@@ -3,7 +3,7 @@
 ---
 
 <p align="center">
-  <img src="assets/macos-cleanup-logo.svg" alt="macOS Cleanup Logo" width="350" />
+  <img src="assets/macos-cleanup-logo.png" alt="macOS Cleanup Logo" width="350" />
 </p>
 
 # macOS Cleanup — Professional System Cleaner
