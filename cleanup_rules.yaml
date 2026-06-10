@@ -1,0 +1,735 @@
+# =============================================================================
+# cleanup_rules.yaml — Baza wiedzy czyszczenia macOS
+# Version: 2.0
+# Last updated: 2026-03-30
+#
+# Struktura każdego wpisu:
+#   name:        Nazwa czytelna dla człowieka
+#   bundle_ids:  Lista identyfikatorów Bundle ID
+#   type:        Typ aplikacji (browser|mail|dev-tool|system|package-manager|...)
+#   paths:       Lista ścieżek z metadanymi czyszczenia
+#     - path:    Ścieżka (obsługuje ~ i zmienne $HOME/$USER)
+#       type:    cache | log | temp | leftover | data | config
+#       safety:  safe | ask | never
+#       notes:   Opis co to jest i dlaczego można/nie można usunąć
+#
+# Poziomy bezpieczeństwa:
+#   safe  — można usunąć automatycznie (cache, tmp, odtwarzalne artefakty)
+#   ask   — zapytaj użytkownika z wyjaśnieniem konsekwencji
+#   never — nigdy nie usuwaj automatycznie (hasła, dane użytkownika)
+# =============================================================================
+
+version: "2.0"
+last_updated: "2026-03-30"
+
+# ---------------------------------------------------------------------------
+# SYSTEM macOS
+# ---------------------------------------------------------------------------
+system:
+  - name: "macOS Kosz (Trash)"
+    bundle_ids: []
+    type: system
+    paths:
+      - path: "~/.Trash"
+        type: temp
+        safety: ask
+        notes: >
+          Kosz macOS. Pliki które usunąłeś ale nie opróżniłeś Kosza.
+          Bezpieczne jeśli celowo usunąłeś te pliki.
+
+  - name: "macOS System Cache"
+    bundle_ids: []
+    type: system
+    paths:
+      - path: "/Library/Caches"
+        type: cache
+        safety: ask
+        notes: >
+          Systemowe cache. Bezpieczne do usunięcia, ale wymaga sudo.
+          macOS odtworzy zawartość przy następnym użyciu.
+
+      - path: "~/Library/Caches"
+        type: cache
+        safety: ask
+        notes: >
+          Cache użytkownika dla wszystkich aplikacji.
+          Każda aplikacja odtworzy swój cache przy następnym uruchomieniu.
+
+      - path: "/private/var/folders"
+        type: temp
+        safety: ask
+        condition:
+          age_hours: 24
+        notes: >
+          Tymczasowe pliki per-user macOS (TMPDIR). Obecny runtime nie usuwa
+          tego rootu automatycznie; można rozważyć tylko precyzyjnie wybrane
+          stare leaf files po dodatkowej detekcji aktywności.
+
+      - path: "/private/tmp"
+        type: temp
+        safety: ask
+        condition:
+          age_hours: 24
+        notes: >
+          Globalny katalog tymczasowy. Czyszczony przez macOS przy restarcie.
+
+  - name: "macOS System Logs"
+    bundle_ids: []
+    type: system
+    paths:
+      - path: "/var/log"
+        type: log
+        safety: ask
+        condition:
+          age_days: 30
+        notes: Systemowe logi. Stare pliki (>30 dni) bezpieczne do usunięcia.
+
+      - path: "/Library/Logs"
+        type: log
+        safety: ask
+        condition:
+          age_days: 30
+        notes: Logi systemowe i aplikacji systemowych.
+
+      - path: "~/Library/Logs"
+        type: log
+        safety: ask
+        condition:
+          age_days: 14
+        notes: Logi aplikacji użytkownika. Starsze niż 14 dni zazwyczaj niepotrzebne.
+
+      - path: "~/Library/Logs/DiagnosticReports"
+        type: log
+        safety: ask
+        condition:
+          age_days: 30
+        notes: >
+          Raporty crash (.crash, .spin, .hang). Generowane gdy aplikacje się zawieszają.
+          Bezpieczne do usunięcia — nie wpływają na działanie systemu.
+
+      - path: "/Library/Logs/DiagnosticReports"
+        type: log
+        safety: ask
+        condition:
+          age_days: 30
+        notes: Systemowe raporty diagnostyczne. Bezpieczne.
+
+# ---------------------------------------------------------------------------
+# PRZEGLĄDARKI INTERNETOWE
+# (Dane użytkownika: NEVER. Cache: ask)
+# ---------------------------------------------------------------------------
+browsers:
+  - name: "Google Chrome"
+    bundle_ids:
+      - "com.google.Chrome"
+    type: browser
+    paths:
+      - path: "~/Library/Caches/Google/Chrome"
+        type: cache
+        safety: ask
+        notes: Cache przeglądarki. Bezpieczne — strony będą wolniej ładować się przy pierwszym odwiedzeniu.
+
+      - path: "~/Library/Application Support/Google/Chrome"
+        type: data
+        safety: never
+        notes: "NIGDY NIE USUWAJ: profile, hasła (Local State), cookies, rozszerzenia, zakładki."
+
+  - name: "Mozilla Firefox"
+    bundle_ids:
+      - "org.mozilla.firefox"
+    type: browser
+    paths:
+      - path: "~/Library/Caches/Firefox"
+        type: cache
+        safety: ask
+        notes: Cache Firefox. Bezpieczne.
+
+      - path: "~/Library/Application Support/Firefox"
+        type: data
+        safety: never
+        notes: "NIGDY NIE USUWAJ: Profile z hasłami, zakładkami, historią, cookies."
+
+  - name: "Safari"
+    bundle_ids:
+      - "com.apple.Safari"
+    type: browser
+    paths:
+      - path: "~/Library/Caches/com.apple.Safari"
+        type: cache
+        safety: ask
+        notes: Cache Safari. Bezpieczne.
+
+      - path: "~/Library/Safari"
+        type: data
+        safety: never
+        notes: "NIGDY NIE USUWAJ: Historia, zakładki, TopSites — dane użytkownika."
+
+  - name: "Microsoft Edge"
+    bundle_ids:
+      - "com.microsoft.edgemac"
+    type: browser
+    paths:
+      - path: "~/Library/Caches/Microsoft Edge"
+        type: cache
+        safety: ask
+        notes: Cache Edge — bezpieczne.
+
+      - path: "~/Library/Application Support/Microsoft Edge"
+        type: data
+        safety: never
+        notes: "Profile, hasła, cookies — NIGDY NIE USUWAJ."
+
+  - name: "Brave Browser"
+    bundle_ids:
+      - "com.brave.Browser"
+    type: browser
+    paths:
+      - path: "~/Library/Caches/BraveSoftware/Brave-Browser"
+        type: cache
+        safety: ask
+        notes: Cache Brave — bezpieczne.
+
+      - path: "~/Library/Application Support/BraveSoftware"
+        type: data
+        safety: never
+        notes: "Profile, hasła — NIGDY NIE USUWAJ."
+
+# ---------------------------------------------------------------------------
+# KLIENTY POCZTY
+# (Wszystkie dane: NEVER)
+# ---------------------------------------------------------------------------
+mail:
+  - name: "Apple Mail"
+    bundle_ids:
+      - "com.apple.mail"
+    type: mail
+    paths:
+      - path: "~/Library/Mail"
+        type: data
+        safety: never
+        notes: "NIGDY NIE USUWAJ: Całe dane poczty — wiadomości, załączniki, konta IMAP/POP."
+
+      - path: "~/Library/Containers/com.apple.mail"
+        type: data
+        safety: never
+        notes: "Sandbox Apple Mail — dane aplikacji."
+
+  - name: "Microsoft Outlook"
+    bundle_ids:
+      - "com.microsoft.Outlook"
+    type: mail
+    paths:
+      - path: "~/Library/Group Containers/UBF8T346G9.Office"
+        type: data
+        safety: never
+        notes: "Dane Microsoft Office — e-mail, kalendarz, kontakty."
+
+  - name: "Spark Mail"
+    bundle_ids:
+      - "com.readdle.smartemail-mac"
+    type: mail
+    paths:
+      - path: "~/Library/Application Support/com.readdle.smartemail-mac"
+        type: data
+        safety: never
+        notes: "Dane Spark — konta, wiadomości."
+
+  - name: "Thunderbird"
+    bundle_ids:
+      - "org.mozilla.thunderbird"
+    type: mail
+    paths:
+      - path: "~/Library/Thunderbird"
+        type: data
+        safety: never
+        notes: "Profile Thunderbird z całą pocztą — NIGDY NIE USUWAJ."
+
+# ---------------------------------------------------------------------------
+# MENEDŻERY HASEŁ
+# (Wszystkie dane: NEVER)
+# ---------------------------------------------------------------------------
+password_managers:
+  - name: "1Password"
+    bundle_ids:
+      - "com.agilebits.onepassword7-osx"
+      - "com.1password.1password"
+    type: password-manager
+    paths:
+      - path: "~/Library/Application Support/1Password 7"
+        type: data
+        safety: never
+        notes: "Vault 1Password — NIGDY NIE USUWAJ."
+      - path: "~/Library/Application Support/com.agilebits"
+        type: data
+        safety: never
+        notes: "Dane 1Password."
+
+  - name: "Bitwarden"
+    bundle_ids:
+      - "com.bitwarden.desktop"
+    type: password-manager
+    paths:
+      - path: "~/Library/Application Support/Bitwarden"
+        type: data
+        safety: never
+        notes: "Dane Bitwarden — NIGDY NIE USUWAJ."
+
+  - name: "Keychain (System)"
+    bundle_ids: []
+    type: system-security
+    paths:
+      - path: "~/Library/Keychains"
+        type: data
+        safety: never
+        notes: "Pęk kluczy — hasła, certyfikaty — NIGDY NIE USUWAJ."
+      - path: "/Library/Keychains"
+        type: data
+        safety: never
+        notes: "Systemowy pęk kluczy — NIGDY NIE USUWAJ."
+
+# ---------------------------------------------------------------------------
+# NARZĘDZIA DEVELOPERSKIE
+# ---------------------------------------------------------------------------
+dev_tools:
+  - name: "Xcode"
+    bundle_ids:
+      - "com.apple.dt.Xcode"
+    type: dev-tool
+    paths:
+      - path: "~/Library/Developer/Xcode/DerivedData"
+        type: cache
+        safety: ask
+        notes: >
+          Skompilowane artefakty buildów. Xcode odtworzy przy następnym buildzie.
+          Może zajmować >10 GB. Bezpieczne do usunięcia.
+
+      - path: "~/Library/Developer/Xcode/Archives"
+        type: cache
+        safety: ask
+        notes: >
+          Archiwa buildów (.xcarchive). Mogą zawierać pliki .ipa do dystrybucji.
+          Usuń tylko jeśli nie potrzebujesz starych wersji archiwów.
+
+      - path: "~/Library/Developer/CoreSimulator/Devices"
+        type: cache
+        safety: ask
+        notes: >
+          Urządzenia symulatorów iOS, watchOS, tvOS.
+          Zalecane: xcrun simctl delete unavailable.
+          Nie usuwaj całego katalogu jeśli aktywnie używasz symulatorów.
+
+      - path: "~/Library/Caches/com.apple.dt.Xcode"
+        type: cache
+        safety: safe
+        notes: "Cache Xcode — bezpieczne do automatycznego usunięcia."
+
+      - path: "~/Library/Developer/Xcode/iOS DeviceSupport"
+        type: cache
+        safety: ask
+        condition:
+          age_days: 180
+        notes: >
+          Symbole debugowania dla starszych wersji iOS (2-5 GB na wersję).
+          Starsze niż 6 miesięcy zazwyczaj niepotrzebne jeśli nie debugujesz starych urządzeń.
+          Xcode pobierze je ponownie gdy podłączysz urządzenie.
+
+      - path: "~/Library/Developer/Xcode/watchOS DeviceSupport"
+        type: cache
+        safety: ask
+        condition:
+          age_days: 180
+        notes: "Symbole debugowania watchOS. Podobnie jak iOS DeviceSupport."
+
+      - path: "~/Library/Developer/Xcode/tvOS DeviceSupport"
+        type: cache
+        safety: ask
+        condition:
+          age_days: 180
+        notes: "Symbole debugowania tvOS."
+
+  - name: "Homebrew"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/Library/Caches/Homebrew"
+        type: cache
+        safety: ask
+        notes: >
+          Cache pobranych paczek. Bezpieczne — brew będzie pobierać ponownie gdy potrzeba.
+          Komenda: brew cleanup --prune=all
+
+  - name: "Node.js / npm"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.npm"
+        type: cache
+        safety: ask
+        notes: >
+          Cache npm. Bezpieczne — npm pobierze ponownie przy instalacji.
+          Komenda: npm cache clean --force
+          UWAGA: może być bardzo duże (>10 GB u aktywnych developerów Node.js).
+
+  - name: "yarn"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/Library/Caches/yarn"
+        type: cache
+        safety: ask
+        notes: "Cache yarn — bezpieczne. Komenda: yarn cache clean"
+
+  - name: "pnpm"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.pnpm-store"
+        type: cache
+        safety: ask
+        notes: "Store pnpm — bezpieczne. Komenda: pnpm store prune"
+
+  - name: "Python / pip"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/Library/Caches/pip"
+        type: cache
+        safety: ask
+        notes: "Cache pip — bezpieczne. Komenda: pip cache purge"
+
+  - name: "CocoaPods"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/Library/Caches/CocoaPods"
+        type: cache
+        safety: ask
+        notes: "Cache CocoaPods — bezpieczne. Pod install pobierze ponownie."
+
+  - name: "Swift Package Manager"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/Library/Caches/org.swift.swiftpm"
+        type: cache
+        safety: ask
+        notes: "Cache Swift Package Manager — bezpieczne. SPM pobierze ponownie."
+      - path: "~/.swiftpm/cache"
+        type: cache
+        safety: ask
+        notes: "Lokalny cache SPM — bezpieczne."
+
+  - name: "Ruby Gems"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.gem"
+        type: cache
+        safety: ask
+        notes: "Cache Ruby gems. Komenda: gem cleanup"
+      - path: "~/.bundle"
+        type: cache
+        safety: ask
+        notes: "Cache Bundler. Bezpieczne — bundle install ponownie pobierze."
+
+  - name: "Composer (PHP)"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.composer/cache"
+        type: cache
+        safety: ask
+        notes: "Cache Composer — bezpieczne. composer install pobierze ponownie."
+
+  - name: "Gradle"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.gradle/caches"
+        type: cache
+        safety: ask
+        notes: "Cache Gradle — bezpieczne. Gradle pobierze ponownie."
+
+  - name: "Maven"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.m2/repository"
+        type: cache
+        safety: ask
+        notes: "Cache Maven — bezpieczne. Maven pobierze ponownie."
+
+  - name: "Cargo (Rust)"
+    bundle_ids: []
+    type: package-manager
+    paths:
+      - path: "~/.cargo/registry"
+        type: cache
+        safety: ask
+        notes: "Cache Cargo — bezpieczne. cargo build pobierze ponownie."
+
+  - name: "Docker"
+    bundle_ids:
+      - "com.docker.docker"
+    type: dev-tool
+    paths:
+      - path: "__docker_prune__"
+        type: cache
+        safety: ask
+        notes: >
+          Dangling images, stopped containers, unused networks and build cache.
+          UWAGA: dane w zatrzymanych kontenerach zostaną utracone.
+          Uruchomione kontenery nie są dotykane. Wolumeny nie są usuwane
+          przez domyślne `docker system prune -f`.
+          Komenda: docker system prune -f
+
+  - name: "Android Studio"
+    bundle_ids:
+      - "com.google.android.studio"
+    type: dev-tool
+    paths:
+      - path: "~/.android/avd"
+        type: cache
+        safety: ask
+        notes: "Android Virtual Devices — emulatory. Duże, odtwarzalne w Android Studio."
+
+      - path: "~/.gradle/caches"
+        type: cache
+        safety: ask
+        notes: "Gradle cache dla Android — bezpieczne."
+
+# ---------------------------------------------------------------------------
+# APLIKACJE KOMUNIKACYJNE
+# ---------------------------------------------------------------------------
+communication:
+  - name: "Slack"
+    bundle_ids:
+      - "com.tinyspeck.slackmacgap"
+    type: communication
+    paths:
+      - path: "~/Library/Application Support/Slack/Cache"
+        type: cache
+        safety: safe
+        notes: "Cache Electron Slack — bezpieczne."
+
+      - path: "~/Library/Application Support/Slack/Code Cache"
+        type: cache
+        safety: safe
+        notes: "Kod V8 cache Slack — bezpieczne."
+
+      - path: "~/Library/Application Support/Slack/GPUCache"
+        type: cache
+        safety: safe
+        notes: "GPU cache Slack — bezpieczne."
+
+      - path: "~/Library/Caches/com.tinyspeck.slackmacgap"
+        type: cache
+        safety: safe
+        notes: "Cache Slack — bezpieczne."
+
+  - name: "Microsoft Teams"
+    bundle_ids:
+      - "com.microsoft.teams2"
+    type: communication
+    paths:
+      - path: "~/Library/Application Support/Microsoft/Teams/Cache"
+        type: cache
+        safety: safe
+        notes: "Cache Teams — bezpieczne."
+
+      - path: "~/Library/Application Support/Microsoft/Teams/Code Cache"
+        type: cache
+        safety: safe
+        notes: "V8 cache Teams — bezpieczne."
+
+  - name: "Discord"
+    bundle_ids:
+      - "com.hnc.Discord"
+    type: communication
+    paths:
+      - path: "~/Library/Application Support/discord/Cache"
+        type: cache
+        safety: safe
+        notes: "Cache Discord (Electron) — bezpieczne."
+
+      - path: "~/Library/Application Support/discord/Code Cache"
+        type: cache
+        safety: safe
+        notes: "V8 code cache Discord — bezpieczne."
+
+  - name: "Zoom"
+    bundle_ids:
+      - "us.zoom.xos"
+    type: communication
+    paths:
+      - path: "~/Library/Caches/us.zoom.xos"
+        type: cache
+        safety: safe
+        notes: "Cache Zoom — bezpieczne."
+
+# ---------------------------------------------------------------------------
+# APLIKACJE KREATYWNE
+# ---------------------------------------------------------------------------
+creative:
+  - name: "Adobe Creative Cloud"
+    bundle_ids:
+      - "com.adobe.acc.installer"
+    type: media-editor
+    paths:
+      - path: "~/Library/Caches/Adobe"
+        type: cache
+        safety: ask
+        notes: "Cache Adobe — może być bardzo duże (>10 GB). Bezpieczne do usunięcia."
+
+      - path: "~/Library/Application Support/Adobe/Common/Media Cache Files"
+        type: cache
+        safety: ask
+        notes: >
+          Cache mediów Premiere Pro, After Effects.
+          Bezpieczne — przeliczone przy następnym otwarciu projektu.
+
+      - path: "~/Library/Application Support/Adobe/Common/Media Cache"
+        type: cache
+        safety: ask
+        notes: "Index cache mediów Adobe."
+
+      - path: "~/Library/Application Support/Adobe"
+        type: data
+        safety: never
+        notes: >
+          NIE USUWAJ W CAŁOŚCI. Zawiera ustawienia, presets, workspace.
+          Usuń tylko specyficzne podkatalogi cache.
+
+  - name: "Figma"
+    bundle_ids:
+      - "com.figma.Desktop"
+    type: media-editor
+    paths:
+      - path: "~/Library/Caches/com.figma.Desktop"
+        type: cache
+        safety: ask
+        notes: "Cache Figma — bezpieczne."
+
+      - path: "~/Library/Application Support/Figma"
+        type: data
+        safety: never
+        notes: "Dane Figma (offline copies, fonts) — nie usuwaj."
+
+# ---------------------------------------------------------------------------
+# NARZĘDZIA DEVELOPERSKIE — IDE
+# ---------------------------------------------------------------------------
+ides:
+  - name: "Visual Studio Code"
+    bundle_ids:
+      - "com.microsoft.VSCode"
+    type: dev-tool
+    paths:
+      - path: "~/Library/Application Support/Code/Cache"
+        type: cache
+        safety: safe
+        notes: "Cache VS Code — bezpieczne."
+
+      - path: "~/Library/Application Support/Code/Code Cache"
+        type: cache
+        safety: safe
+        notes: "V8 code cache VS Code."
+
+      - path: "~/Library/Application Support/Code/CachedData"
+        type: cache
+        safety: ask
+        notes: "Cached extension data."
+
+      - path: "~/Library/Application Support/Code/CachedExtensionVSIXs"
+        type: cache
+        safety: ask
+        notes: "Cached VSIX extension packages. Bezpieczne — VS Code pobierze ponownie."
+
+  - name: "Cursor"
+    bundle_ids:
+      - "com.todesktop.230313mzl4w4u92"
+    type: dev-tool
+    paths:
+      - path: "~/Library/Application Support/Cursor/Cache"
+        type: cache
+        safety: safe
+        notes: "Cache Cursor (Electron) — bezpieczne."
+
+      - path: "~/Library/Application Support/Cursor/Code Cache"
+        type: cache
+        safety: safe
+        notes: "V8 code cache Cursor — bezpieczne."
+
+  - name: "JetBrains IDEs (IntelliJ, PyCharm, WebStorm, etc.)"
+    bundle_ids:
+      - "com.jetbrains.intellij"
+      - "com.jetbrains.pycharm"
+      - "com.jetbrains.webstorm"
+      - "com.jetbrains.rubymine"
+      - "com.jetbrains.goland"
+      - "com.jetbrains.rider"
+    type: dev-tool
+    paths:
+      - path: "~/Library/Caches/JetBrains"
+        type: cache
+        safety: ask
+        notes: "Cache JetBrains — bezpieczne. IDE odtworzy przy starcie."
+
+      - path: "~/Library/Logs/JetBrains"
+        type: log
+        safety: ask
+        condition:
+          age_days: 30
+        notes: "Stare logi JetBrains."
+
+# ---------------------------------------------------------------------------
+# MEDIA
+# ---------------------------------------------------------------------------
+media:
+  - name: "Spotify"
+    bundle_ids:
+      - "com.spotify.client"
+    type: media
+    paths:
+      - path: "~/Library/Caches/com.spotify.client"
+        type: cache
+        safety: safe
+        notes: "Cache Spotify — bezpieczne, automatyczne."
+
+      - path: "~/Library/Application Support/Spotify/PersistentCache"
+        type: cache
+        safety: ask
+        notes: "Persistent cache Spotify (streaming data). Spotify pobierze ponownie."
+
+# ---------------------------------------------------------------------------
+# KOPIE ZAPASOWE iOS
+# ---------------------------------------------------------------------------
+ios_backups:
+  - name: "iOS/iPadOS/watchOS Backups"
+    bundle_ids: []
+    type: backup
+    paths:
+      - path: "~/Library/Application Support/MobileSync/Backup"
+        type: data
+        safety: ask
+        notes: >
+          Lokalne kopie zapasowe urządzeń Apple (iPhone, iPad, Apple Watch).
+          UWAGA: Usuń tylko jeśli masz backup w iCloud LUB nie potrzebujesz
+          odtwarzać urządzenia z tego komputera.
+          Skrypt pyta o każdy backup indywidualnie.
+
+# ---------------------------------------------------------------------------
+# TIME MACHINE
+# ---------------------------------------------------------------------------
+time_machine:
+  - name: "Time Machine Local Snapshots"
+    bundle_ids: []
+    type: backup
+    paths:
+      - path: "__tm_snapshots__"
+        type: cache
+        safety: ask
+        notes: >
+          Lokalne snapshoty APFS Time Machine.
+          macOS usuwa je automatycznie gdy potrzebuje miejsca (purgeable space).
+          Możesz usunąć ręcznie jeśli masz aktualny backup na dysku zewnętrznym.
+          Komenda: tmutil deletelocalsnapshots <data>

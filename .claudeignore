@@ -1,0 +1,55 @@
+# Logs i raporty
+logs/
+reports/
+dev_sync_logs/
+dev-sync/dev_sync_logs/
+dev_sync_cleanup_plan*.json
+dev_sync_quarantine/
+dev-sync/dev_sync_quarantine/
+
+# Systemy budowania / tymczasowe
+*.tmp
+*.swp
+*.bak
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Sekrety i poufne dane
+.env
+.env.*
+.env.local
+.env.*.local
+.dev_sync_config.json
+.dev_sync_config_test.json
+.dev_sync_manifest.json
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Duże pliki binarne / archiwa
+*.tar.gz
+*.tar.bz2
+*.zip
+*.gz
+*.dmg
+*.pkg
+*.iso
+
+# Duże logi zewnętrzne
+*.log
+
+# Node / Python (jeśli kiedyś dodane)
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/

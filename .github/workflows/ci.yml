@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Syntax check
+        run: /bin/bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
+
+      - name: Shell tests (System bash 3.2)
+        run: /bin/bash tests/run_all.sh
+
+      - name: Python dev-sync tests
+        run: python3 -m unittest tests/test_dev_sync_safety.py
+
+      - name: Python syntax
+        run: python3 -m py_compile dev-sync/*.py tests/test_dev_sync_safety.py
+
+      - name: Install shellcheck
+        run: brew install shellcheck
+
+      - name: Shellcheck
+        run: shellcheck -S warning cleanup_all.sh lib/*.sh config/*.sh
+
+      - name: Generate a plan for schema validation
+        run: /bin/bash cleanup_all.sh --dry-run --non-interactive --category trash 2>/dev/null || true
+
+      - name: Validate plan schema
+        shell: python3 {0}
+        run: |
+          import glob, json, sys
+          plans = sorted(glob.glob("reports/plan_*.json"))
+          if not plans:
+              sys.exit("No plan generated")
+          plan = json.load(open(plans[-1]))
+          assert "operations" in plan and "summary" in plan, "missing top-level keys"
+          for op in plan["operations"]:
+              assert op["risk"] in ("SAFE", "REVIEW", "DANGEROUS"), "bad risk: %s" % op["risk"]
+          print("Plan validated: %d operations" % len(plan["operations"]))
+
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Syntax check
+        run: bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
+
+      - name: Install tools and set up dummy sw_vers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          mkdir -p "$HOME/bin"
+          echo '#!/bin/sh' > "$HOME/bin/sw_vers"
+          echo 'echo 10.15.7' >> "$HOME/bin/sw_vers"
+          chmod +x "$HOME/bin/sw_vers"
+
+      - name: Shell tests
+        run: |
+          export PATH="$HOME/bin:$PATH"
+          bash tests/run_all.sh
+
+      - name: Python dev-sync tests
+        run: python3 -m unittest tests/test_dev_sync_safety.py
+
+      - name: Python syntax
+        run: python3 -m py_compile dev-sync/*.py tests/test_dev_sync_safety.py
+
+      - name: Shellcheck
+        run: shellcheck -S warning cleanup_all.sh lib/*.sh config/*.sh
+

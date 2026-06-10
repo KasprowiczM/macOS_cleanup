@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/macos-cleanup/plan.schema.json",
+  "title": "macOS Cleanup Plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "tool_version",
+    "run_id",
+    "generated_at",
+    "summary",
+    "operations"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": { "type": "string", "minLength": 1 },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "run_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "rules_file": { "type": "string" },
+    "summary": {
+      "type": "object",
+      "required": [
+        "operations",
+        "safe_operations",
+        "review_operations",
+        "dangerous_operations",
+        "safe_bytes",
+        "review_bytes",
+        "dangerous_bytes"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "operations": { "type": "integer", "minimum": 0 },
+        "safe_operations": { "type": "integer", "minimum": 0 },
+        "review_operations": { "type": "integer", "minimum": 0 },
+        "dangerous_operations": { "type": "integer", "minimum": 0 },
+        "safe_bytes": { "type": "integer", "minimum": 0 },
+        "review_bytes": { "type": "integer", "minimum": 0 },
+        "dangerous_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "risk",
+          "action",
+          "path",
+          "command",
+          "estimated_bytes",
+          "size",
+          "description",
+          "recommendation"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^op-[0-9]{4}$" },
+          "category": { "type": "string", "minLength": 1 },
+          "risk": { "enum": ["SAFE", "REVIEW", "DANGEROUS"] },
+          "action": { "enum": ["remove_path", "native_command", "report_only"] },
+          "path": { "type": "string" },
+          "command": { "type": "string" },
+          "estimated_bytes": { "type": "integer", "minimum": 0 },
+          "size": { "type": "integer", "minimum": 0 },
+          "description": { "type": "string", "minLength": 1 },
+          "recommendation": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

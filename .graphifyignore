@@ -1,0 +1,20 @@
+# Runtime artifacts and generated output — never include in the knowledge graph
+logs/
+reports/
+dev_sync_logs/
+graphify-out/
+.git/
+__pycache__/
+*.pyc
+*.log
+*.jsonl
+*.tsv
+.DS_Store
+
+# Machine-local agent/editor config (not part of the cleanup tool itself)
+.claude/
+.gemini/
+.codexignore
+.claudeignore
+.geminiignore
+.graphifyignore

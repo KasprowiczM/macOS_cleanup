@@ -1,0 +1,66 @@
+# Build artifacts and dependencies
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+coverage/
+
+# Runtime output
+logs/
+reports/
+dev_sync_logs/
+dev-sync/dev_sync_logs/
+dev_sync_cleanup_plan*.json
+dev_sync_quarantine/
+dev-sync/dev_sync_quarantine/
+*.log
+*.tmp
+*.swp
+*.bak
+*~
+
+# Databases and dumps
+*.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sql
+*.dump
+
+# Archives and binaries
+*.zip
+*.tar
+*.tar.gz
+*.tar.bz2
+*.tgz
+*.dmg
+*.pkg
+*.iso
+*.bin
+
+# Secrets
+.env
+.env.*
+.env.local
+.env.*.local
+.dev_sync_config.json
+.dev_sync_config_test.json
+.dev_sync_manifest.json
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# macOS
+.DS_Store
+._*
+.AppleDouble
+
+# Python/dev-sync generated files
+__pycache__/
+dev-sync/__pycache__/
+*.pyc
