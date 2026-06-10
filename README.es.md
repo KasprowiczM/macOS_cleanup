@@ -2,9 +2,20 @@
 
 ---
 
+<p align="center">
+  <img src="assets/macos-cleanup-logo.png" alt="macOS Cleanup Logo" width="350" />
+</p>
+
 # macOS Cleanup — Limpiador de Sistema Profesional
 
 > **Herramienta profesional de limpieza para macOS** — más segura que las aplicaciones comerciales, totalmente transparente, con control total del usuario sobre lo que se elimina.
+
+<p align="center">
+  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
+  <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
+  <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+</p>
 
 ## ¿Qué es este proyecto?
 

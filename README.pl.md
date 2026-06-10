@@ -2,9 +2,20 @@
 
 ---
 
+<p align="center">
+  <img src="assets/macos-cleanup-logo.png" alt="macOS Cleanup Logo" width="350" />
+</p>
+
 # macOS Cleanup — Professional System Cleaner
 
 > **Profesjonalne narzędzie czyszczące macOS** — bezpieczniejsze niż komercyjne aplikacje, w pełni transparentne, z pełną kontrolą użytkownika nad tym, co jest usuwane.
+
+<p align="center">
+  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
+  <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
+  <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
+</p>
 
 ## Czym jest ten projekt?
 
@@ -333,6 +344,18 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG w ~/Downloads
 ## Disclaimer
 
 > **Używasz tego skryptu na własną odpowiedzialność.** Skrypt jest zaprojektowany z myślą o bezpieczeństwie i zawsze pyta przed usunięciem, ale żadne oprogramowanie nie jest wolne od błędów. Przed pierwszym uruchomieniem w trybie innym niż dry-run upewnij się, że masz aktualną kopię zapasową.
+
+
+---
+
+## 🌍 Landing Page & UI Preview
+
+<p align="center">
+  <a href="https://macos-cleanup.64bit.site">
+    <br/>
+    <strong>Visit Official Website for full details and documentation</strong>
+  </a>
+</p>
 
 ---
 
