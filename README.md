@@ -1,94 +1,101 @@
-<div align="center">
-  <img src="assets/clean_logo.svg" alt="macOS Cleanup Logo" width="120" />
+<p align="center">
+  <img src="assets/macos_cleanup_logo_dark.svg" alt="macOS Cleanup Logo" width="350" />
+</p>
 
-  <br>
+<h1 align="center">macOS Cleanup</h1>
 
-  <h1>Regain disk space with <i>zero blind spots</i>.<br>No compromises.</h1>
+<p align="center">
+  <strong>Safe, predictable, and fully reversible macOS cleanup utility.</strong><br><br>
+  <a href="https://macos-cleanup.64bit.site">Visit the Official Landing Page</a>
+</p>
 
-  <p>
-    Safer than commercial apps, fully transparent, and built on a strict "Informed Consent" model.<br>
-    Analyze your system, review the plan, and execute with absolute control over what gets deleted.
-  </p>
-
-  <p>
-    <a href="https://macos-cleanup.64bit.site"><strong>Run Dry-Run Analysis on Official Site</strong></a>
-    &nbsp;&nbsp;·&nbsp;&nbsp;
-    <a href="user_guide.md"><strong>Read Documentation</strong></a>
-  </p>
-
-  <br>
-
-  <a href="https://macos-cleanup.64bit.site">
-  </a>
-
-  <br><br>
-
+<p align="center">
   <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
   <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
   <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-</div>
+</p>
+<br/>
 
-<br>
+## ⚡ Overview
 
----
+macOS Cleanup is a professional, system-native utility that safely reclaims gigabytes of disk space on your Mac. Unlike aggressive system cleaners, it utilizes a rigorous **3-stage safety model** (Analyze → Plan → Quarantine), guaranteeing that your critical data remains perfectly untouched.
 
-<div align="center">
-  <h2>🌍 Available Languages</h2>
-  <a href="README.md">🇬🇧 English</a> &nbsp;|&nbsp; 
-  <a href="README.pl.md">🇵🇱 Polski</a> &nbsp;|&nbsp; 
-  <a href="README.es.md">🇪🇸 Español</a> &nbsp;|&nbsp; 
-  <a href="README.fr.md">🇫🇷 Français</a> &nbsp;|&nbsp; 
-  <a href="README.de.md">🇩🇪 Deutsch</a> &nbsp;|&nbsp; 
-  <a href="README.it.md">🇮🇹 Italiano</a> &nbsp;|&nbsp; 
-  <a href="README.pt.md">🇵🇹 Português</a>
-</div>
+
 
 ---
 
-## ⚡ Install in one line
+## 🚀 Quick Start
 
-Install and scan your Mac in seconds. The installation is perfectly safe and won't delete anything automatically.
+Get started immediately with zero risk using the built-in dry-run mode:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/KasprowiczM/macOS_cleanup/main/install.sh)"
+# Clone the repository
+git clone https://github.com/KasprowiczM/macOS_cleanup.git
+cd macOS_cleanup
+
+# Run a safe dry-run analysis (no files will be deleted)
+bash cleanup_all.sh --dry-run
 ```
 
 ---
 
 ## 🛡️ The Safety Model
 
-We believe a system utility should never be a source of anxiety. Our strict boundaries are hardcoded into the engine:
+We believe a cleanup script should never be a source of anxiety. Our non-negotiable rules are hardcoded into the engine:
 
-1. **User Data is Sacred**: Never touches `~/Documents`, `~/Desktop`, Mail, SSH/GPG keys, or active browser profiles.
-2. **Quarantine by Default**: Files are not permanently deleted right away. They are moved to a temporary quarantine so you can easily restore them.
-3. **No Sudo Required**: Reclaim massive amounts of space from user-level caches without exposing your system to root vulnerabilities.
-4. **Pure Bash 3.2 Compatibility**: Fully native on macOS 10.15+. No heavy dependencies or backends.
+1. **User Data is Sacred**: Never touches `~/Documents`, `~/Desktop`, Mail, or browser profiles (passwords, history).
+2. **Quarantine by Default**: Files are not permanently deleted right away. They are moved to a temporary quarantine.
+3. **No Sudo Required**: Reclaim massive amounts of space purely from user-level caches without root permissions.
+
+
 
 ---
 
-## 💻 Native CLI Power
+## ⚙️ Core Commands
 
 ### Analyze (Dry Run)
-Scan your system safely and review a detailed JSON/Markdown plan before committing to any changes:
+Scan your system safely. Generates a detailed Markdown and JSON report of reclaimable space without modifying a single file on disk.
 ```bash
 bash cleanup_all.sh --dry-run
 ```
 
 ### Auto-Safe Clean
-Automatically clean only files classified as strictly `SAFE`, moving them directly to quarantine:
+Automatically clean only files classified as strictly `SAFE` (like build caches or temporary logs), moving them directly to quarantine.
 ```bash
 bash cleanup_all.sh --auto-safe
 ```
 
 ### Restore from Quarantine
-Made a mistake? Revert your last cleanup instantly:
+Made a mistake or an app started misbehaving? Everything is instantly reversible.
 ```bash
 bash cleanup_all.sh --restore latest
 ```
 
 ---
 
-## 📄 License
+## 📸 Interface Preview
 
+<p align="center">
+  <a href="https://macos-cleanup.64bit.site">
+  </a>
+</p>
+
+---
+
+## 🌍 Multilingual Guides
+
+Detailed instructions and documentation are available in your preferred language. Simply select your language below:
+
+* [🇬🇧 English (Default)](user_guide.md)
+* [🇵🇱 Polski](user_guide.pl.md)
+* [🇪🇸 Español](user_guide.es.md)
+* [🇫🇷 Français](user_guide.fr.md)
+* [🇩🇪 Deutsch](user_guide.de.md)
+* [🇮🇹 Italiano](user_guide.it.md)
+* [🇵🇹 Português](user_guide.pt.md)
+
+---
+
+## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
