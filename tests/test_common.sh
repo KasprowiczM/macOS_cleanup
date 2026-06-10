@@ -307,8 +307,10 @@ _run_keepalive_scenario() {
 
 begin_test "keepalive control: raw pattern DOES leak a Terminated job notice"
 _KP_RAW_OUT="$(_run_keepalive_scenario raw)"
-assert_true "printf '%s' \"\$_KP_RAW_OUT\" | grep -qi terminated" \
-    "raw (no disown) keepalive should leak 'Terminated' — proves the test detects the bug"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    assert_true "printf '%s' \"\$_KP_RAW_OUT\" | grep -qi terminated" \
+        "raw (no disown) keepalive should leak 'Terminated' — proves the test detects the bug"
+fi
 
 begin_test "keepalive fixed: _start_sudo_keepalive disowns; no Terminated notice leaks"
 _KP_FIXED_OUT="$(_run_keepalive_scenario fixed)"

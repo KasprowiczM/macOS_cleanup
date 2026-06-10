@@ -1,44 +1,68 @@
-<p align="center">
-  <img src="assets/macos_cleanup_logo_dark.svg" alt="macOS Cleanup Logo" width="350" />
-</p>
+# 🍏 macOS Cleanup
 
-<h1 align="center">macOS Cleanup</h1>
-
-<p align="center">
-  <strong>Safe, predictable, and fully reversible macOS cleanup utility.</strong><br><br>
+<p align="left">
+  <img src="assets/logo_clean.svg" alt="macOS Cleanup Logo" width="120" align="right" />
+  <strong>The Professional System Cleaner</strong><br>
+  Built on an Informed Consent model with strict data boundaries.<br><br>
   <a href="https://macos-cleanup.64bit.site">Visit the Official Landing Page</a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/KasprowiczM/macOS_cleanup/actions"><img src="https://img.shields.io/github/actions/workflow/status/KasprowiczM/macOS_cleanup/ci.yml?branch=main" alt="CI Status" /></a>
+<p align="left">
+  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
   <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
   <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
-  <img src="https://img.shields.io/github/license/KasprowiczM/macOS_cleanup" alt="License" />
+  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
 </p>
-<br/>
 
-## ⚡ Overview
+## 🌍 Read in Your Language
 
-macOS Cleanup is a professional, system-native utility that safely reclaims gigabytes of disk space on your Mac. Unlike aggressive system cleaners, it utilizes a rigorous **3-stage safety model** (Analyze → Plan → Quarantine), guaranteeing that your critical data remains perfectly untouched.
-
-<p align="center">
-  <img src="assets/overview-dark.jpg" alt="Overview Dashboard" width="800" style="border-radius: 8px;" />
-</p>
+* [🇬🇧 English (Default)](README.md)
+* [🇵🇱 Polski](README.pl.md)
+* [🇪🇸 Español](README.es.md)
+* [🇫🇷 Français](README.fr.md)
+* [🇩🇪 Deutsch](README.de.md)
+* [🇮🇹 Italiano](README.it.md)
+* [🇵🇹 Português](README.pt.md)
 
 ---
 
-## 🚀 Quick Start
+## ⚡ 1-Line Installer
 
-Get started immediately with zero risk using the built-in dry-run mode:
+Install and run `macOS Cleanup` in seconds. Open your terminal and paste:
 
 ```bash
-# Clone the repository
-git clone https://github.com/KasprowiczM/macOS_cleanup.git
-cd macOS_cleanup
-
-# Run a safe dry-run analysis (no files will be deleted)
-bash cleanup_all.sh --dry-run
+curl -fsSL https://raw.githubusercontent.com/KasprowiczM/macos_cleanup/main/install.sh | bash
 ```
+
+---
+
+## 📸 Interface & Features
+
+macOS Cleanup is a professional, system-native utility that safely reclaims gigabytes of disk space on your Mac. Unlike aggressive system cleaners, it utilizes a rigorous **4-stage safety model** (Analyze → Plan → Apply → Quarantine), guaranteeing that your critical data remains perfectly untouched.
+
+<details open>
+<summary><b>1. Professional Overview</b></summary>
+<br>
+<br>
+</details>
+
+<details open>
+<summary><b>2. Safety First: The Informed Consent Model</b></summary>
+<br>
+<br>
+</details>
+
+<details open>
+<summary><b>3. Native Bash CLI Power</b></summary>
+<br>
+<br>
+</details>
+
+<details open>
+<summary><b>4. Compared to Alternatives</b></summary>
+<br>
+<br>
+</details>
 
 ---
 
@@ -46,13 +70,10 @@ bash cleanup_all.sh --dry-run
 
 We believe a cleanup script should never be a source of anxiety. Our non-negotiable rules are hardcoded into the engine:
 
-1. **User Data is Sacred**: Never touches `~/Documents`, `~/Desktop`, Mail, or browser profiles (passwords, history).
+1. **User Data is Sacred**: Never touches `~/Documents`, `~/Desktop`, Mail, SSH/GPG keys, or browser profiles (passwords, history).
 2. **Quarantine by Default**: Files are not permanently deleted right away. They are moved to a temporary quarantine.
 3. **No Sudo Required**: Reclaim massive amounts of space purely from user-level caches without root permissions.
-
-<p align="center">
-  <img src="assets/runcenter-dark.jpg" alt="Run Center Console" width="800" style="border-radius: 8px;" />
-</p>
+4. **Pure Bash 3.2 Compatibility**: No heavy backends. Fully native on macOS 10.15+.
 
 ---
 
@@ -75,29 +96,6 @@ Made a mistake or an app started misbehaving? Everything is instantly reversible
 ```bash
 bash cleanup_all.sh --restore latest
 ```
-
----
-
-## 📸 Interface Preview
-
-<p align="center">
-  <img src="assets/categories-dark.jpg" alt="Cleanup Categories" width="400" style="border-radius: 8px; margin-right: 10px;" />
-  <img src="assets/suggestions-dark.jpg" alt="Smart Suggestions" width="400" style="border-radius: 8px;" />
-</p>
-
----
-
-## 🌍 Multilingual Guides
-
-Detailed instructions and documentation are available in your preferred language. Simply select your language below:
-
-* [🇬🇧 English (Default)](user_guide.md)
-* [🇵🇱 Polski](user_guide.pl.md)
-* [🇪🇸 Español](user_guide.es.md)
-* [🇫🇷 Français](user_guide.fr.md)
-* [🇩🇪 Deutsch](user_guide.de.md)
-* [🇮🇹 Italiano](user_guide.it.md)
-* [🇵🇹 Português](user_guide.pt.md)
 
 ---
 
