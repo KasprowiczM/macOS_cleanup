@@ -579,40 +579,19 @@ app_name_exists() {
 }
 
 # ---------------------------------------------------------------------------
-# Sudo helpers
+# Sudo helpers — DISABLED (P0-1b: privileged deletion removed)
+#
+# These stubs exist so that callers don't need code changes, but they
+# unconditionally refuse sudo. Any code path that depended on sudo
+# should now use report_only instead.
 # ---------------------------------------------------------------------------
 
 request_sudo() {
-    local reason="${1:-system-level cleanup operations}"
-    echo
-    print_warn "Niektóre operacje wymagają dostępu administratora (sudo)."
-    print_warn "Powód: ${reason}"
-    print_warn "Zostaniesz poproszony o hasło logowania macOS."
-    echo
-    sudo -v 2>/dev/null || {
-        print_error "Nie można uzyskać dostępu sudo. Pomijam operacje systemowe."
-        return 1
-    }
-    _start_sudo_keepalive
-    return 0
+    log_info "request_sudo called but privileged operations are disabled (P0-1b)."
+    return 1
 }
 
-# Spawn the background sudo keep-alive loop and record its PID.
-#
-# `disown` is essential here: it removes the loop from the shell's job table
-# so that, when the loop is later killed by a signal (SIGTERM when the parent
-# exits via cleanup_sudo_keepalive, OR when the whole process group is
-# interrupted — e.g. the caller presses Ctrl-C / an interrupt kills the run),
-# bash does NOT print an asynchronous job-control notice such as:
-#   lib/common.sh: line N: <pid> Terminated: 15  ( while true; do ... )
-# That notice is emitted by the *parent* shell's job-control layer, so the
-# in-subshell `2>/dev/null` and the `2>/dev/null` on `kill` cannot suppress
-# it — only dropping the job from the table (disown) does.
-_start_sudo_keepalive() {
-    (while true; do sudo -n true; sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null) &
-    SUDO_KEEPALIVE_PID=$!
-    disown "$SUDO_KEEPALIVE_PID" 2>/dev/null || disown %% 2>/dev/null || true
-}
+_start_sudo_keepalive() { :; }
 
 cleanup_sudo_keepalive() {
     if [[ -n "${SUDO_KEEPALIVE_PID:-}" ]]; then
@@ -858,20 +837,15 @@ direct_remove() {
     local sudo_required="${3:-0}"
     local action="${4:-deleted}"
 
-    print_cleaned "Removing: ${target}  ($(bytes_to_human "$size"))"
+    # P0-1b: privileged deletion is disabled
     if [[ "$sudo_required" == "1" ]]; then
-        if sudo rm -rf "$target" 2>/dev/null; then
-            TOTAL_CLEANED_BYTES=$(( TOTAL_CLEANED_BYTES + size ))
-            cleanup_journal_event "$action" "$target" "" "$size" "ok" ""
-            return 0
-        fi
-        print_warn "Could not remove (sudo): ${target}"
-        log_warn "sudo rm failed for: ${target}"
-        record_skipped_item "Nie udało się usunąć przez sudo: ${target}"
-        cleanup_journal_event "${action}_failed" "$target" "" "$size" "failed" "sudo rm failed"
+        print_warn "Privileged deletion disabled (P0-1b): ${target}"
+        record_skipped_item "Privileged deletion refused: ${target}"
+        cleanup_journal_event "${action}_blocked" "$target" "" "$size" "blocked" "sudo disabled (P0-1b)"
         return 1
     fi
 
+    print_cleaned "Removing: ${target}  ($(bytes_to_human "$size"))"
     if rm -rf "$target" 2>/dev/null; then
         TOTAL_CLEANED_BYTES=$(( TOTAL_CLEANED_BYTES + size ))
         cleanup_journal_event "$action" "$target" "" "$size" "ok" ""

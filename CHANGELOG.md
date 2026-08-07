@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **[P0-1a] BREAKING: System cache cleanup is now report-only.** The interactive path
+  no longer executes `sudo rm -rf` on `/Library/Caches` children. System caches are
+  reported with sizes but never deleted. Users who need this should use Disk Utility
+  or manual `sudo` outside this tool.
+- **[P0-1b] BREAKING: All privileged (`sudo`) operations removed.** `request_sudo`,
+  `_start_sudo_keepalive`, and the `sudo` branch in `direct_remove` are replaced
+  with stubs that unconditionally refuse. No code path in the tool can escalate to
+  root privileges.
+- **[P0-3] Extended protected-path denylist.** Added ~30 new paths including iCloud
+  Drive, `~/Library/CloudStorage`, `~/Dropbox`, `~/OneDrive`, `~/Google Drive`,
+  developer source trees (`~/Developer`, `~/Projects`, `~/src`, `~/code`, `~/repos`),
+  and credential dotfiles (`~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`,
+  `~/.zshrc`, `~/.bashrc`, `~/.npmrc`, etc.).
+- **[P1-11] Test artifact isolation.** `LOGS_DIR` and `REPORTS_DIR` in
+  `config/defaults.sh` are now environment-overridable (`${LOGS_DIR:-...}`). All
+  test files export artifact directories into per-test sandboxes, preventing leakage
+  into production `logs/` and `reports/` directories.
+
+### Added
+- `tests/test_path_protection.sh`: Table-driven test covering 80+ protected/unprotected
+  path assertions including all P0-3 additions, broad roots, system paths, edge cases.
+- `tests/fixtures/make_fake_home.sh`: Deterministic fixture home generator for testing.
+- `tests/helpers.sh`: `setup_artifact_isolation()` helper function.
+
 ### Fixed
 - `--json`: removed a dead per-category byte block in `lib/json_summary.sh` that
   was assembled into `cat_fragment` but never emitted — and would have produced
@@ -14,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test hermeticity: `tests/test_planner.sh` now sources `lib/json_summary.sh`
   the same way `cleanup_all.sh` does, so the suite no longer prints
   `json_summary_record_plan: command not found` to stderr while still passing.
+- `tests/test_cli.sh`: quarantine path assertion now uses `$QUARANTINE_ROOT`
+  instead of hardcoded default path.
 
 ## [2.1.0]
 

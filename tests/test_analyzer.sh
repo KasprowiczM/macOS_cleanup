@@ -11,6 +11,12 @@ PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 SANDBOX="$(mktemp -d -t macos_cleanup_test_analyzer.XXXXXX)"
 export HOME="$SANDBOX"
 export LOG_LEVEL="INFO"
+export LOGS_DIR="${SANDBOX}/logs"
+export REPORTS_DIR="${SANDBOX}/reports"
+export CLEANUP_JOURNAL_FILE="${SANDBOX}/reports/journal_test.jsonl"
+export CLEANUP_RESTORE_MANIFEST="${SANDBOX}/reports/restore_test.tsv"
+export QUARANTINE_ROOT="${SANDBOX}/quarantine"
+mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT"
 
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/config/defaults.sh"

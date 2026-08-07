@@ -110,7 +110,12 @@ clean_app_specific_caches() {
 }
 
 # ---------------------------------------------------------------------------
-# clean_system_caches — needs sudo
+# clean_system_caches — report-only (P0-1: privileged deletion removed)
+#
+# System caches under /Library/Caches are now report-only. The planner
+# already treats them as report_only; this aligns the interactive path.
+# Users who need to clean these should use Disk Utility or manual sudo
+# outside this tool.
 # ---------------------------------------------------------------------------
 clean_system_caches() {
     [[ ${#FOUND_SYSTEM_CACHES[@]} -eq 0 ]] && return
@@ -120,28 +125,14 @@ clean_system_caches() {
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
-    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        confirm_category \
-            --title      "Cache systemowe (/Library/Caches)" \
-            --size       "$total_h" \
-            --paths      "$(printf '%s|' "${FOUND_SYSTEM_CACHES[@]}")" \
-            --what       "Cache systemowe macOS w /Library/Caches. /private/var/folders nie jest automatycznie czyszczone." \
-            --consequence "System i aplikacje odtworzą cache. Nie jest potrzebny restart." \
-            --safe-if    "Bezpieczne. macOS samo czyści te katalogi gdy potrzebuje miejsca." \
-            --risk       "MEDIUM" || return 0
-    fi
+    print_section "Cache systemowe (/Library/Caches) — tylko raport"
+    print_info "Rozmiar: ${total_h}"
+    print_info "Cache systemowe są raportowane, ale nie usuwane przez ten skrypt."
+    print_info "macOS zarządza tymi plikami automatycznie."
 
-    if ! request_sudo "czyszczenie cache systemowych (/Library/Caches)"; then
-        print_warn "Brak sudo — pomijam cache systemowe."
-        return
-    fi
-
-    print_section "Czyszczenie: cache systemowe"
     for path in "${FOUND_SYSTEM_CACHES[@]}"; do
-        [[ -d "$path" ]] || continue
-        while IFS= read -r -d '' item; do
-            safe_remove "$item"
-        done < <(find "$path" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
+        record_skipped_item "System cache (report-only): ${path}"
+        cleanup_journal_event "report_only" "$path" "" "$(path_size_bytes "$path")" "skipped" "system cache report-only (P0-1)"
     done
 }
 

@@ -148,3 +148,18 @@ make_sandbox() {
     dir=$(mktemp -d -t macos_cleanup_test.XXXXXX)
     echo "$dir"
 }
+
+# Redirect all artifact output directories into the given sandbox.
+# Call this BEFORE sourcing config/defaults.sh so the readonly vars
+# pick up the exported values.
+setup_artifact_isolation() {
+    local sandbox="$1"
+    export LOGS_DIR="${sandbox}/logs"
+    export REPORTS_DIR="${sandbox}/reports"
+    export CLEANUP_JOURNAL_FILE="${sandbox}/reports/journal_test.jsonl"
+    export CLEANUP_RESTORE_MANIFEST="${sandbox}/reports/restore_test.tsv"
+    export QUARANTINE_ROOT="${sandbox}/quarantine"
+    export QUARANTINE_RUN_DIR="${sandbox}/quarantine/test_run"
+    mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT" "$QUARANTINE_RUN_DIR"
+}
+

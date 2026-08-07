@@ -18,6 +18,12 @@ mkdir -p "$TEST_HOME"
 export HOME="$TEST_HOME"
 export USER="${USER:-testuser}"
 export LOG_LEVEL="INFO"
+export LOGS_DIR="${SANDBOX}/logs"
+export REPORTS_DIR="${SANDBOX}/reports"
+export CLEANUP_JOURNAL_FILE="${SANDBOX}/reports/journal_test.jsonl"
+export CLEANUP_RESTORE_MANIFEST="${SANDBOX}/reports/restore_test.tsv"
+export QUARANTINE_ROOT="${SANDBOX}/quarantine"
+mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT"
 
 LOG_FILE="${SANDBOX}/test.log"
 C_RESET='' C_RED='' C_GREEN='' C_YELLOW='' C_BLUE='' C_CYAN='' C_BOLD='' C_DIM=''
