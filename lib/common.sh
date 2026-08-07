@@ -115,19 +115,8 @@ path_size_human() {
 # Path safety guard
 # ---------------------------------------------------------------------------
 
-# PF3: Probe realpath -m support once at source time (stock macOS /bin/realpath
-# rejects -m; avoid a failing subprocess on every normalize_path call).
-_REALPATH_HAS_M=0
-_REALPATH_CMD="realpath"
-if command -v grealpath >/dev/null 2>&1; then
-    if grealpath -m / >/dev/null 2>&1; then
-        _REALPATH_HAS_M=1; _REALPATH_CMD="grealpath"
-    fi
-elif command -v realpath >/dev/null 2>&1; then
-    if realpath -m / >/dev/null 2>&1; then
-        _REALPATH_HAS_M=1
-    fi
-fi
+# Task 1.7: realpath -m probe removed — use only in-tree normalizer for
+# deterministic behavior across macOS bash 3.2 and homebrew bash 5.
 
 # Pre-normalized copy of NEVER_TOUCH_PATHS; populated by
 # normalize_never_touch_paths() during preflight_checks.
@@ -158,7 +147,6 @@ normalize_path() {
     local input="$1"
     local path
     local norm=""
-    local -a segs out
     local top=0 is_abs=0 i seg
 
     path="$(_path_expand_home_and_vars "$input")"
@@ -172,22 +160,14 @@ normalize_path() {
         path="$collapsed"
     done
 
-    # PF3: use cached probe result instead of command -v on every call.
-    if (( _REALPATH_HAS_M )); then
-        local rp
-        rp="$($_REALPATH_CMD -m "$path" 2>/dev/null || true)"
-        if [[ -n "$rp" ]]; then
-            echo "$rp"
-            return 0
-        fi
-    fi
+
 
     # Convert relative input to absolute
     if [[ "$path" != /* ]]; then
         path="$(pwd -P)/$path"
     fi
 
-    # Manual path normalization (best effort) if realpath is not available
+    # For existing paths: resolve ancestors with cd -P, keep leaf unresolved
     if [[ -e "$path" || -L "$path" ]]; then
         local dir base
         if [[ "$path" == */* ]]; then
@@ -207,8 +187,19 @@ normalize_path() {
         return 0
     fi
 
+    # For non-existent paths: segment-based normalization (bash 3.2 compatible)
     [[ "$path" == /* ]] && is_abs=1
-    IFS='/' read -ra segs <<< "$path"
+
+    # Split path on '/' without read -ra (bash 3.2 compatible)
+    local -a segs=()
+    local _oldIFS="${IFS}"
+    IFS='/'
+    for seg in $path; do
+        segs[${#segs[@]}]="$seg"
+    done
+    IFS="${_oldIFS}"
+
+    local -a out=()
     for seg in "${segs[@]}"; do
         case "$seg" in
             ""|".")
