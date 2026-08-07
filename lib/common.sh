@@ -51,6 +51,29 @@ _on_interrupt() {
     exit 130
 }
 
+# Sourcing i18n dictionaries
+_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PROJ_ROOT="$(cd "${_COMMON_DIR}/.." && pwd)"
+if [[ -f "${_PROJ_ROOT}/i18n/pl.sh" ]]; then source "${_PROJ_ROOT}/i18n/pl.sh"; fi
+if [[ -f "${_PROJ_ROOT}/i18n/en.sh" ]]; then source "${_PROJ_ROOT}/i18n/en.sh"; fi
+
+t() {
+    local key="${1:-}"
+    local lang="${LANG_CODE:-pl}"
+    local val=""
+    if [[ "$lang" == "en" ]]; then
+        if val="$(i18n_get_en "$key" 2>/dev/null)"; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    if val="$(i18n_get_pl "$key" 2>/dev/null)"; then
+        echo "$val"
+        return 0
+    fi
+    echo "$key"
+}
+
 # ---------------------------------------------------------------------------
 # Privacy & Security Helpers
 # ---------------------------------------------------------------------------
@@ -85,27 +108,40 @@ rotate_old_artifacts() {
 }
 
 print_header() {
+    [[ "${QUIET_OUTPUT:-0}" == "1" ]] && return 0
     echo
-    echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}  $*${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+    if [[ "${PLAIN_OUTPUT:-0}" == "1" ]]; then
+        echo "=========================================================="
+        echo "  $*"
+        echo "=========================================================="
+    else
+        echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}  $*${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+    fi
     echo
 }
 
 print_section() {
+    [[ "${QUIET_OUTPUT:-0}" == "1" ]] && return 0
     echo
-    echo -e "${C_BOLD}${C_CYAN}▶ $*${C_RESET}"
-    echo -e "${C_DIM}──────────────────────────────────────────────────────────${C_RESET}"
+    if [[ "${PLAIN_OUTPUT:-0}" == "1" ]]; then
+        echo "-> $*"
+        echo "----------------------------------------------------------"
+    else
+        echo -e "${C_BOLD}${C_CYAN}▶ $*${C_RESET}"
+        echo -e "${C_DIM}──────────────────────────────────────────────────────────${C_RESET}"
+    fi
 }
 
-print_info()    { echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
+print_info()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
 print_ok()      { echo -e "  ${C_GREEN}✔${C_RESET}  $*"; log_info "OK: $*"; }
 print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; }
 print_error()   { echo -e "  ${C_RED}✖${C_RESET}  $*" >&2; log_error "$*"; }
-print_skip()    { echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
-print_found()   { echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
+print_skip()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
+print_found()   { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
 print_cleaned() { echo -e "  ${C_GREEN}✓${C_RESET}  $*"; log_info "CLEANED: $*"; }
-print_dry()     { echo -e "  ${C_CYAN}[DRY]${C_RESET}  $*"; log_info "DRY-RUN: $*"; }
+print_dry()     { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_CYAN}[DRY]${C_RESET}  $*"; log_info "DRY-RUN: $*"; }
 
 # A prominent warning box used before any destructive confirmation prompt.
 print_warning_box() {

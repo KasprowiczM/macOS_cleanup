@@ -391,6 +391,22 @@ parse_args() {
                 REDACT_PATHS=1
                 shift
                 ;;
+            --plain)
+                PLAIN_OUTPUT=1
+                shift
+                ;;
+            --quiet|-q)
+                QUIET_OUTPUT=1
+                shift
+                ;;
+            --lang)
+                if [[ -z "${2:-}" ]]; then
+                    print_error "--lang wymaga kodu języka (pl|en)"
+                    exit 2
+                fi
+                LANG_CODE="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+                shift 2
+                ;;
             --help|-h)
                 SHOW_HELP=1
                 shift
