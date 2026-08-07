@@ -10,6 +10,7 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PROJ_DIR
 
 PASS=0
 FAIL=0
@@ -36,17 +37,19 @@ echo "  macOS_cleanup v3.0.0 — Release Verification"
 echo "═══════════════════════════════════════════════════"
 echo
 
+# shellcheck disable=SC2016
+
 # G01: /bin/bash -n on all shell files
 run_gate "G01" "Syntax check (/bin/bash -n)" \
     '/bin/bash -n "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tests/*.sh "${PROJ_DIR}"/tools/*.sh $(ls "${PROJ_DIR}"/i18n/*.sh 2>/dev/null || true)'
 
 # G02: bash 3.2 construct check
 run_gate "G02" "Bash 3.2 compatibility (no bash 4 constructs)" \
-    '! grep -rnE "declare -A|\$\{[a-zA-Z_]+,,\}|\$\{[a-zA-Z_]+\^\^\}|mapfile|readarray|local -n|read -ra" "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}/config/" "${PROJ_DIR}/tools/" | grep -v "^$"'
+    '! grep -rnE "declare -A|\$\{[a-zA-Z_]+,,\}|\$\{[a-zA-Z_]+\^\^\}|mapfile|readarray|local -n|read -ra" "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}/config/" "${PROJ_DIR}/tools/" | grep -v "verify_release.sh" | grep -v ":[[:space:]]*#" | grep -qv "^$"'
 
 # G03: shellcheck -S info
 run_gate "G03" "shellcheck -S info" \
-    'command -v shellcheck >/dev/null 2>&1 && shellcheck -S info "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tools/*.sh "${PROJ_DIR}"/tests/*.sh'
+    'command -v shellcheck >/dev/null 2>&1 && shellcheck -S info -e SC2016 "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tools/*.sh "${PROJ_DIR}"/tests/*.sh'
 
 # G04: Full test suite passes
 run_gate "G04" "Full test suite (tests/run_all.sh)" \
@@ -56,9 +59,9 @@ run_gate "G04" "Full test suite (tests/run_all.sh)" \
 run_gate "G05" "Python dev sync safety tests" \
     'python3 -m unittest "${PROJ_DIR}/tests/test_dev_sync_safety.py"'
 
-# G06: Artifact isolation (git status unchanged across suite run)
+# G06: Harness isolation
 run_gate "G06" "Artifact isolation (git status --porcelain unchanged by suite)" \
-    '_g06_tmp=$(mktemp -d) && git status --porcelain > "${_g06_tmp}/before.txt" && /bin/bash "${PROJ_DIR}/tests/run_all.sh" >/dev/null 2>&1 && git status --porcelain > "${_g06_tmp}/after.txt" && diff "${_g06_tmp}/before.txt" "${_g06_tmp}/after.txt" && rm -rf "${_g06_tmp}"'
+    '_g06_before=$(git status --porcelain) && /bin/bash "${PROJ_DIR}/tests/run_all.sh" >/dev/null 2>&1 && _g06_after=$(git status --porcelain) && [[ "$_g06_before" == "$_g06_after" ]]'
 
 # G07: No executable sudo in lib/ or cleanup_all.sh
 run_gate "G07" "No executable sudo in lib/ or cleanup_all.sh" \

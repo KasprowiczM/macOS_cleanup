@@ -72,11 +72,11 @@ fi
 
 begin_test "QUIET_OUTPUT suppresses print_info terminal output"
 QUIET_OUTPUT=1
-out="$(print_info "suppressed_test_msg" 2>&1)"
-if [[ -z "$out" ]]; then
+quiet_out="$(print_info "suppressed_test_msg" 2>&1)"
+if [[ -z "$quiet_out" ]]; then
     _pass
 else
-    _fail "QUIET_OUTPUT should produce no terminal output, got: ${out}"
+    _fail "QUIET_OUTPUT should produce no terminal output, got: ${quiet_out}"
 fi
 
 print_test_summary

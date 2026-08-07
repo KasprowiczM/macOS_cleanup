@@ -40,6 +40,7 @@ trap cleanup EXIT
 begin_test "redact_path sanitizes HOME directory paths when REDACT_PATHS=1"
 REDACT_PATHS=1
 redacted="$(redact_path "$HOME/Library/Caches/test")"
+# shellcheck disable=SC2088
 if [[ "$redacted" == "~/Library/Caches/test" ]]; then
     _pass
 else

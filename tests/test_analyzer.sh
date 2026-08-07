@@ -91,7 +91,8 @@ run_analyzer_check analyze_app_specific_caches
 create_file_kb "$HOME/Library/Application Support/Slack/Cache/index.dat" 12
 analyze_app_specific_caches
 assert_array_var_contains_fragment "FOUND_APP_CACHE_ITEMS" "Slack (Electron cache):$HOME/Library/Application Support/Slack/Cache"
-assert_true "(( $(catbytes_get \"app-caches\") >= $(path_size_bytes \"$HOME/Library/Application Support/Slack/Cache\") ))"
+_slack_sz="$(path_size_bytes "$HOME/Library/Application Support/Slack/Cache")"
+assert_true "(( $(catbytes_get 'app-caches') >= _slack_sz ))"
 
 begin_test "known app caches are not double-counted as generic user caches"
 run_analyzer_check analyze_user_caches

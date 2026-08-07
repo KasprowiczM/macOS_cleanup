@@ -25,12 +25,27 @@ normalize_file() {
     local src="$1" dest="$2"
     sed -E \
         -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}_[0-9]{6}/<TIMESTAMP>/g' \
+        -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}/<ISO_TIMESTAMP>/g' \
         -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z?/<ISO_TIMESTAMP>/g' \
         -e 's/_pid[0-9]+/_pid<PID>/g' \
-        -e 's/_[0-9]{5}\./_<PID>./g' \
+        -e 's/_[0-9]{4,6}\.(log|md|json|jsonl)/_<PID>.\1/g' \
+        -e 's/_[0-9]{4,6}"/_<PID>"/' \
+        -e 's/_[0-9]{4,6}$/_<PID>/' \
+        -e 's/"run_id": "<TIMESTAMP>_[0-9]+"/"run_id": "<TIMESTAMP>_<PID>"/g' \
+        -e 's/quarantine\/<TIMESTAMP>_[0-9]+/quarantine\/<TIMESTAMP>_<PID>/g' \
         -e 's/\/private\/var\/folders\/[^\/]+\/[^\/]+\/T\/[^\/]+/<TMP_PATH>/g' \
         -e 's/\/var\/folders\/[^\/]+\/[^\/]+\/T\/[^\/]+/<TMP_PATH>/g' \
         -e 's/\/tmp\/[^\/]+/<TMP_PATH>/g' \
+        -e 's/baseline\/[^\/]+\/(logs|reports|quarantine)/<OUTPUT_DIR>\/\1/g' \
+        -e 's/<TMP_PATH>\/(logs|reports|quarantine)/<OUTPUT_DIR>\/\1/g' \
+        -e 's/baseline\/(pre|post)/baseline\/<DIR>/g' \
+        -e 's/version [0-9]+\.[0-9]+\.[0-9]+/version <VERSION>/g' \
+        -e 's/"tool_version": "[0-9]+\.[0-9]+\.[0-9]+"/"tool_version": "<VERSION>"/g' \
+        -e 's/Wersja:[[:space:]]+[0-9]+\.[0-9]+\.[0-9]+/Wersja:   <VERSION>/g' \
+        -e 's/Wolne:[[:space:]]+[0-9.]+[[:space:]]+[KMGT]?B/Wolne:     <FREE_SPACE>/g' \
+        -e 's/Użyte:[[:space:]]+[0-9]+Gi[[:space:]]+\|[[:space:]]+Wolne:[[:space:]]+[0-9]+Gi[[:space:]]+\([0-9]+%\)/Użyte: <USED> | Wolne: <FREE>/g' \
+        -e 's/.*com\.apple\.TimeMachine.*/    • com.apple.TimeMachine.<SNAPSHOT>.local/g' \
+        -e '/"informational_bytes": 0,/d' \
         "$src" > "$dest"
 }
 

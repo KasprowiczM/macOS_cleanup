@@ -54,7 +54,9 @@ _on_interrupt() {
 # Sourcing i18n dictionaries
 _COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _PROJ_ROOT="$(cd "${_COMMON_DIR}/.." && pwd)"
+# shellcheck disable=SC1091
 if [[ -f "${_PROJ_ROOT}/i18n/pl.sh" ]]; then source "${_PROJ_ROOT}/i18n/pl.sh"; fi
+# shellcheck disable=SC1091
 if [[ -f "${_PROJ_ROOT}/i18n/en.sh" ]]; then source "${_PROJ_ROOT}/i18n/en.sh"; fi
 
 t() {
@@ -941,7 +943,7 @@ path_has_symlink_ancestor_under_home() {
     parent="$(dirname "$normalized")"
     [[ "$parent" == "$home_norm" ]] && return 1
 
-    rel="${parent#$home_norm/}"
+    rel="${parent#"$home_norm"/}"
     current="$home_norm"
     local -a parts=()
     local _oldIFS="${IFS}"
@@ -1052,6 +1054,7 @@ resolve_restore_manifest() {
     [[ -z "$requested" ]] && return 1
 
     if [[ "$requested" == "latest" ]]; then
+        # shellcheck disable=SC2012
         candidate="$(ls -t "${REPORTS_DIR}"/restore_*.tsv 2>/dev/null | head -1 || true)"
         if [[ -n "$candidate" && -f "$candidate" ]]; then
             normalize_path "$candidate" || echo "$candidate"
@@ -1194,6 +1197,7 @@ restore_quarantine_manifest() {
 
 latest_quarantine_run_dir() {
     local latest
+    # shellcheck disable=SC2012
     latest="$(ls -td "${QUARANTINE_ROOT}"/* 2>/dev/null | head -1 || true)"
     [[ -n "$latest" && -d "$latest" ]] || return 1
     normalize_path "$latest" || echo "$latest"

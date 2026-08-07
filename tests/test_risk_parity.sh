@@ -46,10 +46,10 @@ c_low_p="$(consequence_for_mode "LOW" "permanent")"
 c_med_p="$(consequence_for_mode "MEDIUM" "permanent")"
 c_high_p="$(consequence_for_mode "HIGH" "permanent")"
 
-if [[ "$c_low_q" == *"kwarantanny"* ]]; then
+if [[ "$c_low_q" == *"kwarantanny"* ]] && [[ "$c_low_p" == *"usunięte"* ]]; then
     _pass
 else
-    _fail "LOW risk quarantine consequence should mention kwarantanny"
+    _fail "LOW risk consequence strings invalid"
 fi
 
 if [[ "$c_med_p" == *"ŚREDNIE RYZYKO"* ]]; then

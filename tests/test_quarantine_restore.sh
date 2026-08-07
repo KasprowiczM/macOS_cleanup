@@ -67,7 +67,7 @@ start_case() {
 
     NEVER_TOUCH_PATHS=()
     DRY_RUN=0
-    MODE="auto-safe"
+    MODE="auto-safe"; : "$MODE"
     REMOVE_MODE="quarantine"
     TOTAL_CLEANED_BYTES=0
     TOTAL_WOULD_FREE_BYTES=0
