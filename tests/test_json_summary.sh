@@ -62,7 +62,7 @@ reset_summary_state() {
     TOTAL_USER_DECISIONS_NEEDED=0
     USER_DECISION_ITEMS=()
     WARNINGS_LIST=()
-    MODE="dry-run"
+    MODE="dry-run"; : "$MODE"
     DRY_RUN=1
     REMOVE_MODE="quarantine"
     ACTIVE_CATEGORIES=("trash")

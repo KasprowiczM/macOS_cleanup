@@ -189,6 +189,11 @@ policy_adjust_risk_for_path() {
     local default_risk="${2:-REVIEW}"
     local explicit_risk default_rank explicit_rank
 
+    if is_protected_path "$path"; then
+        echo "DANGEROUS"
+        return 0
+    fi
+
     explicit_risk="$(policy_explicit_risk_for_path "$path" 2>/dev/null || true)"
     [[ -z "$explicit_risk" ]] && { echo "$default_risk"; return 0; }
 

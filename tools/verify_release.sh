@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # tools/verify_release.sh — Release verification gates (G01–G15)
-#
-# Runs all verification gates for the 3.0.0 release. Each gate prints
-# PASS or FAIL with an explanation. Exit 0 only if all gates pass.
+# Part 2 & Part 0.1 Contract Specification
+# Exit 0 only if all gates pass.
 # Bash 3.2 compatible.
 # =============================================================================
 
@@ -11,18 +10,53 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+export PROJ_DIR
+
+QUICK_MODE=0
+TARGET_GATE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --quick)
+            QUICK_MODE=1
+            shift
+            ;;
+        --gate)
+            TARGET_GATE="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
 
 PASS=0
 FAIL=0
 
-gate() {
-    local id="$1" desc="$2"
-    shift 2
-    if "$@" >/dev/null 2>&1; then
-        echo "  ✅  ${id}: ${desc}"
+run_gate() {
+    local id="$1" desc="$2" cmd="$3"
+    if [[ "$id" == "G14" && ( -z "${TARGET_GATE:-}" || "${TARGET_GATE:-}" == "G14" ) && ( ! -d "${PROJ_DIR}/baseline/pre" || ! -d "${PROJ_DIR}/baseline/post" ) ]]; then
+        echo "Skipping G14: private machine baselines are not distributed; capture local baselines first."
+        return 0
+    fi
+    
+    if [[ -n "$TARGET_GATE" && "$TARGET_GATE" != "$id" ]]; then
+        return 0
+    fi
+    if [[ "$QUICK_MODE" -eq 1 && ("$id" == "G04" || "$id" == "G06" || "$id" == "G12") ]]; then
+        echo "-----------------------------------------------------------"
+        echo "Skipping ${id} (--quick mode): ${desc}"
+        return 0
+    fi
+
+    echo "-----------------------------------------------------------"
+    echo "Running ${id}: ${desc}"
+    if eval "$cmd"; then
+        echo "  ✅  ${id}: PASS — ${desc}"
         PASS=$(( PASS + 1 ))
     else
-        echo "  ❌  ${id}: ${desc}"
+        echo "  ❌  ${id}: FAIL — ${desc}"
         FAIL=$(( FAIL + 1 ))
     fi
 }
@@ -32,65 +66,86 @@ echo "  macOS_cleanup v3.0.0 — Release Verification"
 echo "═══════════════════════════════════════════════════"
 echo
 
+SUITE_RUN_NEEDED=0
+if [[ "$QUICK_MODE" -eq 0 ]]; then
+    if [[ -z "$TARGET_GATE" || "$TARGET_GATE" == "G04" || "$TARGET_GATE" == "G06" || "$TARGET_GATE" == "G08" || "$TARGET_GATE" == "G10" || "$TARGET_GATE" == "G13" ]]; then
+        SUITE_RUN_NEEDED=1
+    fi
+fi
+
+_SUITE_LOG=""
+_SUITE_RC=0
+_GIT_BEFORE=""
+_GIT_AFTER=""
+
+if [[ "$SUITE_RUN_NEEDED" -eq 1 ]]; then
+    _SUITE_LOG="$(mktemp -t verify_suite.XXXXXX)"
+    trap 'rm -f "$_SUITE_LOG"' EXIT
+    _GIT_BEFORE="$(git status --porcelain)"
+    /bin/bash "${PROJ_DIR}/tests/run_all.sh" > "$_SUITE_LOG" 2>&1
+    _SUITE_RC=$?
+    _GIT_AFTER="$(git status --porcelain)"
+fi
+
 # G01: Syntax check
-gate "G01" "bash -n on all .sh files" \
-    /bin/bash -c '/bin/bash -n '"${PROJ_DIR}"'/cleanup_all.sh '"${PROJ_DIR}"'/lib/*.sh '"${PROJ_DIR}"'/config/*.sh '"${PROJ_DIR}"'/tests/*.sh'
+run_gate "G01" "Syntax check (/bin/bash -n)" \
+    '/bin/bash -n "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tests/*.sh "${PROJ_DIR}"/tools/*.sh $(ls "${PROJ_DIR}"/i18n/*.sh 2>/dev/null || true)'
 
-# G02: Test suite passes
-gate "G02" "All test files pass" \
-    /bin/bash "${PROJ_DIR}/tests/run_all.sh"
+# G02: Bash 3.2 compatibility
+run_gate "G02" "Bash 3.2 compatibility (no bash 4 constructs)" \
+    '! grep -rnE "declare -A|\$\{[a-zA-Z_]+,,\}|\$\{[a-zA-Z_]+\^\^\}|mapfile|readarray|local -n|read -ra" "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}/config/" "${PROJ_DIR}/tools/" | grep -v "verify_release.sh" | grep -v ":[[:space:]]*#" | grep -qv "^$"'
 
-# G03: No sudo in execution paths
-gate "G03" "No executable sudo calls in lib/" \
-    /bin/bash -c '! grep -rn "sudo " '"${PROJ_DIR}"'/lib/*.sh | grep -v "^.*:#" | grep -v "cleanup_sudo_keepalive" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_\|cleanup_journal_event\|użyj trybu" | grep -qv "^$"'
+# G03: shellcheck -S info
+run_gate "G03" "shellcheck -S info" \
+    'command -v shellcheck >/dev/null 2>&1 && shellcheck -S info -e SC2016 "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tools/*.sh "${PROJ_DIR}"/tests/*.sh'
 
-# G04: Version is 3.0.0
-gate "G04" "Version string is 3.0.0" \
-    /bin/bash -c 'grep -q "SCRIPT_VERSION=\"3.0.0\"" '"${PROJ_DIR}"'/config/defaults.sh'
+# G04: Full test suite passes
+run_gate "G04" "Full test suite (tests/run_all.sh)" \
+    '[[ "$_SUITE_RC" -eq 0 ]] && grep -q "ALL TEST FILES PASSED" "$_SUITE_LOG"'
 
-# G05: CHANGELOG has 3.0.0 entry
-gate "G05" "CHANGELOG contains [3.0.0] entry" \
-    /bin/bash -c 'grep -q "\[3.0.0\]" '"${PROJ_DIR}"'/CHANGELOG.md'
+# G05: Python dev sync safety
+run_gate "G05" "Python dev sync safety tests" \
+    'python3 -m unittest "${PROJ_DIR}/tests/test_dev_sync_safety.py"'
 
-# G06: No read -ra in lib/ (bash 3.2 compat)
-gate "G06" "No read -ra in lib/ (bash 3.2)" \
-    /bin/bash -c '! grep -rn "read -ra\|read -a" '"${PROJ_DIR}"'/lib/*.sh | grep -qv "^$"'
+# G06: Artifact isolation
+run_gate "G06" "Artifact isolation (git status --porcelain unchanged by suite)" \
+    '[[ "$_GIT_BEFORE" == "$_GIT_AFTER" ]]'
 
-# G07: No _REALPATH_HAS_M in common.sh
-gate "G07" "No realpath -m probe in common.sh" \
-    /bin/bash -c '! grep -q "_REALPATH_HAS_M\|_REALPATH_CMD" '"${PROJ_DIR}"'/lib/common.sh'
+# G07: No executable sudo
+run_gate "G07" "No executable sudo in lib/ or cleanup_all.sh" \
+    '! grep -rn "sudo " "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" | grep -v "^[[:space:]]*#" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_\|cleanup_journal_event\|użyj trybu\|sudo disabled" | grep -qv "^$"'
 
-# G08: Protected path test exists and passes
-gate "G08" "test_path_protection.sh exists and passes" \
-    /bin/bash "${PROJ_DIR}/tests/test_path_protection.sh"
+# G08: Protected path assertions >= 60
+run_gate "G08" "Protected path assertions >= 60 (tests/test_path_protection.sh)" \
+    'if [[ -n "$_SUITE_LOG" ]]; then [[ "$_SUITE_RC" -eq 0 ]]; else /bin/bash "${PROJ_DIR}/tests/test_path_protection.sh" >/dev/null 2>&1; fi && [[ $(grep -c "assert_protected\|assert_unprotected\|check_path" "${PROJ_DIR}/tests/test_path_protection.sh") -ge 60 ]]'
 
-# G09: NEVER_TOUCH has cloud storage paths
-gate "G09" "NEVER_TOUCH includes cloud storage" \
-    /bin/bash -c 'grep -q "CloudStorage\|Dropbox\|OneDrive" '"${PROJ_DIR}"'/config/defaults.sh'
+# G09: plan.json schema validation
+run_gate "G09" "plan.json validates against schemas/plan.schema.json" \
+    '_g09_tmp=$(mktemp -d) && HOME="$_g09_tmp" /bin/bash "${PROJ_DIR}/cleanup_all.sh" plan --non-interactive --no-color >/dev/null 2>&1 && _plan=$(ls -t "${PROJ_DIR}/reports/plan_"*.json 2>/dev/null | head -1) && [[ -n "$_plan" ]] && jsonschema -i "$_plan" "${PROJ_DIR}/schemas/plan.schema.json" && rm -rf "${_g09_tmp}"'
 
-# G10: assert_safe_path returns 1, not exit 99
-gate "G10" "assert_safe_path uses return, not exit 99" \
-    /bin/bash -c '! grep -q "exit 99" '"${PROJ_DIR}"'/lib/common.sh'
+# G10: Risk parity (Must check category_max_risk wiring and parity assertions; FAILS until Batch A)
+run_gate "G10" "Risk parity (tests/test_risk_parity.sh)" \
+    '[[ $(grep -c "category_max_risk\|policy_adjust_risk_for_path" "${PROJ_DIR}/lib/cleaner.sh") -ge 12 ]] && [[ -f "${PROJ_DIR}/tests/test_risk_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_risk_parity.sh"'
 
-# G11: System caches report-only
-gate "G11" "clean_system_caches is report-only" \
-    /bin/bash -c 'grep -q "report.only\|report_only\|tylko raport" '"${PROJ_DIR}"'/lib/cleaner.sh'
+# G11: i18n string coverage (Must check 7 lang files, key equality, and 0 Polish literals; FAILS until Batch C)
+run_gate "G11" "i18n string coverage (no literals outside i18n/)" \
+    '[[ -d "${PROJ_DIR}/i18n" ]] && [[ -f "${PROJ_DIR}/i18n/en.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pl.sh" ]] && [[ -f "${PROJ_DIR}/i18n/de.sh" ]] && [[ -f "${PROJ_DIR}/i18n/es.sh" ]] && [[ -f "${PROJ_DIR}/i18n/fr.sh" ]] && [[ -f "${PROJ_DIR}/i18n/it.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pt.sh" ]] && [[ $(grep -rcE "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]" "${PROJ_DIR}/lib/"*.sh "${PROJ_DIR}/cleanup_all.sh" | awk -F: "{s+=\$2} END{print s}") -eq 0 ]]'
 
-# G12: Dry-run runs without error
-gate "G12" "cleanup_all.sh --dry-run exits 0" \
-    /bin/bash "${PROJ_DIR}/cleanup_all.sh" --dry-run
+# G12: Suite passes with and without grealpath on PATH (Only gate allowed 2nd full suite run)
+run_gate "G12" "Normalizer determinism (suite passes with and without grealpath)" \
+    'PATH="$(echo "$PATH" | tr ":" "\n" | grep -v "coreutils" | tr "\n" ":")" /bin/bash "${PROJ_DIR}/tests/run_all.sh" >/dev/null 2>&1'
 
-# G13: INT/TERM trap exists
-gate "G13" "INT/TERM signal trap registered" \
-    /bin/bash -c 'grep -q "trap.*INT.*TERM\|trap.*_on_interrupt.*INT" '"${PROJ_DIR}"'/cleanup_all.sh'
+# G13: Accounting deduplication
+run_gate "G13" "Accounting deduplication (tests/test_accounting.sh)" \
+    'if [[ -n "$_SUITE_LOG" ]]; then [[ "$_SUITE_RC" -eq 0 ]]; else [[ -f "${PROJ_DIR}/tests/test_accounting.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_accounting.sh" >/dev/null 2>&1; fi'
 
-# G14: Fail-closed normalization in safe_remove
-gate "G14" "safe_remove has fail-closed normalization check" \
-    /bin/bash -c 'grep -q "normalization.failed\|normalization_failed" '"${PROJ_DIR}"'/lib/common.sh'
+# G14: Baseline diff
+run_gate "G14" "Baseline diff (baseline/pre vs baseline/post)" \
+    '[[ -d "${PROJ_DIR}/baseline/post" ]] && /bin/bash "${PROJ_DIR}/tools/baseline_diff.sh" "${PROJ_DIR}/baseline/pre" "${PROJ_DIR}/baseline/post"'
 
-# G15: LOGS_DIR/REPORTS_DIR env-overridable
-gate "G15" "LOGS_DIR uses env override pattern" \
-    /bin/bash -c 'grep -q "LOGS_DIR:-\|LOGS_DIR=.*{LOGS_DIR" '"${PROJ_DIR}"'/config/defaults.sh'
+# G15: No runtime network usage
+run_gate "G15" "No network calls in cleanup code" \
+    '! grep -rnE "curl|wget|nc |/dev/tcp|ftp " "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" | grep -v "^[[:space:]]*#" | grep -qv "^$"'
 
 echo
 echo "═══════════════════════════════════════════════════"

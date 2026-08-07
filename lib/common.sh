@@ -31,31 +31,148 @@ log_warn()  { _log "WARN"  "$@"; }
 log_error() { _log "ERROR" "$@"; }
 
 # ---------------------------------------------------------------------------
-# Formatted output (to terminal)
+# Signal & Trap Handlers
 # ---------------------------------------------------------------------------
 
+_on_exit() {
+    local rc=$?
+    log_debug "Exit handler called with status ${rc}"
+    return $rc
+}
+
+_on_error() {
+    local line="${1:-0}"
+    log_error "Unhandled error occurred on line ${line}"
+}
+
+_on_interrupt() {
+    log_warn "Interrupted by signal (SIGINT/SIGTERM), exiting cleanly."
+    print_warn "Przerwano działanie skryptu (sygnał INT/TERM)."
+    exit 130
+}
+
+# Sourcing i18n dictionaries
+_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PROJ_ROOT="$(cd "${_COMMON_DIR}/.." && pwd)"
+# shellcheck disable=SC1091
+if [[ -f "${_PROJ_ROOT}/i18n/pl.sh" ]]; then source "${_PROJ_ROOT}/i18n/pl.sh"; fi
+# shellcheck disable=SC1091
+if [[ -f "${_PROJ_ROOT}/i18n/en.sh" ]]; then source "${_PROJ_ROOT}/i18n/en.sh"; fi
+
+t() {
+    local key="${1:-}"
+    local lang="${LANG_CODE:-pl}"
+    local val=""
+    if [[ "$lang" == "en" ]]; then
+        if val="$(i18n_get_en "$key" 2>/dev/null)"; then
+            echo "$val"
+            return 0
+        fi
+    fi
+    if val="$(i18n_get_pl "$key" 2>/dev/null)"; then
+        echo "$val"
+        return 0
+    fi
+    echo "$key"
+}
+
+# Cached path size calculation to optimize filesystem du traversal
+SIZE_CACHE_KEYS=()
+SIZE_CACHE_VALS=()
+
+get_path_size_cached() {
+    local path="${1:-}"
+    [[ -z "$path" || ! -e "$path" ]] && { echo "0"; return 0; }
+
+    local norm
+    norm="$(normalize_path "$path" || echo "$path")"
+
+    local i
+    for (( i=0; i<${#SIZE_CACHE_KEYS[@]}; i++ )); do
+        if [[ "${SIZE_CACHE_KEYS[i]}" == "$norm" ]]; then
+            echo "${SIZE_CACHE_VALS[i]}"
+            return 0
+        fi
+    done
+
+    local bytes
+    bytes="$(du -sk "$norm" 2>/dev/null | awk '{print $1 * 1024}')"
+    bytes="${bytes:-0}"
+
+    SIZE_CACHE_KEYS+=("$norm")
+    SIZE_CACHE_VALS+=("$bytes")
+
+    echo "$bytes"
+}
+
+# ---------------------------------------------------------------------------
+# Privacy & Security Helpers
+# ---------------------------------------------------------------------------
+
+redact_path() {
+    local str="$1"
+    if [[ "${REDACT_PATHS:-0}" == "1" ]]; then
+        if [[ -n "${HOME:-}" ]]; then
+            str="${str//$HOME/~}"
+        fi
+        local user
+        user="$(whoami 2>/dev/null || echo "")"
+        if [[ -n "$user" ]]; then
+            str="${str//\/Users\/$user/~}"
+        fi
+    fi
+    echo "$str"
+}
+
+rotate_old_artifacts() {
+    local max_days="${1:-30}"
+    local logs_dir="${LOGS_DIR:-}"
+    local reports_dir="${REPORTS_DIR:-}"
+
+    if [[ -n "$logs_dir" && -d "$logs_dir" ]]; then
+        find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+    fi
+
+    if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
+        find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+    fi
+}
+
 print_header() {
+    [[ "${QUIET_OUTPUT:-0}" == "1" ]] && return 0
     echo
-    echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}  $*${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+    if [[ "${PLAIN_OUTPUT:-0}" == "1" ]]; then
+        echo "=========================================================="
+        echo "  $*"
+        echo "=========================================================="
+    else
+        echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}  $*${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"
+    fi
     echo
 }
 
 print_section() {
+    [[ "${QUIET_OUTPUT:-0}" == "1" ]] && return 0
     echo
-    echo -e "${C_BOLD}${C_CYAN}▶ $*${C_RESET}"
-    echo -e "${C_DIM}──────────────────────────────────────────────────────────${C_RESET}"
+    if [[ "${PLAIN_OUTPUT:-0}" == "1" ]]; then
+        echo "-> $*"
+        echo "----------------------------------------------------------"
+    else
+        echo -e "${C_BOLD}${C_CYAN}▶ $*${C_RESET}"
+        echo -e "${C_DIM}──────────────────────────────────────────────────────────${C_RESET}"
+    fi
 }
 
-print_info()    { echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
+print_info()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
 print_ok()      { echo -e "  ${C_GREEN}✔${C_RESET}  $*"; log_info "OK: $*"; }
 print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; }
 print_error()   { echo -e "  ${C_RED}✖${C_RESET}  $*" >&2; log_error "$*"; }
-print_skip()    { echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
-print_found()   { echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
+print_skip()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
+print_found()   { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
 print_cleaned() { echo -e "  ${C_GREEN}✓${C_RESET}  $*"; log_info "CLEANED: $*"; }
-print_dry()     { echo -e "  ${C_CYAN}[DRY]${C_RESET}  $*"; log_info "DRY-RUN: $*"; }
+print_dry()     { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_CYAN}[DRY]${C_RESET}  $*"; log_info "DRY-RUN: $*"; }
 
 # A prominent warning box used before any destructive confirmation prompt.
 print_warning_box() {
@@ -179,7 +296,11 @@ normalize_path() {
         fi
         dir="$(cd -P "$dir" 2>/dev/null && pwd -P)"
         if [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
-            norm="$dir/$base"
+            if [[ "$dir" == "/" ]]; then
+                norm="/$base"
+            else
+                norm="$dir/$base"
+            fi
         else
             norm="$dir"
         fi
@@ -248,7 +369,7 @@ is_protected_path() {
     # Fail closed for broad roots. Cleaners should pass leaf candidates, never
     # whole user/system roots.
     case "$normalized_candidate" in
-        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/Applications|/Applications/*|/opt|/opt/*)
+        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
             return 0 ;;
         /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
             return 0 ;;
@@ -266,7 +387,8 @@ is_protected_path() {
 
     # /System/* and other users are never touched.
     # /Library is protected by default, with targeted cache/log leaf cleanup.
-    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* ]]; then
+    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
+          "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
         return 0
     fi
     if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
@@ -352,6 +474,60 @@ add_never_touch_path() {
     fi
 
     NEVER_TOUCH_PATHS+=("$normalized")
+}
+
+# ---------------------------------------------------------------------------
+# Claimed path registry — prevents double-counting across categories
+# ---------------------------------------------------------------------------
+_CLAIMED_PATHS=()
+_CLAIMED_BYTES=()
+
+claim_path() {
+    local target="$1"
+    local bytes="${2:-0}"
+    local norm
+    norm="$(normalize_path "$target" 2>/dev/null || echo "$target")"
+    [[ -z "$norm" ]] && return 1
+
+    if is_path_claimed "$norm"; then
+        return 1
+    fi
+
+    _CLAIMED_PATHS+=("$norm")
+    _CLAIMED_BYTES+=("$bytes")
+    return 0
+}
+
+is_path_claimed() {
+    local target="$1"
+    local norm
+    norm="$(normalize_path "$target" 2>/dev/null || echo "$target")"
+    [[ -z "$norm" ]] && return 1
+
+    if (( ${#_CLAIMED_PATHS[@]} == 0 )); then
+        return 1
+    fi
+
+    local p
+    for p in "${_CLAIMED_PATHS[@]}"; do
+        if [[ "$p" == "$norm" || "$norm" == "$p"/* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+reset_claimed_paths() {
+    _CLAIMED_PATHS=()
+    _CLAIMED_BYTES=()
+}
+
+add_informational_bytes() {
+    local bytes="${1:-0}"
+    case "$bytes" in
+        ''|*[!0-9]*) bytes=0 ;;
+    esac
+    TOTAL_INFORMATIONAL_BYTES=$(( TOTAL_INFORMATIONAL_BYTES + bytes ))
 }
 
 # Parse cleanup_rules.yaml and append all paths with safety: never.
@@ -464,6 +640,15 @@ assert_safe_path() {
         record_skipped_item "SAFETY VIOLATION (parent of protected): ${path}"
         cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "parent of protected path"
         return 1
+    fi
+    if type validate_cache_path >/dev/null 2>&1; then
+        if ! validate_cache_path "$path"; then
+            print_error "SAFETY VIOLATION: pathguard rejected candidate path: ${path}"
+            log_error "SAFETY VIOLATION: pathguard rejected candidate path: ${path}"
+            record_skipped_item "SAFETY VIOLATION (pathguard): ${path}"
+            cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "pathguard rejection"
+            return 1
+        fi
     fi
     return 0
 }
@@ -758,7 +943,7 @@ path_has_symlink_ancestor_under_home() {
     parent="$(dirname "$normalized")"
     [[ "$parent" == "$home_norm" ]] && return 1
 
-    rel="${parent#$home_norm/}"
+    rel="${parent#"$home_norm"/}"
     current="$home_norm"
     local -a parts=()
     local _oldIFS="${IFS}"
@@ -869,6 +1054,7 @@ resolve_restore_manifest() {
     [[ -z "$requested" ]] && return 1
 
     if [[ "$requested" == "latest" ]]; then
+        # shellcheck disable=SC2012
         candidate="$(ls -t "${REPORTS_DIR}"/restore_*.tsv 2>/dev/null | head -1 || true)"
         if [[ -n "$candidate" && -f "$candidate" ]]; then
             normalize_path "$candidate" || echo "$candidate"
@@ -1011,6 +1197,7 @@ restore_quarantine_manifest() {
 
 latest_quarantine_run_dir() {
     local latest
+    # shellcheck disable=SC2012
     latest="$(ls -td "${QUARANTINE_ROOT}"/* 2>/dev/null | head -1 || true)"
     [[ -n "$latest" && -d "$latest" ]] || return 1
     normalize_path "$latest" || echo "$latest"

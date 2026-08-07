@@ -55,11 +55,4 @@ dev-sync/__pycache__/
 .venv/
 venv/
 
-# Internal Docs and Reviews
-git_history.md
-FABLE5_Project_Review_Report.md
-MACOS_CLEANUP_ULTRA_REVIEW.md
-DESIGN.md
-docs/agents/
-design_system/
-graphify-out/
+CONTINUATION_PROMPT.md

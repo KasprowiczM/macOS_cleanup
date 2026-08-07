@@ -44,4 +44,7 @@ jobs:
               assert op["risk"] in ("SAFE", "REVIEW", "DANGEROUS"), "bad risk: %s" % op["risk"]
           print("Plan validated: %d operations" % len(plan["operations"]))
 
+      - name: Release verification gates
+        run: /bin/bash tools/verify_release.sh
+
 

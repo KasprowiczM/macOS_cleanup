@@ -24,6 +24,8 @@ source "${PROJ_DIR}/config/defaults.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/common.sh"
 # shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/policy.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/interactive.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/analyzer.sh"

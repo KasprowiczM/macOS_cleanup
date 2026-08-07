@@ -12,6 +12,42 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
+# Prints detailed explanation of all cleanup categories (--explain)
+# ---------------------------------------------------------------------------
+explain_categories() {
+    print_header "Objaśnienie kategorii czyszczenia (System Explanations)"
+
+    cat << 'EOF'
+▶ User Caches (user-caches)
+  • Opis: Pamięć podręczna aplikacji w ~/Library/Caches.
+  • Ryzyko: LOW (pliki są odtwarzane przez aplikacje po uruchomieniu).
+  • Kwarantanna: Pełne wsparcie odzyskiwania przez --restore.
+
+▶ Developer Caches (dev)
+  • Opis: Pamięć podręczna npm, pip, cargo, Homebrew oraz niedostępne symulatory iOS.
+  • Ryzyko: LOW / MEDIUM (wymaga ponownego pobrania pakietów przy budowaniu).
+  • Kwarantanna: Kwarantanna przenosi zasoby do odzyskania.
+
+▶ Xcode Device Support (dev / xcode)
+  • Opis: Symbole debugowania starsze niż 180 dni dla podłączanych urządzeń iOS.
+  • Ryzyko: HIGH (duży rozmiar, ponowne pobieranie po podłączeniu starzejącego się urządzenia).
+  • Kwarantanna: Zalecana ręczna weryfikacja.
+
+▶ Logs (user-logs / system-logs)
+  • Opis: Pliki dzienników systemowych oraz aplikacji starsze niż 30 dni.
+  • Ryzyko: LOW.
+
+▶ System Caches (system-caches)
+  • Opis: Pamięć podręczna w /Library/Caches (SIP protected).
+  • Ryzyko: REPORT ONLY (tylko raportowanie, brak usuwania).
+
+▶ Docker (docker)
+  • Opis: Czyszczenie nieużywanych kontenerów, obrazów i wolumenów (system prune).
+  • Ryzyko: HIGH (trwałe usunięcie skontenerowanych środowisk).
+EOF
+}
+
+# ---------------------------------------------------------------------------
 # Low-level yes/no prompt
 # Returns 0 for yes, 1 for no.
 # ---------------------------------------------------------------------------
@@ -53,22 +89,49 @@ ask_yes_no() {
 }
 
 # ---------------------------------------------------------------------------
+# Returns human-readable Polish consequence string based on risk level and mode.
+# ---------------------------------------------------------------------------
+consequence_for_mode() {
+    local risk="${1:-REVIEW}"
+    local mode="${2:-${REMOVE_MODE:-quarantine}}"
+
+    # Normalize legacy risk strings
+    case "$risk" in
+        LOW)  risk="SAFE" ;;
+        MEDIUM) risk="REVIEW" ;;
+        HIGH) risk="DANGEROUS" ;;
+    esac
+
+    case "$risk" in
+        SAFE)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je odzyskać poleceniem --restore. Miejsce nie jest zwalniane do momentu --purge-quarantine."
+            else
+                echo "Pliki zostaną usunięte. Aplikacje odtworzą je w razie potrzeby. Brak możliwości odzyskania tym narzędziem."
+            fi
+            ;;
+        REVIEW)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania lub indeksowania."
+            else
+                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki zostaną trwale usunięte z dysku bez kwarantanny."
+            fi
+            ;;
+        DANGEROUS|*)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej."
+            else
+                echo "UWAGA (RYZYKO DANGEROUS): Nieodwracalne usunięcie kluczowych danych systemowych lub użytkownika."
+            fi
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
 # Full informed-consent confirmation for a cleanup category.
-#
-# Usage:
-#   confirm_category \
-#       --title      "Xcode DerivedData" \
-#       --size       "4.2 GB" \
-#       --paths      "/Users/you/Library/Developer/Xcode/DerivedData" \
-#       --what       "Compiled build artefacts created by Xcode." \
-#       --consequence "Xcode will recompile your projects from scratch. First build after cleaning will take longer." \
-#       --safe-if    "You can rebuild at any time; no source code is deleted." \
-#       --risk       "LOW"
-#
-# Returns 0 if user approves, 1 if skipped.
 # ---------------------------------------------------------------------------
 confirm_category() {
-    local title="" size="" paths_str="" what="" consequence="" safe_if="" risk="LOW"
+    local title="" size="" paths_str="" what="" consequence="" safe_if="" risk="REVIEW"
     local -a paths=()
 
     while [[ $# -gt 0 ]]; do
@@ -84,6 +147,29 @@ confirm_category() {
         esac
     done
 
+    # Normalize legacy risk labels
+    case "$risk" in
+        LOW)       risk="SAFE" ;;
+        MEDIUM)    risk="REVIEW" ;;
+        HIGH)      risk="DANGEROUS" ;;
+        SAFE|REVIEW|DANGEROUS) ;;
+        *)
+            log_error "Unknown risk level '${risk}' for ${title} — failing closed as DANGEROUS"
+            risk="DANGEROUS"
+            ;;
+    esac
+
+    if [[ "$risk" == "DANGEROUS" ]]; then
+        echo -e "${C_RED}✖  Kategoria DANGEROUS (${title}): Nie podlega automatycznemu ani interaktywnemu czyszczeniu.${C_RESET}"
+        record_user_decision "${title} (DANGEROUS - blocked)"
+        log_info "DANGEROUS risk level blocked from interactive prompt: ${title}"
+        return 1
+    fi
+
+    if [[ -z "$consequence" ]]; then
+        consequence="$(consequence_for_mode "$risk" "${REMOVE_MODE:-quarantine}")"
+    fi
+
     local -a paths=()
     local _oldIFS="${IFS}"
     IFS='|'
@@ -92,16 +178,16 @@ confirm_category() {
     done
     IFS="${_oldIFS}"
 
-    # Risk colour
+    # Risk colour and text
     local risk_color="$C_GREEN"
-    [[ "$risk" == "MEDIUM" ]] && risk_color="$C_YELLOW"
-    [[ "$risk" == "HIGH" ]]   && risk_color="$C_RED"
+    [[ "$risk" == "REVIEW" ]] && risk_color="$C_YELLOW"
+    [[ "$risk" == "DANGEROUS" ]] && risk_color="$C_RED"
 
     echo
     echo -e "${C_BOLD}${C_BLUE}┌─ ${title} ──────────────────────────────────────────────────${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Rozmiar:${C_RESET}       ${C_YELLOW}${size}${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Ryzyko:${C_RESET}        ${risk_color}${risk}${C_RESET}"
+    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Poziom ryzyka:${C_RESET} ${risk_color}${C_BOLD}${risk}${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
 
     if [[ -n "$what" ]]; then
@@ -137,7 +223,7 @@ confirm_category() {
 
     echo -e "${C_BOLD}${C_BLUE}└──────────────────────────────────────────────────────────────${C_RESET}"
 
-    if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" && "$risk" != "LOW" ]]; then
+    if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" && "$risk" != "SAFE" ]]; then
         print_skip "Automatyczne --yes nie zatwierdza ryzyka ${risk}: ${title}"
         record_skipped_item "${title} (wymaga interaktywnego potwierdzenia)"
         log_info "Non-interactive AUTO_YES blocked for ${risk} cleanup: ${title}"

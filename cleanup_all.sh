@@ -83,6 +83,7 @@ SCRIPT_SELF="${BASH_SOURCE[0]}"
 # ---------------------------------------------------------------------------
 source "${SCRIPT_DIR}/config/defaults.sh"
 source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/lib/pathguard.sh"
 source "${SCRIPT_DIR}/lib/policy.sh"
 source "${SCRIPT_DIR}/lib/interactive.sh"
 source "${SCRIPT_DIR}/lib/analyzer.sh"
@@ -384,6 +385,30 @@ parse_args() {
                 ;;
             --json)
                 JSON_OUTPUT=1
+                shift
+                ;;
+            --redact)
+                REDACT_PATHS=1
+                shift
+                ;;
+            --plain)
+                PLAIN_OUTPUT=1
+                shift
+                ;;
+            --quiet|-q)
+                QUIET_OUTPUT=1
+                shift
+                ;;
+            --lang)
+                if [[ -z "${2:-}" ]]; then
+                    print_error "--lang wymaga kodu języka (pl|en)"
+                    exit 2
+                fi
+                LANG_CODE="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
+                shift 2
+                ;;
+            --explain)
+                SHOW_EXPLAIN=1
                 shift
                 ;;
             --help|-h)
@@ -756,6 +781,7 @@ main() {
     # Handle informational flags first (no logging needed)
     if (( SHOW_HELP )); then    show_help;    exit 0; fi
     if (( SHOW_VERSION )); then show_version; exit 0; fi
+    if (( SHOW_EXPLAIN )); then explain_categories; exit 0; fi
 
     preflight_checks
 

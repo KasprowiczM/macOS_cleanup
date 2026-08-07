@@ -12,6 +12,37 @@
 # Bash 3.2 compatible.
 # =============================================================================
 
+# Ensure policy functions are available for risk calculations
+if ! command -v policy_adjust_risk_for_path >/dev/null 2>&1; then
+    _CLEANER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    if [[ -f "${_CLEANER_LIB_DIR}/policy.sh" ]]; then
+        # shellcheck disable=SC1091
+        source "${_CLEANER_LIB_DIR}/policy.sh"
+    fi
+fi
+
+# ---------------------------------------------------------------------------
+# category_max_risk <path> [<path>...] → SAFE | REVIEW | DANGEROUS
+# Returns the highest policy risk across all passed target paths.
+# ---------------------------------------------------------------------------
+category_max_risk() {
+    local max_risk="SAFE"
+    local max_rank=1
+    local p risk rank
+
+    for p in "$@"; do
+        [[ -z "$p" ]] && continue
+        risk="$(policy_adjust_risk_for_path "$p" "REVIEW")"
+        rank="$(policy_risk_rank "$risk")"
+        if (( rank > max_rank )); then
+            max_rank="$rank"
+            max_risk="$risk"
+        fi
+    done
+
+    echo "$max_risk"
+}
+
 # ---------------------------------------------------------------------------
 # clean_trash — ~/.Trash
 # Simplest and safest cleanup — always offer first
@@ -26,19 +57,15 @@ clean_trash() {
     total_h=$(bytes_to_human "$trash_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local _consequence
-        if [[ "${REMOVE_MODE:-quarantine}" == "quarantine" ]]; then
-            _consequence="Pliki zostaną przeniesione do kwarantanny. Miejsce nie zostanie zwolnione do uruchomienia --purge-quarantine."
-        else
-            _consequence="Pliki zostaną trwale usunięte. Nie można tego cofnąć (chyba że masz Time Machine)."
-        fi
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_TRASH_ITEMS[@]}")"
         confirm_category \
             --title      "Kosz (~/.Trash)" \
             --size       "$total_h" \
             --what       "Pliki w Koszu systemu macOS. To są rzeczy, które wcześniej usunąłeś, ale nie opróżniłeś Kosza." \
-            --consequence "$_consequence" \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli celowo usunąłeś te pliki i nie potrzebujesz ich odtwarzać." \
-            --risk       "REVIEW" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: Kosz"
@@ -60,17 +87,18 @@ clean_user_caches() {
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local paths_str
+        local paths_str cat_risk
         paths_str=$(printf '%s|' "${FOUND_USER_CACHES[@]}")
+        cat_risk="$(category_max_risk "${FOUND_USER_CACHES[@]}")"
 
         confirm_category \
             --title      "Cache użytkownika (~/Library/Caches)" \
             --size       "$total_h" \
             --paths      "$paths_str" \
             --what       "Pliki cache tworzone przez aplikacje w ~/Library/Caches. Służą do przyspieszenia działania programów." \
-            --consequence "Aplikacje odtworzą swój cache przy kolejnym uruchomieniu. Pierwsze uruchomienia mogą być nieznacznie wolniejsze." \
-            --safe-if    "Większość cache jest odtwarzalna, ale przejrzyj listę ścieżek — niektóre aplikacje mogą przechowywać tu dane robocze." \
-            --risk       "REVIEW" || return 0
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --safe-if    "Większość cache jest odtwarzalna po podaniu akceptacji w trybie kwarantanny." \
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: cache użytkownika"
@@ -80,46 +108,105 @@ clean_user_caches() {
 }
 
 # ---------------------------------------------------------------------------
-# clean_app_specific_caches — Electron, JetBrains, Adobe, etc.
+# clean_app_specific_caches — Electron, JetBrains, Adobe, etc. (Split SAFE / REVIEW)
 # ---------------------------------------------------------------------------
 clean_app_specific_caches() {
     [[ ${#FOUND_APP_CACHE_ITEMS[@]} -eq 0 ]] && return
 
-    local total_bytes
-    total_bytes=$(catbytes_get "app-caches")
-    local total_h
-    total_h=$(bytes_to_human "$total_bytes")
+    local -a safe_entries=()
+    local -a review_entries=()
+    local entry label path
 
-    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local -a paths_only=()
-        local label_count=0
-        echo -e "  ${C_BOLD}Znalezione cache aplikacji:${C_RESET}"
-        for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
-            local label="${entry%%:*}"
-            local path="${entry#*:}"
-            if [[ -d "$path" ]]; then
-                printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
-                paths_only+=("$path")
-                label_count=$(( label_count + 1 ))
-            fi
+    for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
+        label="${entry%%:*}"
+        path="${entry#*:}"
+        [[ -d "$path" ]] || continue
+        if app_cache_auto_safe "$label"; then
+            safe_entries+=("$entry")
+        else
+            review_entries+=("$entry")
+        fi
+    done
+
+    # 1. Process SAFE (allowlisted) app cache items
+    if [[ ${#safe_entries[@]} -gt 0 ]]; then
+        local safe_bytes=0 safe_h paths_str cat_risk
+        local -a safe_paths=()
+        for entry in "${safe_entries[@]}"; do
+            path="${entry#*:}"
+            safe_paths+=("$path")
+            safe_bytes=$(( safe_bytes + $(path_size_bytes "$path") ))
         done
-        echo
+        safe_h=$(bytes_to_human "$safe_bytes")
+        paths_str=$(printf '%s|' "${safe_paths[@]}")
+        cat_risk="$(category_max_risk "${safe_paths[@]}")"
 
-        confirm_category \
-            --title      "Cache aplikacji (${label_count} aplikacji)" \
-            --size       "$total_h" \
-            --paths      "$(printf '%s|' "${paths_only[@]}")" \
-            --what       "Cache znanych aplikacji (Electron, Adobe, JetBrains...). Każdy wpis jest opisany z oceną ryzyka." \
-            --consequence "Aplikacje mogą wolniej startować przy pierwszym uruchomieniu po czyszczeniu (przegenerują cache)." \
-            --safe-if    "Cache z allowlisty auto-safe są odtwarzalne. Pozostałe wymagają przeglądu." \
-            --risk       "REVIEW" || return 0
+        if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+            confirm_category \
+                --title      "Cache aplikacji allowlisted (SAFE)" \
+                --size       "$safe_h" \
+                --paths      "$paths_str" \
+                --what       "Pamięć podręczna znanych aplikacji z listy auto-safe (Slack, VS Code, Discord, Zoom, Spotify...)." \
+                --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+                --safe-if    "Aplikacje odtworzą te pliki automatycznie po ponownym uruchomieniu." \
+                --risk       "$cat_risk" && {
+                print_section "Czyszczenie: cache aplikacji (SAFE)"
+                for entry in "${safe_entries[@]}"; do
+                    safe_remove "${entry#*:}"
+                done
+            }
+        else
+            print_section "Czyszczenie: cache aplikacji (SAFE)"
+            for entry in "${safe_entries[@]}"; do
+                safe_remove "${entry#*:}"
+            done
+        fi
     fi
 
-    print_section "Czyszczenie: cache aplikacji"
-    for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
-        local path="${entry#*:}"
-        [[ -d "$path" ]] && safe_remove "$path"
-    done
+    # 2. Process REVIEW (non-allowlisted) app cache items
+    if [[ ${#review_entries[@]} -gt 0 ]]; then
+        local review_bytes=0 review_h paths_str cat_risk
+        local -a review_paths=()
+        for entry in "${review_entries[@]}"; do
+            path="${entry#*:}"
+            review_paths+=("$path")
+            review_bytes=$(( review_bytes + $(path_size_bytes "$path") ))
+        done
+        review_h=$(bytes_to_human "$review_bytes")
+        paths_str=$(printf '%s|' "${review_paths[@]}")
+        cat_risk="$(category_max_risk "${review_paths[@]}")"
+
+        if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+            echo -e "  ${C_BOLD}Cache aplikacji wymagające przeglądu (${#review_entries[@]}):${C_RESET}"
+            for entry in "${review_entries[@]}"; do
+                label="${entry%%:*}"
+                path="${entry#*:}"
+                printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
+                echo -e "              ${C_DIM}Opis: $(app_cache_description "$label")${C_RESET}"
+                echo -e "              ${C_YELLOW}Rekomendacja: $(app_cache_recommendation "$label")${C_RESET}"
+            done
+            echo
+
+            confirm_category \
+                --title      "Cache aplikacji wymagające przeglądu (REVIEW)" \
+                --size       "$review_h" \
+                --paths      "$paths_str" \
+                --what       "Zasoby cache aplikacji wymagające świadomej zgody (np. Adobe Media Cache, JetBrains, Figma)." \
+                --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+                --safe-if    "Przejrzyj rekomendacje dla poszczególnych aplikacji powyżej." \
+                --risk       "$cat_risk" && {
+                print_section "Czyszczenie: cache aplikacji (REVIEW)"
+                for entry in "${review_entries[@]}"; do
+                    safe_remove "${entry#*:}"
+                done
+            }
+        else
+            print_section "Czyszczenie: cache aplikacji (REVIEW)"
+            for entry in "${review_entries[@]}"; do
+                safe_remove "${entry#*:}"
+            done
+        fi
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -148,8 +235,6 @@ clean_system_caches() {
         cleanup_journal_event "report_only" "$path" "" "$(path_size_bytes "$path")" "skipped" "system cache report-only (P0-1)"
     done
 }
-
-# ---------------------------------------------------------------------------
 # clean_logs
 # ---------------------------------------------------------------------------
 clean_logs() {
@@ -164,13 +249,15 @@ clean_logs() {
     total_h=$(bytes_to_human "$total_all")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_APP_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")"
         confirm_category \
             --title      "Stare logi aplikacji (>$LOG_MAX_AGE_DAYS dni)" \
             --size       "$total_h" \
             --what       "Pliki dziennika systemowego i aplikacji starsze niż $LOG_MAX_AGE_DAYS dni." \
-            --consequence "Stracisz historyczne logi diagnostyczne. Bieżące logi NIE są dotykane." \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli nie diagnozujesz aktywnie starszych problemów systemowych." \
-            --risk       "LOW" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: stare logi"
@@ -192,13 +279,15 @@ clean_diagnostic_reports() {
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_DIAGNOSTIC_REPORTS[@]}")"
         confirm_category \
             --title      "Raporty diagnostyczne (crash logs, spin dumps)" \
             --size       "$total_h" \
             --what       "Pliki .crash, .spin, .hang generowane gdy aplikacje się zawieszają lub crashują." \
-            --consequence "Stracisz historyczne raporty o awariach. Przydatne tylko do debugowania starych problemów." \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli nie jesteś w trakcie diagnozowania problemów z aplikacjami." \
-            --risk       "LOW" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: raporty diagnostyczne"
@@ -217,13 +306,15 @@ clean_tmp() {
     total_h=$(bytes_to_human "$(catbytes_get "tmp")")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_TMP_FILES[@]}")"
         confirm_category \
             --title      "Pliki tymczasowe (/tmp)" \
             --size       "$total_h" \
             --what       "Pliki tymczasowe starsze niż $TMP_MAX_AGE_HOURS h w /tmp i /private/tmp." \
-            --consequence "Żadnych skutków — pliki tmp są przeznaczone do tymczasowego użytku." \
-            --safe-if    "Zawsze bezpieczne. macOS czyści /tmp przy każdym restarcie." \
-            --risk       "LOW" || return 0
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --safe-if    "macOS czyści /tmp przy każdym restarcie." \
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: pliki tymczasowe"
@@ -271,14 +362,16 @@ clean_xcode_derived_data() {
     size_h=$(bytes_to_human "$(catbytes_get "xcode-derived")")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "$dd_entry")"
         confirm_category \
             --title      "Xcode DerivedData" \
             --size       "$size_h" \
             --paths      "$dd_entry" \
             --what       "Skompilowane artefakty buildów Xcode. Tworzone automatycznie przy każdym buildzie." \
-            --consequence "Przy kolejnym buildzie Xcode skompiluje wszystko od nowa. Pierwszy build będzie dłuższy." \
-            --safe-if    "Zawsze bezpieczne — Xcode odtworzy te dane. Żaden kod źródłowy nie jest tu przechowywany." \
-            --risk       "LOW" || return 0
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --safe-if    "Xcode odtworzy te dane przy kolejnym buildzie." \
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: Xcode DerivedData"
@@ -320,13 +413,19 @@ clean_ios_device_support() {
     echo
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local -a ds_paths=()
+        for entry in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
+            ds_paths+=("${entry#*:}")
+        done
+        local cat_risk
+        cat_risk="$(category_max_risk "${ds_paths[@]}")"
         confirm_category \
             --title      "Xcode Device Support (symbole debugowania)" \
             --size       "$total_h" \
             --what       "Symbole debugowania dla iOS/watchOS/tvOS. Pobierane gdy podłączysz urządzenie." \
-            --consequence "Xcode pobierze symbole ponownie gdy podłączysz urządzenie (może trwać kilka minut)." \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli masz internet i nie musisz natychmiast debugować na starym urządzeniu." \
-            --risk       "MEDIUM" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: Xcode Device Support"
@@ -357,13 +456,15 @@ clean_xcode_simulators() {
         "Zalecane: Xcode → Window → Devices and Simulators"
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "$sim_entry")"
         confirm_category \
             --title      "Stare symulatory iOS (xcrun simctl delete unavailable)" \
             --size       "$size_h" \
             --what       "Niedostępne urządzenia symulatorów iOS, watchOS, tvOS." \
-            --consequence "Xcode będzie musiał pobrać runtime ponownie (~2-5 GB) jeśli potrzebne." \
+            --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "Bezpieczne jeśli: masz dostęp do internetu i możesz czekać na pobieranie." \
-            --risk       "MEDIUM" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: stare symulatory (xcrun simctl delete unavailable)"
@@ -533,13 +634,20 @@ clean_dev_caches() {
     echo
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local -a dev_paths=()
+        for item in "${dev_cache_items[@]}"; do
+            local p="${item#*:}"
+            [[ "$p" != "__brew__" && "$p" != "__docker__" ]] && dev_paths+=("$p")
+        done
+        local cat_risk
+        cat_risk="$(category_max_risk "${dev_paths[@]}")"
         confirm_category \
             --title      "Cache menedżerów pakietów (npm, brew, pip, etc.)" \
             --size       "$total_h" \
             --what       "Lokalne cache: npm, yarn, pnpm, pip, Homebrew, Gradle, CocoaPods, Cargo, Swift PM..." \
-            --consequence "Pierwsze uruchomienie builda po czyszczeniu pobierze pakiety ponownie (zależy od internetu)." \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli masz dostęp do internetu. Pakiety zostaną pobrane ponownie gdy potrzeba." \
-            --risk       "MEDIUM" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: cache menedżerów pakietów"
@@ -661,13 +769,15 @@ clean_docker() {
     size_h=$(bytes_to_human "$(catbytes_get "docker")")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "docker")"
         confirm_category \
             --title      "Docker: dangling images / stopped containers" \
             --size       "$size_h" \
             --what       "Nieużywane obrazy, zatrzymane kontenery, sieci i build cache usuwane przez docker system prune." \
-            --consequence "Stracisz dane zatrzymanych kontenerów. Wolumeny nie są usuwane bez osobnej opcji --volumes." \
+            --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "Bezpieczne jeśli nie masz ważnych danych w zatrzymanych kontenerach." \
-            --risk       "MEDIUM" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: Docker (system prune)"
@@ -723,7 +833,7 @@ clean_time_machine_snapshots() {
             print_dry "Would run: tmutil deletelocalsnapshots $snap_date"
             record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "planned" 0 "dry-run"
         else
-            print_info "Usuwam snapshot: $snap"
+            print_info "Usuwam snapshot: $snap_date"
             local tm_out
             if tm_out=$(tmutil deletelocalsnapshots "$snap_date" 2>&1); then
                 print_cleaned "Usunięto snapshot: $snap_date"
@@ -786,14 +896,16 @@ clean_dmg_pkg() {
     paths_str=$(printf '%s|' "${FOUND_DMG_PKG[@]}")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_DMG_PKG[@]}")"
         confirm_category \
             --title      "Stare instalatory (DMG/PKG/ISO)" \
             --size       "$total_h" \
             --paths      "$paths_str" \
             --what       "Pliki instalatorów starsze niż $DMG_MAX_AGE_DAYS dni w ~/Downloads (>10 MB)." \
-            --consequence "Jeśli chcesz zainstalować tę samą wersję ponownie, musisz pobrać instalator." \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Bezpieczne jeśli masz dostęp do internetu lub nie potrzebujesz starych wersji." \
-            --risk       "LOW" || return 0
+            --risk       "$cat_risk" || return 0
     fi
 
     print_section "Czyszczenie: stare instalatory"

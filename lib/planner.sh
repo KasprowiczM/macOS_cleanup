@@ -299,6 +299,7 @@ generate_plan_json() {
         printf '  "run_id": "%s",\n' "$(json_escape "$RUN_TIMESTAMP")"
         printf '  "generated_at": "%s",\n' "$(json_escape "$(date '+%Y-%m-%dT%H:%M:%S%z')")"
         printf '  "rules_file": "%s",\n' "$(json_escape "${RULES_FILE:-}")"
+        printf '  "checksum": "%s",\n' "$(json_escape "$count-${safe_count}-${review_count}-${dangerous_count}")"
         printf '  "summary": {\n'
         printf '    "operations": %s,\n' "$count"
         printf '    "safe_operations": %s,\n' "$safe_count"
@@ -444,10 +445,36 @@ plan_require_review_confirmation() {
     ask_yes_no "Wykonać operację REVIEW z planu: ${id}?" "no"
 }
 
+verify_plan_file_checksum() {
+    local plan_file="$1"
+    python3 -c '
+import json, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+chk = data.get("checksum", "")
+if not chk:
+    sys.exit(0)
+summary = data.get("summary", {})
+ops = summary.get("operations", 0)
+safe = summary.get("safe_operations", 0)
+rev = summary.get("review_operations", 0)
+dang = summary.get("dangerous_operations", 0)
+expected = f"{ops}-{safe}-{rev}-{dang}"
+if chk != expected:
+    sys.exit(1)
+' "$plan_file" 2>/dev/null
+}
+
 apply_plan_file() {
     local plan_file="$1"
     [[ -f "$plan_file" ]] || { print_error "Nie znaleziono planu: ${plan_file}"; return 2; }
     command -v python3 >/dev/null 2>&1 || { print_error "apply --from-plan wymaga python3 do bezpiecznego parsowania JSON."; return 2; }
+
+    if ! verify_plan_file_checksum "$plan_file"; then
+        print_error "Weryfikacja sumy kontrolnej planu nie powiodła się: ${plan_file}"
+        cleanup_journal_event "plan_apply_blocked" "$plan_file" "" 0 "blocked" "checksum mismatch" "plan"
+        return 2
+    fi
 
     local id_b64 risk action path_b64 command_b64 bytes category_b64
     local id path command category

@@ -62,12 +62,12 @@ assert_eq "$(catbytes_get "xcode-derived")" "42"
 
 # ---------------------------------------------------------------------------
 begin_test "is_protected_path: exact match"
-assert_true  "is_protected_path '$HOME/.ssh'"          "~/.ssh should be protected"
+assert_true  "is_protected_path '$HOME/.ssh'"          "\$HOME/.ssh should be protected"
 assert_true  "is_protected_path '$HOME/Documents'"     "Documents should be protected"
 assert_true  "is_protected_path '$HOME/.Trash'"        "Trash root should be protected"
 
 begin_test "is_protected_path: subpath match"
-assert_true  "is_protected_path '$HOME/.ssh/id_ed25519'" "subpath of ~/.ssh protected"
+assert_true  "is_protected_path '$HOME/.ssh/id_ed25519'" "subpath of \$HOME/.ssh protected"
 assert_true  "is_protected_path '$HOME/Documents/tax/2024.pdf'" "subpath of Documents protected"
 
 begin_test "is_protected_path: unrelated path is NOT protected"
@@ -89,6 +89,7 @@ assert_false "is_protected_path '/Library/Logs/example.log'"          "Library l
 assert_true  "is_protected_path '/Library/PrivateFrameworks'"        "/Library private framework path should be protected"
 
 begin_test "normalize_path handles tilde and relative segments"
+# shellcheck disable=SC2088
 assert_eq "$(normalize_path '~/.ssh')" "$HOME/.ssh"
 assert_eq "$(normalize_path '$HOME/.ssh')" "$HOME/.ssh"
 EXPECTED_TMP="/tmp"
@@ -231,7 +232,7 @@ begin_test "PF3: is_protected_path unchanged after precompute"
 NEVER_TOUCH_PATHS=("$HOME/.ssh" "$HOME/Documents" "$HOME/Library/Mail")
 _NEVER_TOUCH_NORMALIZED=()
 normalize_never_touch_paths
-assert_true  "is_protected_path '$HOME/.ssh'"            "~/.ssh still protected after precompute"
+assert_true  "is_protected_path '$HOME/.ssh'"            "\$HOME/.ssh still protected after precompute"
 assert_true  "is_protected_path '$HOME/Documents'"       "Documents still protected after precompute"
 assert_true  "is_protected_path '$HOME/Library/Mail'"    "Mail still protected after precompute"
 assert_true  "is_protected_path '$HOME/.ssh/id_ed25519'" "subpath still protected after precompute"
@@ -242,7 +243,7 @@ assert_false "is_protected_path '/tmp/xyz'"              "unrelated still not pr
 begin_test "PF3: is_protected_path falls back when _NEVER_TOUCH_NORMALIZED empty"
 NEVER_TOUCH_PATHS=("$HOME/.ssh" "$HOME/Documents")
 _NEVER_TOUCH_NORMALIZED=()
-assert_true  "is_protected_path '$HOME/.ssh'"      "fallback: ~/.ssh still protected"
+assert_true  "is_protected_path '$HOME/.ssh'"      "fallback: \$HOME/.ssh still protected"
 assert_true  "is_protected_path '$HOME/Documents'"  "fallback: Documents still protected"
 
 # ---------------------------------------------------------------------------
@@ -252,6 +253,7 @@ begin_test "PF4: app_bundle_exists uses mdfind fast path"
 APP_BUNDLE_SEARCH_DIRS=("${SANDBOX}/Applications")
 APP_BUNDLE_ID_CACHE_LOADED=0
 APP_BUNDLE_ID_CACHE=""
+# shellcheck disable=SC2329
 mdfind() {
     case "$*" in
         *com.example.fastpath*)
@@ -281,6 +283,7 @@ cat > "${APP_BUNDLE_SEARCH_DIRS[0]}/Mock.app/Contents/Info.plist" <<'EOF'
 </dict>
 </plist>
 EOF
+# shellcheck disable=SC2329
 mdfind() {
     return 1
 }
