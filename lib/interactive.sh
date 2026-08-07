@@ -53,19 +53,39 @@ ask_yes_no() {
 }
 
 # ---------------------------------------------------------------------------
+# Returns human-readable Polish consequence string based on risk level and mode.
+# ---------------------------------------------------------------------------
+consequence_for_mode() {
+    local risk="${1:-LOW}"
+    local mode="${2:-${REMOVE_MODE:-permanent}}"
+
+    case "$risk" in
+        LOW)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je łatwo odzyskać poleceniem --restore."
+            else
+                echo "Pliki zostaną usunięte. Aplikacje automatycznie odtworzą je w razie potrzeby."
+            fi
+            ;;
+        MEDIUM)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "Ostrzeżenie (ŚREDNIE RYZYKO): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania zasobów."
+            else
+                echo "Ostrzeżenie (ŚREDNIE RYZYKO): Pliki zostaną bezpowrotnie usunięte. Aplikacje odtworzą podstawowe zasoby na nowo."
+            fi
+            ;;
+        HIGH|*)
+            if [[ "$mode" == "quarantine" ]]; then
+                echo "UWAGA (WYSOKIE RYZYKO): Przenoszenie dużych zasobów do kwarantanny. Upewnij się, że posiadasz aktualną kopię zapasową."
+            else
+                echo "UWAGA (WYSOKIE RYZYKO): Ta operacja bezpowrotnie usuwa kluczowe dane i NIE MOŻE zostać cofnięta."
+            fi
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
 # Full informed-consent confirmation for a cleanup category.
-#
-# Usage:
-#   confirm_category \
-#       --title      "Xcode DerivedData" \
-#       --size       "4.2 GB" \
-#       --paths      "/Users/you/Library/Developer/Xcode/DerivedData" \
-#       --what       "Compiled build artefacts created by Xcode." \
-#       --consequence "Xcode will recompile your projects from scratch. First build after cleaning will take longer." \
-#       --safe-if    "You can rebuild at any time; no source code is deleted." \
-#       --risk       "LOW"
-#
-# Returns 0 if user approves, 1 if skipped.
 # ---------------------------------------------------------------------------
 confirm_category() {
     local title="" size="" paths_str="" what="" consequence="" safe_if="" risk="LOW"
@@ -83,6 +103,10 @@ confirm_category() {
             *)             shift ;;
         esac
     done
+
+    if [[ -z "$consequence" ]]; then
+        consequence="$(consequence_for_mode "$risk" "${REMOVE_MODE:-permanent}")"
+    fi
 
     local -a paths=()
     local _oldIFS="${IFS}"
