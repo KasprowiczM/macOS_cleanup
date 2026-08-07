@@ -809,16 +809,37 @@ warn_if_no_fresh_backup() {
         return 0
     fi
 
-    print_warning_box "No confirmed fresh backup" \
-        "Could not verify Time Machine backup" \
-        "from the last ${BACKUP_MAX_AGE_DAYS} days." \
-        "" \
-        "Context: ${context}" \
-        "" \
-        "Proceeding only under guardrails; REVIEW/DANGEROUS" \
-        "are not executed automatically."
-    WARNINGS_LIST+=("No fresh Time Machine backup confirmed before: ${context}")
-    cleanup_journal_event "backup_check" "" "" 0 "warning" "fresh Time Machine backup missing for ${context}" "safety"
+    local local_snaps=0
+    if command -v tmutil >/dev/null 2>&1; then
+        local_snaps="$(tmutil listlocalsnapshots / 2>/dev/null | grep -c "com.apple.TimeMachine" 2>/dev/null || echo 0)"
+    fi
+    local_snaps="$(echo "$local_snaps" | tr -d '[:space:]')"
+    [[ -z "$local_snaps" ]] && local_snaps=0
+
+    if (( local_snaps > 0 )); then
+        print_warning_box "No destination backup (local snapshots found)" \
+            "No destination Time Machine backup in last ${BACKUP_MAX_AGE_DAYS} days." \
+            "Found ${local_snaps} local APFS snapshot(s) on disk." \
+            "" \
+            "Local snapshots reside on local disk, NOT an off-device backup." \
+            "Context: ${context}" \
+            "" \
+            "Proceeding under guardrails; REVIEW/DANGEROUS" \
+            "are not executed automatically."
+        WARNINGS_LIST+=("No destination Time Machine backup (found ${local_snaps} local APFS snapshots) before: ${context}")
+        cleanup_journal_event "backup_check" "" "" 0 "warning" "destination backup missing (${local_snaps} local APFS snapshots found) for ${context}" "safety"
+    else
+        print_warning_box "No confirmed fresh backup" \
+            "Could not verify Time Machine backup" \
+            "from the last ${BACKUP_MAX_AGE_DAYS} days." \
+            "" \
+            "Context: ${context}" \
+            "" \
+            "Proceeding only under guardrails; REVIEW/DANGEROUS" \
+            "are not executed automatically."
+        WARNINGS_LIST+=("No fresh Time Machine backup confirmed before: ${context}")
+        cleanup_journal_event "backup_check" "" "" 0 "warning" "fresh Time Machine backup missing for ${context}" "safety"
+    fi
     return 1
 }
 
