@@ -117,7 +117,7 @@ run_gate "G07" "No executable sudo in lib/ or cleanup_all.sh" \
 
 # G08: Protected path assertions >= 60
 run_gate "G08" "Protected path assertions >= 60 (tests/test_path_protection.sh)" \
-    'if [[ -n "$_SUITE_LOG" ]]; then grep -A 20 "test_path_protection.sh" "$_SUITE_LOG" | grep -q "Fail: 0"; else /bin/bash "${PROJ_DIR}/tests/test_path_protection.sh" >/dev/null 2>&1; fi && [[ $(grep -c "assert_protected\|assert_unprotected\|check_path" "${PROJ_DIR}/tests/test_path_protection.sh") -ge 60 ]]'
+    'if [[ -n "$_SUITE_LOG" ]]; then [[ "$_SUITE_RC" -eq 0 ]]; else /bin/bash "${PROJ_DIR}/tests/test_path_protection.sh" >/dev/null 2>&1; fi && [[ $(grep -c "assert_protected\|assert_unprotected\|check_path" "${PROJ_DIR}/tests/test_path_protection.sh") -ge 60 ]]'
 
 # G09: plan.json schema validation
 run_gate "G09" "plan.json validates against schemas/plan.schema.json" \
@@ -137,7 +137,7 @@ run_gate "G12" "Normalizer determinism (suite passes with and without grealpath)
 
 # G13: Accounting deduplication
 run_gate "G13" "Accounting deduplication (tests/test_accounting.sh)" \
-    'if [[ -n "$_SUITE_LOG" ]]; then grep -A 20 "test_accounting.sh" "$_SUITE_LOG" | grep -q "Fail: 0"; else [[ -f "${PROJ_DIR}/tests/test_accounting.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_accounting.sh" >/dev/null 2>&1; fi'
+    'if [[ -n "$_SUITE_LOG" ]]; then [[ "$_SUITE_RC" -eq 0 ]]; else [[ -f "${PROJ_DIR}/tests/test_accounting.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_accounting.sh" >/dev/null 2>&1; fi'
 
 # G14: Baseline diff
 run_gate "G14" "Baseline diff (baseline/pre vs baseline/post)" \
