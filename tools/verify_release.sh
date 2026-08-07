@@ -155,6 +155,10 @@ run_gate "G16" "Functional deletion smoke gate (quarantine mode cleans candidate
 run_gate "G17" "Plan risk vs policy parity (tests/test_plan_policy_parity.sh)" \
     '[[ -f "${PROJ_DIR}/tests/test_plan_policy_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_plan_policy_parity.sh"'
 
+# G18: Plan native_command round-trip preservation
+run_gate "G18" "Plan native_command round-trip preservation (apply_plan_file native_command)" \
+    '_g18_tmp=$(mktemp -d) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && mkdir -p "${_g18_bin}" && echo "#!/bin/bash" > "${_g18_bin}/npm" && echo "echo NPM:\$* >> \"${_g18_rec}\"" >> "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && /bin/bash "${PROJ_DIR}/cleanup_all.sh" --generate-plan "${_g18_plan}" >/dev/null 2>&1 && PATH="${_g18_bin}:${PATH}" env LOGS_DIR="${_g18_tmp}/logs" REPORTS_DIR="${_g18_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g18_tmp}/reports/journal.jsonl" /bin/bash "${PROJ_DIR}/cleanup_all.sh" --apply --from-plan "${_g18_plan}" --yes >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
+
 echo
 echo "═══════════════════════════════════════════════════"
 echo "  Results: ${PASS} pass, ${FAIL} fail"

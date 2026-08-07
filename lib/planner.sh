@@ -487,7 +487,7 @@ apply_plan_file() {
     local id_b64 risk action path_b64 command_b64 bytes category_b64
     local id path command category
 
-    while IFS=$'\t' read -u3 -r id_b64 risk action path_b64 command_b64 bytes category_b64; do
+    while IFS=$'\x1f' read -u3 -r id_b64 risk action path_b64 command_b64 bytes category_b64; do
         id="$(base64_decode_string "$id_b64")"
         path="$(base64_decode_string "$path_b64")"
         command="$(base64_decode_string "$command_b64")"
@@ -566,7 +566,7 @@ def b64(value):
     return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
 
 for op in data.get("operations", []):
-    print("\t".join([
+    print("\x1f".join([
         b64(op.get("id", "")),
         str(op.get("risk", "")),
         str(op.get("action", "")),
