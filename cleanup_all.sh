@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # cleanup_all.sh — Professional macOS System Cleaner
-# Version: 2.1.0
+# Version: 3.0.0
 #
 # SYNOPSIS
 #   bash cleanup_all.sh [OPTIONS]
@@ -62,7 +62,7 @@
 #   1   General error
 #   2   Bad arguments
 #   3   macOS version incompatible (requires 10.15+)
-#   99  Safety violation (attempted to touch protected path) — BUG, please report
+#   99  Safety violation — operation blocked, run continues (logged + journalled)
 #
 # =============================================================================
 
@@ -70,6 +70,7 @@ set -euo pipefail
 # Ensure errexit doesn't prevent cleanup on exit
 trap '_on_exit' EXIT
 trap '_on_error $LINENO' ERR
+trap '_on_interrupt' INT TERM
 
 # ---------------------------------------------------------------------------
 # Resolve script location so we can source lib files regardless of CWD
@@ -190,9 +191,6 @@ _on_exit() {
     cleanup_sudo_keepalive
     if (( exit_code == 0 )); then
         log_info "Script completed successfully (exit 0)."
-    elif (( exit_code == 99 )); then
-        print_error "KRYTYCZNY BŁĄD BEZPIECZEŃSTWA: próba dotyknięcia chronionej ścieżki!"
-        print_error "To jest błąd skryptu. Proszę zgłosić na: https://github.com/KasprowiczM/macOS_cleanup/issues"
     fi
 }
 
@@ -201,6 +199,14 @@ _on_error() {
     local lineno="$1"
     log_error "Błąd w linii ${lineno}. Kod wyjścia: ${status}"
     # Don't exit loudly — the set -e will handle propagation
+}
+
+_on_interrupt() {
+    echo
+    print_warn "Przerwano przez użytkownika (Ctrl-C)."
+    log_info "Script interrupted by user signal."
+    cleanup_sudo_keepalive
+    exit 130
 }
 
 # ---------------------------------------------------------------------------

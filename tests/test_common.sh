@@ -188,15 +188,23 @@ assert_eq "$TOTAL_CLEANED_BYTES" "$prev_cleaned"     "missing path must not chan
 # ---------------------------------------------------------------------------
 # P1-12: protected-path violations now skip (return 1), not abort (exit 99).
 begin_test "safe_remove skips on protected path (P1-12, return 1)"
+DRY_RUN=0
+REMOVE_MODE=quarantine
 prev_cleaned="$TOTAL_CLEANED_BYTES"
-SANDBOX="$(make_sandbox)"
-PROTECTED_FILE="${SANDBOX}/protected_file"
-echo "precious" > "$PROTECTED_FILE"
-# Try to remove $HOME/.ssh which is in NEVER_TOUCH_PATHS
-safe_remove "$HOME/.ssh" >/dev/null 2>&1
+# Use $HOME/Documents which is in NEVER_TOUCH_PATHS; ensure it exists
+mkdir -p "$HOME/Documents"
+_test_marker="${HOME}/Documents/_test_marker_safe_remove_$$"
+echo "precious" > "$_test_marker"
+set +e
+(
+    safe_remove "$HOME/Documents" >/dev/null 2>&1
+)
 rc=$?
+set -u
 assert_eq "$rc" "1" "safe_remove must return 1 on protected path"
 assert_eq "$TOTAL_CLEANED_BYTES" "$prev_cleaned" "protected path must not change counter"
+assert_file_exists "$_test_marker" "protected directory contents must NOT be deleted"
+rm -f "$_test_marker"
 
 # ---------------------------------------------------------------------------
 begin_test "log file receives plain-text (no ANSI escapes)"
