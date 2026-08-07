@@ -16,7 +16,7 @@ if [[ -z "$OUTDIR" ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJ_DIR="${PROJ_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
 mkdir -p "$OUTDIR"
 
@@ -24,7 +24,7 @@ mkdir -p "$OUTDIR"
 TMP_HOME="$(mktemp -d -t macos_cleanup_baseline_home.XXXXXX)"
 trap 'chmod -R 700 "$TMP_HOME" 2>/dev/null || true; rm -rf "$TMP_HOME"' EXIT
 
-bash "${PROJ_DIR}/tests/fixtures/make_fake_home.sh" "$TMP_HOME" >/dev/null
+bash "${SCRIPT_DIR}/../tests/fixtures/make_fake_home.sh" "$TMP_HOME" >/dev/null
 
 export HOME="$TMP_HOME"
 export LOGS_DIR="${OUTDIR}/logs"
