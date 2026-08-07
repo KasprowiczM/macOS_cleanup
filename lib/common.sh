@@ -31,8 +31,25 @@ log_warn()  { _log "WARN"  "$@"; }
 log_error() { _log "ERROR" "$@"; }
 
 # ---------------------------------------------------------------------------
-# Formatted output (to terminal)
+# Signal & Trap Handlers
 # ---------------------------------------------------------------------------
+
+_on_exit() {
+    local rc=$?
+    log_debug "Exit handler called with status ${rc}"
+    return $rc
+}
+
+_on_error() {
+    local line="${1:-0}"
+    log_error "Unhandled error occurred on line ${line}"
+}
+
+_on_interrupt() {
+    log_warn "Interrupted by signal (SIGINT/SIGTERM), exiting cleanly."
+    print_warn "Przerwano działanie skryptu (sygnał INT/TERM)."
+    exit 130
+}
 
 print_header() {
     echo
