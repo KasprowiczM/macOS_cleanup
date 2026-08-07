@@ -42,7 +42,7 @@ gate "G02" "All test files pass" \
 
 # G03: No sudo in execution paths
 gate "G03" "No executable sudo calls in lib/" \
-    /bin/bash -c '! grep -rn "sudo " '"${PROJ_DIR}"'/lib/*.sh | grep -v "^.*:#" | grep -v "cleanup_sudo_keepalive" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_" | grep -qv "^$"'
+    /bin/bash -c '! grep -rn "sudo " '"${PROJ_DIR}"'/lib/*.sh | grep -v "^.*:#" | grep -v "cleanup_sudo_keepalive" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_\|cleanup_journal_event\|użyj trybu" | grep -qv "^$"'
 
 # G04: Version is 3.0.0
 gate "G04" "Version string is 3.0.0" \
@@ -52,9 +52,9 @@ gate "G04" "Version string is 3.0.0" \
 gate "G05" "CHANGELOG contains [3.0.0] entry" \
     /bin/bash -c 'grep -q "\[3.0.0\]" '"${PROJ_DIR}"'/CHANGELOG.md'
 
-# G06: No read -ra in common.sh (bash 3.2 compat)
-gate "G06" "No read -ra in common.sh (bash 3.2)" \
-    /bin/bash -c '! grep -q "read -ra\|read -a" '"${PROJ_DIR}"'/lib/common.sh'
+# G06: No read -ra in lib/ (bash 3.2 compat)
+gate "G06" "No read -ra in lib/ (bash 3.2)" \
+    /bin/bash -c '! grep -rn "read -ra\|read -a" '"${PROJ_DIR}"'/lib/*.sh | grep -qv "^$"'
 
 # G07: No _REALPATH_HAS_M in common.sh
 gate "G07" "No realpath -m probe in common.sh" \

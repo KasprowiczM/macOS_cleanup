@@ -84,7 +84,13 @@ confirm_category() {
         esac
     done
 
-    IFS='|' read -ra paths <<< "$paths_str"
+    local -a paths=()
+    local _oldIFS="${IFS}"
+    IFS='|'
+    for p in $paths_str; do
+        paths[${#paths[@]}]="$p"
+    done
+    IFS="${_oldIFS}"
 
     # Risk colour
     local risk_color="$C_GREEN"
@@ -233,7 +239,13 @@ show_dry_run_summary() {
     echo -e "${C_BOLD}  Analiza – ${category}${C_RESET}"
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
 
-    IFS='|' read -ra items <<< "$items_str"
+    local -a items=()
+    local _oldIFS="${IFS}"
+    IFS='|'
+    for it in $items_str; do
+        items[${#items[@]}]="$it"
+    done
+    IFS="${_oldIFS}"
     for item in "${items[@]}"; do
         [[ -z "$item" ]] && continue
         echo -e "  ${C_DIM}→${C_RESET}  ${item}"

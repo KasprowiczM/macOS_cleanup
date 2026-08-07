@@ -190,7 +190,7 @@ normalize_path() {
     # For non-existent paths: segment-based normalization (bash 3.2 compatible)
     [[ "$path" == /* ]] && is_abs=1
 
-    # Split path on '/' without read -ra (bash 3.2 compatible)
+    # Split path on '/' without read array construct (bash 3.2 compatible)
     local -a segs=()
     local _oldIFS="${IFS}"
     IFS='/'
@@ -760,7 +760,13 @@ path_has_symlink_ancestor_under_home() {
 
     rel="${parent#$home_norm/}"
     current="$home_norm"
-    IFS='/' read -ra parts <<< "$rel"
+    local -a parts=()
+    local _oldIFS="${IFS}"
+    IFS='/'
+    for part in $rel; do
+        parts[${#parts[@]}]="$part"
+    done
+    IFS="${_oldIFS}"
     for part in "${parts[@]}"; do
         [[ -z "$part" ]] && continue
         current="${current}/${part}"
