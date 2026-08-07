@@ -228,7 +228,7 @@ clean_system_caches() {
 # clean_logs
 # ---------------------------------------------------------------------------
 clean_logs() {
-    local total_count=$(( ${#FOUND_USER_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
+    local total_count=$(( ${#FOUND_APP_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
     [[ $total_count -eq 0 ]] && return
 
     local total_bytes
@@ -236,7 +236,7 @@ clean_logs() {
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
-    local -a all_logs=("${FOUND_USER_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")
+    local -a all_logs=("${FOUND_APP_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
@@ -263,7 +263,7 @@ clean_logs() {
 # clean_diagnostic_reports
 # ---------------------------------------------------------------------------
 clean_diagnostic_reports() {
-    [[ ${#FOUND_CRASH_REPORTS[@]} -eq 0 ]] && return
+    [[ ${#FOUND_DIAGNOSTIC_REPORTS[@]} -eq 0 ]] && return
 
     local total_bytes
     total_bytes=$(catbytes_get "diagnostic-reports")
@@ -272,8 +272,8 @@ clean_diagnostic_reports() {
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
-        paths_str=$(printf '%s|' "${FOUND_CRASH_REPORTS[@]}")
-        cat_risk="$(category_max_risk "${FOUND_CRASH_REPORTS[@]}")"
+        paths_str=$(printf '%s|' "${FOUND_DIAGNOSTIC_REPORTS[@]}")
+        cat_risk="$(category_max_risk "${FOUND_DIAGNOSTIC_REPORTS[@]}")"
 
         confirm_category \
             --title      "Diagnostic Reports / Crash Logs" \
@@ -286,7 +286,7 @@ clean_diagnostic_reports() {
     fi
 
     print_section "Cleaning: diagnostic reports"
-    for f in "${FOUND_CRASH_REPORTS[@]}"; do
+    for f in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
         safe_remove "$f"
     done
 }
@@ -377,14 +377,14 @@ clean_xcode_derived_data() {
 }
 
 clean_ios_device_support() {
-    [[ ${#FOUND_DEVICE_SUPPORT[@]} -eq 0 ]] && return
+    [[ ${#FOUND_DEVICE_SUPPORT_ITEMS[@]} -eq 0 ]] && return
 
     local total_bytes
     total_bytes=$(catbytes_get "xcode-device-support")
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
     local paths_str
-    paths_str=$(printf '%s|' "${FOUND_DEVICE_SUPPORT[@]}")
+    paths_str=$(printf '%s|' "${FOUND_DEVICE_SUPPORT_ITEMS[@]}")
 
     print_warning_box "$(t "xcode_support_box_title")" \
         "$(t "xcode_support_box_1")" \
@@ -396,7 +396,7 @@ clean_ios_device_support() {
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local cat_risk
-        cat_risk="$(category_max_risk "${FOUND_DEVICE_SUPPORT[@]}")"
+        cat_risk="$(category_max_risk "${FOUND_DEVICE_SUPPORT_ITEMS[@]}")"
         confirm_category \
             --title      "$(t "xcode_support_box_title")" \
             --size       "$total_h" \
@@ -408,7 +408,7 @@ clean_ios_device_support() {
     fi
 
     print_section "Cleaning: iOS DeviceSupport"
-    for item in "${FOUND_DEVICE_SUPPORT[@]}"; do
+    for item in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
         safe_remove "$item"
     done
 }

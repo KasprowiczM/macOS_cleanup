@@ -53,30 +53,59 @@ _has_hostile_content_markers() {
 # Helper: Check if path is within authorized disposable roots
 _is_within_allowed_cache_root() {
     local norm="$1"
-    local user_home="${HOME:-}"
+    local user_home_raw="${HOME:-}"
+    local user_home_norm=""
 
     # Must be absolute
     [[ "$norm" == /* ]] || return 1
 
-    # Allowed userDisposableRoots
-    if [[ -n "$user_home" ]]; then
+    if [[ -n "$user_home_raw" ]]; then
+        user_home_norm="$(normalize_path "$user_home_raw" 2>/dev/null || echo "$user_home_raw")"
+    fi
+
+    # Helper case check function for a single home root
+    _check_home_root() {
+        local h="$1"
+        [[ -z "$h" ]] && return 1
         case "$norm" in
-            "$user_home/Library/Caches"|"$user_home/Library/Caches/"*) return 0 ;;
-            "$user_home/Library/Logs"|"$user_home/Library/Logs/"*) return 0 ;;
-            "$user_home/Library/Developer/Xcode/DerivedData"|"$user_home/Library/Developer/Xcode/DerivedData/"*) return 0 ;;
-            "$user_home/Library/Developer/Xcode/Archives"|"$user_home/Library/Developer/Xcode/Archives/"*) return 0 ;;
-            "$user_home/Library/Developer/Xcode/iOS DeviceSupport"|"$user_home/Library/Developer/Xcode/iOS DeviceSupport/"*) return 0 ;;
-            "$user_home/Library/Developer/CoreSimulator/Devices"|"$user_home/Library/Developer/CoreSimulator/Devices/"*) return 0 ;;
-            "$user_home/Library/Application Support/CrashReporter"|"$user_home/Library/Application Support/CrashReporter/"*) return 0 ;;
-            "$user_home/.cache"|"$user_home/.cache/"*) return 0 ;;
-            "$user_home/.npm"|"$user_home/.npm/"*) return 0 ;;
-            "$user_home/.yarn"|"$user_home/.yarn/"*) return 0 ;;
-            "$user_home/.gradle"|"$user_home/.gradle/"*) return 0 ;;
-            "$user_home/.cargo"|"$user_home/.cargo/"*) return 0 ;;
-            "$user_home/.gem"|"$user_home/.gem/"*) return 0 ;;
-            "$user_home/.Trash"|"$user_home/.Trash/"*) return 0 ;;
-            "$user_home/Downloads"|"$user_home/Downloads/"*) return 0 ;;
+            "$h/Library/Caches"|"$h/Library/Caches/"*) return 0 ;;
+            "$h/Library/Logs"|"$h/Library/Logs/"*) return 0 ;;
+            "$h/Library/Developer"|"$h/Library/Developer/"*) return 0 ;;
+            "$h/Library/CoreSimulator/Devices"|"$h/Library/CoreSimulator/Devices/"*) return 0 ;;
+            "$h/Library/Application Support/CrashReporter"|"$h/Library/Application Support/CrashReporter/"*) return 0 ;;
+            "$h/.cache"|"$h/.cache/"*) return 0 ;;
+            "$h/.npm"|"$h/.npm/"*) return 0 ;;
+            "$h/.yarn"|"$h/.yarn/"*) return 0 ;;
+            "$h/.pnpm-store"|"$h/.pnpm-store/"*) return 0 ;;
+            "$h/.gradle"|"$h/.gradle/"*) return 0 ;;
+            "$h/.m2"|"$h/.m2/"*) return 0 ;;
+            "$h/.cargo"|"$h/.cargo/"*) return 0 ;;
+            "$h/.gem"|"$h/.gem/"*) return 0 ;;
+            "$h/.bundle"|"$h/.bundle/"*) return 0 ;;
+            "$h/.composer"|"$h/.composer/"*) return 0 ;;
+            "$h/.swiftpm"|"$h/.swiftpm/"*) return 0 ;;
+            "$h/.Trash"|"$h/.Trash/"*) return 0 ;;
+            "$h/Downloads"|"$h/Downloads/"*) return 0 ;;
         esac
+        return 1
+    }
+
+    if [[ -n "$user_home_norm" ]] && _check_home_root "$user_home_norm"; then
+        return 0
+    fi
+    if [[ -n "$user_home_raw" ]] && _check_home_root "$user_home_raw"; then
+        return 0
+    fi
+
+    # Brew cache root if brew is available
+    if type brew >/dev/null 2>&1; then
+        local brew_prefix=""
+        brew_prefix="$(brew --prefix 2>/dev/null || true)"
+        if [[ -n "$brew_prefix" ]]; then
+            case "$norm" in
+                "$brew_prefix"|"$brew_prefix/"*) return 0 ;;
+            esac
+        fi
     fi
 
     # Allowed System/Global Disposable Roots

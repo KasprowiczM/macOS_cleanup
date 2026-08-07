@@ -14,6 +14,9 @@ i18n_get_de() {
         developer_env) echo "Entwicklerumgebung" ;;
         system_caches) echo "System-Caches (/Library/Caches)" ;;
         trash) echo "Papierkorb" ;;
+        header_phase1) echo "FASE 1: Systemanalyse" ;;
+        header_phase2) echo "FASE 2: Reinigung" ;;
+        cli_categories) echo "Verfügbare Kategorien" ;;
         total_potential) echo "Insgesamt freigebbarer Speicherplatz" ;;
 
         # Explain categories

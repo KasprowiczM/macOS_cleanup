@@ -122,17 +122,17 @@ bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json --dry-run
 # Analysis without questions
 bash cleanup_all.sh --dry-run --non-interactive
 
-# Auto-safe without manual confirmation (explicitly safe items only)
+# Auto-safe without manual confirmation (approves SAFE risk categories only; REVIEW categories require interactive confirmation)
 bash cleanup_all.sh --auto-safe --non-interactive --yes
 
-# Real space recovery in automation: only after conscious --permanent
+# Real space recovery in automation: only after conscious --permanent (SAFE categories only)
 bash cleanup_all.sh --auto-safe --permanent --non-interactive --yes
 
 # Running a specific category without prompts
 bash cleanup_all.sh --dry-run --non-interactive --category app-leftovers
 ```
 
-`--non-interactive` runs the script without reading input from TTY. For safety, every question defaults to `no`. `--yes` confirms only low-risk operations; medium/high categories require interactive mode.
+`--non-interactive` runs the script without reading input from TTY. For safety, every question defaults to `no`. `--yes` automatically confirms `SAFE` risk categories only (such as allowlisted app caches); `REVIEW` categories require interactive confirmation and are skipped in unattended non-interactive runs.
 
 ### 7. With path exclusion
 

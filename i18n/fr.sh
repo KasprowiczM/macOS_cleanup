@@ -12,8 +12,11 @@ i18n_get_fr() {
         user_caches) echo "Caches Utilisateur" ;;
         app_caches) echo "Caches d'Applications" ;;
         developer_env) echo "Environnement de Développement" ;;
-        system_caches) echo "Caches Système (/Library/Caches)" ;;
+        system_caches) echo "Caches système (/Library/Caches)" ;;
         trash) echo "Corbeille" ;;
+        header_phase1) echo "PHASE 1: Analyse du système" ;;
+        header_phase2) echo "PHASE 2: Nettoyage" ;;
+        cli_categories) echo "Catégories disponibles" ;;
         total_potential) echo "Espace total potentiellement libérable" ;;
 
         # Explain categories
