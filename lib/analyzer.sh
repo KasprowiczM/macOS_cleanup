@@ -31,6 +31,8 @@ declare -a FOUND_TM_SNAPSHOTS=()
 declare -a FOUND_IOS_BACKUPS=()
 # shellcheck disable=SC2034
 declare -a FOUND_LARGE_FILES=()
+# shellcheck disable=SC2034
+FOUND_DERIVED_DATA=""
 declare -a FOUND_DMG_PKG=()
 declare -a FOUND_TRASH_ITEMS=()
 declare -a FOUND_APP_CACHE_ITEMS=()
@@ -819,6 +821,8 @@ analyze_dev_environment() {
         local dd_size
         dd_size=$(path_size_bytes "$dd")
         if (( dd_size > 0 )); then
+            # shellcheck disable=SC2034
+            FOUND_DERIVED_DATA="$dd"
             FOUND_DEV_ITEMS+=("xcode_derived_data:$dd")
             catbytes_set "xcode-derived" "$dd_size"
             print_found "Xcode DerivedData: $(bytes_to_human "$dd_size")"

@@ -12,8 +12,11 @@ i18n_get_it() {
         user_caches) echo "Cache Utente" ;;
         app_caches) echo "Cache Applicazioni" ;;
         developer_env) echo "Ambiente di Sviluppo" ;;
-        system_caches) echo "Cache di Sistema (/Library/Caches)" ;;
+        system_caches) echo "Cache di sistema (/Library/Caches)" ;;
         trash) echo "Cestino" ;;
+        header_phase1) echo "FASE 1: Analisi del sistema" ;;
+        header_phase2) echo "FASE 2: Pulizia" ;;
+        cli_categories) echo "Categorie disponibili" ;;
         total_potential) echo "Spazio totale potenzialmente liberabile" ;;
 
         # Explain categories

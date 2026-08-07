@@ -37,7 +37,7 @@
 #   --require-typing-path Require typing the full path for REVIEW removals
 #   --retention-days <n>  Retention for --purge-quarantine expired
 #   --non-interactive      Run without tty prompts (recommended for CI)
-#   --yes                  Auto-confirm LOW-risk prompts (use with --non-interactive)
+#   --yes                  Auto-confirm SAFE risk categories only (use with --non-interactive)
 #   --no-color             Disable colored output
 #   --log-level <level>   DEBUG | INFO | WARN | ERROR (default: INFO)
 #   --json                Print machine-readable JSON run summary to stdout
