@@ -456,19 +456,25 @@ normalize_never_touch_paths() {
     done
 }
 
-# Abort with a clear error if a protected path is about to be touched.
+# Block and journal (but do NOT abort) if a protected path is about to be touched.
+# Returns 0 if path is safe to proceed, 1 if blocked.
 assert_safe_path() {
     local path="$1"
     if is_protected_path "$path"; then
         print_error "SAFETY VIOLATION: attempted to touch protected path: ${path}"
-        print_error "This is a bug in the script. Please report it."
-        exit 99
+        log_error "SAFETY VIOLATION: protected path blocked: ${path}"
+        record_skipped_item "SAFETY VIOLATION (protected): ${path}"
+        cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "protected path"
+        return 1
     fi
     if path_contains_protected_descendant "$path"; then
         print_error "SAFETY VIOLATION: attempted to remove parent of protected path: ${path}"
-        print_error "This is a bug in the script. Please report it."
-        exit 99
+        log_error "SAFETY VIOLATION: parent of protected path blocked: ${path}"
+        record_skipped_item "SAFETY VIOLATION (parent of protected): ${path}"
+        cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "parent of protected path"
+        return 1
     fi
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -1161,7 +1167,7 @@ safe_remove() {
         return 0
     fi
 
-    assert_safe_path "$normalized_target"
+    assert_safe_path "$normalized_target" || return 1
 
     if [[ ! -e "$normalized_target" && ! -L "$normalized_target" ]]; then
         log_debug "safe_remove: path does not exist, skipping: ${normalized_target}"

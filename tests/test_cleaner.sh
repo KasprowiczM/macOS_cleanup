@@ -112,7 +112,7 @@ clean_user_caches
 assert_file_exists "$USER_CACHE_DIR2/file.bin"
 assert_eq "${TOTAL_CLEANED_BYTES}" "${prev_cleaned}"
 
-begin_test "clean_system_caches requires request_sudo confirmation"
+begin_test "clean_system_caches is report-only (P0-1a)"
 reset_cleaner_state
 MODE="auto-safe"
 DRY_RUN=0
@@ -122,20 +122,9 @@ create_file_kb "$SYSTEM_CACHE_DIR/file.bin" 4
 FOUND_SYSTEM_CACHES=("$SYSTEM_CACHE_DIR")
 catbytes_set "system-caches" "$(path_size_bytes "$SYSTEM_CACHE_DIR")"
 
-REQUEST_SUDO_RESULT=0
 clean_system_caches
-assert_file_absent "$SYSTEM_CACHE_DIR/file.bin"
-
-reset_cleaner_state
-REQUEST_SUDO_RESULT=1
-DRY_RUN=0
-mkdir -p "$SYSTEM_CACHE_DIR"
-create_file_kb "$SYSTEM_CACHE_DIR/file.bin" 4
-FOUND_SYSTEM_CACHES=("$SYSTEM_CACHE_DIR")
-catbytes_set "system-caches" "$(path_size_bytes "$SYSTEM_CACHE_DIR")"
-
-clean_system_caches
-assert_file_exists "$SYSTEM_CACHE_DIR/file.bin"
+# P0-1a: system caches must NOT be deleted — report-only
+assert_file_exists "$SYSTEM_CACHE_DIR/file.bin" "system cache must survive (report-only)"
 
 begin_test "clean_app_specific_caches removes entries prepared in FOUND_APP_CACHE_ITEMS"
 reset_cleaner_state

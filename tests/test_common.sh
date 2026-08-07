@@ -186,22 +186,17 @@ safe_remove "${SANDBOX}/does-not-exist" >/dev/null
 assert_eq "$TOTAL_CLEANED_BYTES" "$prev_cleaned"     "missing path must not change counter"
 
 # ---------------------------------------------------------------------------
-# NOTE: protected-path abort calls exit 99. We verify it in a subshell so the
-# test runner survives.
-begin_test "safe_remove aborts on protected path (exit 99)"
-set +e
-DRY_RUN=0 HOME="$HOME" PROJ_DIR="$PROJ_DIR" \
-    bash <<'INNER' >/dev/null 2>&1
-        # shellcheck disable=SC1090
-        source "${PROJ_DIR}/config/defaults.sh"
-        LOG_LEVEL="INFO"
-        # shellcheck disable=SC1090
-        source "${PROJ_DIR}/lib/common.sh"
-        safe_remove "$HOME/.ssh"
-INNER
+# P1-12: protected-path violations now skip (return 1), not abort (exit 99).
+begin_test "safe_remove skips on protected path (P1-12, return 1)"
+prev_cleaned="$TOTAL_CLEANED_BYTES"
+SANDBOX="$(make_sandbox)"
+PROTECTED_FILE="${SANDBOX}/protected_file"
+echo "precious" > "$PROTECTED_FILE"
+# Try to remove $HOME/.ssh which is in NEVER_TOUCH_PATHS
+safe_remove "$HOME/.ssh" >/dev/null 2>&1
 rc=$?
-set -u
-assert_eq "$rc" "99" "safe_remove must abort with exit 99 on protected path"
+assert_eq "$rc" "1" "safe_remove must return 1 on protected path"
+assert_eq "$TOTAL_CLEANED_BYTES" "$prev_cleaned" "protected path must not change counter"
 
 # ---------------------------------------------------------------------------
 begin_test "log file receives plain-text (no ANSI escapes)"

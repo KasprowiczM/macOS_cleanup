@@ -26,13 +26,19 @@ clean_trash() {
     total_h=$(bytes_to_human "$trash_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local _consequence
+        if [[ "${REMOVE_MODE:-quarantine}" == "quarantine" ]]; then
+            _consequence="Pliki zostaną przeniesione do kwarantanny. Miejsce nie zostanie zwolnione do uruchomienia --purge-quarantine."
+        else
+            _consequence="Pliki zostaną trwale usunięte. Nie można tego cofnąć (chyba że masz Time Machine)."
+        fi
         confirm_category \
             --title      "Kosz (~/.Trash)" \
             --size       "$total_h" \
             --what       "Pliki w Koszu systemu macOS. To są rzeczy, które wcześniej usunąłeś, ale nie opróżniłeś Kosza." \
-            --consequence "Pliki zostaną trwale usunięte. Nie można tego cofnąć (chyba że masz Time Machine)." \
+            --consequence "$_consequence" \
             --safe-if    "Bezpieczne jeśli celowo usunąłeś te pliki i nie potrzebujesz ich odtwarzać." \
-            --risk       "LOW" || return 0
+            --risk       "REVIEW" || return 0
     fi
 
     print_section "Czyszczenie: Kosz"
@@ -63,8 +69,8 @@ clean_user_caches() {
             --paths      "$paths_str" \
             --what       "Pliki cache tworzone przez aplikacje w ~/Library/Caches. Służą do przyspieszenia działania programów." \
             --consequence "Aplikacje odtworzą swój cache przy kolejnym uruchomieniu. Pierwsze uruchomienia mogą być nieznacznie wolniejsze." \
-            --safe-if    "Zawsze bezpieczne — żadna aplikacja nie przechowuje tu nieodtwarzalnych danych użytkownika." \
-            --risk       "LOW" || return 0
+            --safe-if    "Większość cache jest odtwarzalna, ale przejrzyj listę ścieżek — niektóre aplikacje mogą przechowywać tu dane robocze." \
+            --risk       "REVIEW" || return 0
     fi
 
     print_section "Czyszczenie: cache użytkownika"
@@ -85,21 +91,28 @@ clean_app_specific_caches() {
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local -a paths_only=()
+        local label_count=0
         echo -e "  ${C_BOLD}Znalezione cache aplikacji:${C_RESET}"
         for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
             local label="${entry%%:*}"
             local path="${entry#*:}"
-            [[ -d "$path" ]] && printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
+            if [[ -d "$path" ]]; then
+                printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
+                paths_only+=("$path")
+                label_count=$(( label_count + 1 ))
+            fi
         done
         echo
 
         confirm_category \
-            --title      "Cache aplikacji (Slack, VS Code, JetBrains, Adobe...)" \
+            --title      "Cache aplikacji (${label_count} aplikacji)" \
             --size       "$total_h" \
-            --what       "Wewnętrzne cache aplikacji Electron i innych. Są odtwarzalne — aplikacje je regenerują." \
+            --paths      "$(printf '%s|' "${paths_only[@]}")" \
+            --what       "Cache znanych aplikacji (Electron, Adobe, JetBrains...). Każdy wpis jest opisany z oceną ryzyka." \
             --consequence "Aplikacje mogą wolniej startować przy pierwszym uruchomieniu po czyszczeniu (przegenerują cache)." \
-            --safe-if    "Zawsze bezpieczne. To tylko cache — żadne Twoje dane (ustawienia, projekty) nie są tu przechowywane." \
-            --risk       "LOW" || return 0
+            --safe-if    "Cache z allowlisty auto-safe są odtwarzalne. Pozostałe wymagają przeglądu." \
+            --risk       "REVIEW" || return 0
     fi
 
     print_section "Czyszczenie: cache aplikacji"
