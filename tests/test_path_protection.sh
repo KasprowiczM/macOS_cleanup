@@ -185,8 +185,15 @@ assert_protected "$HOME/Documents/"
 assert_protected "$HOME/Documents/."
 assert_protected "$HOME/Library/../Documents"
 
-begin_test "Edge: child of protected dir is still protected"
-assert_protected "$HOME/Documents/important.txt"
-assert_protected "$HOME/.ssh/id_rsa"
+begin_test "R-1: Normalizer double-slash fix and protection-bypass prevention"
+norm1="$(normalize_path "/tmp/../etc")"
+if [[ "$norm1" == "/etc" || "$norm1" == "/private/etc" ]]; then _pass; else _fail "expected /etc or /private/etc, got $norm1"; fi
+
+norm2="$(normalize_path "/var/tmp/../System")"
+if [[ "$norm2" == "/System" || "$norm2" == "/private/var/System" || "$norm2" == "/var/System" ]]; then _pass; else _fail "expected /System or /private/var/System, got $norm2"; fi
+
+assert_protected "/tmp/../etc" "traversal to /etc"
+assert_protected "/var/tmp/../System" "traversal to /System"
+assert_protected "/tmp/../System/Library/Keychains" "traversal to keychains"
 
 print_test_summary

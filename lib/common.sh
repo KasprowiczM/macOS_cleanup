@@ -179,7 +179,11 @@ normalize_path() {
         fi
         dir="$(cd -P "$dir" 2>/dev/null && pwd -P)"
         if [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
-            norm="$dir/$base"
+            if [[ "$dir" == "/" ]]; then
+                norm="/$base"
+            else
+                norm="$dir/$base"
+            fi
         else
             norm="$dir"
         fi
@@ -248,7 +252,7 @@ is_protected_path() {
     # Fail closed for broad roots. Cleaners should pass leaf candidates, never
     # whole user/system roots.
     case "$normalized_candidate" in
-        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/Applications|/Applications/*|/opt|/opt/*)
+        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
             return 0 ;;
         /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
             return 0 ;;
@@ -266,7 +270,8 @@ is_protected_path() {
 
     # /System/* and other users are never touched.
     # /Library is protected by default, with targeted cache/log leaf cleanup.
-    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* ]]; then
+    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
+          "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
         return 0
     fi
     if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
