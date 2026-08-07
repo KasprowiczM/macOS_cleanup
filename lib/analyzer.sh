@@ -85,26 +85,33 @@ PY
     return 124
 }
 
-is_known_app_specific_cache_path() {
-    local path="$1"
-    is_path_claimed "$path" && return 0
-
-    local normalized known known_norm
-    normalized="$(normalize_path "$path" || echo "$path")"
-
-    for known in \
+_claim_known_specific_caches() {
+    local path
+    for path in \
+        "$HOME/Library/Caches/Homebrew" \
+        "$HOME/Library/Caches/pip" \
+        "$HOME/Library/Caches/CocoaPods" \
+        "$HOME/Library/Caches/org.swift.swiftpm" \
+        "$HOME/Library/Caches/composer" \
         "$HOME/Library/Caches/com.figma.Desktop" \
         "$HOME/Library/Caches/JetBrains" \
         "$HOME/Library/Caches/Adobe" \
         "$HOME/Library/Caches/com.spotify.client" \
         "$HOME/Library/Caches/us.zoom.xos" \
         "$HOME/Library/Caches/com.apple.dt.Xcode" \
-        "$HOME/Library/Caches/com.macpaw.CleanMyMac4"; do
-        known_norm="$(normalize_path "$known" || echo "$known")"
-        [[ "$normalized" == "$known_norm" ]] && return 0
+        "$HOME/Library/Caches/com.macpaw.CleanMyMac4" \
+        "$HOME/Library/Caches/com.apple.Safari" \
+        "$HOME/Library/Caches/Google/Chrome" \
+        "$HOME/Library/Caches/Firefox" \
+        "$HOME/Library/Caches/Microsoft Edge" \
+        "$HOME/Library/Caches/BraveSoftware/Brave-Browser"; do
+        [[ -d "$path" ]] && claim_path "$path" 0
     done
+}
 
-    return 1
+is_known_app_specific_cache_path() {
+    local path="$1"
+    is_path_claimed "$path"
 }
 
 simctl_unavailable_udids() {
@@ -397,6 +404,8 @@ analyze_user_caches() {
 
     local cache_base="$HOME/Library/Caches"
     [[ -d "$cache_base" ]] || { print_skip "Directory does not exist: $cache_base"; return; }
+
+    _claim_known_specific_caches
 
     local total=0
     local size_list=""   # PF1: accumulate sizes to avoid double-du
