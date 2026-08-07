@@ -8,15 +8,15 @@
 # ---------------------------------------------------------------------------
 # Script identity & versioning
 # ---------------------------------------------------------------------------
-readonly SCRIPT_VERSION="2.1.0"
+readonly SCRIPT_VERSION="3.0.0"
 readonly SCRIPT_NAME="cleanup_all.sh"
 readonly PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ---------------------------------------------------------------------------
 # Runtime directories
 # ---------------------------------------------------------------------------
-readonly LOGS_DIR="${PROJECT_DIR}/logs"
-readonly REPORTS_DIR="${PROJECT_DIR}/reports"
+readonly LOGS_DIR="${LOGS_DIR:-${PROJECT_DIR}/logs}"
+readonly REPORTS_DIR="${REPORTS_DIR:-${PROJECT_DIR}/reports}"
 RULES_FILE="${RULES_FILE:-${PROJECT_DIR}/cleanup_rules.yaml}"
 
 # ---------------------------------------------------------------------------
@@ -97,6 +97,13 @@ NEVER_TOUCH_PATHS=(
     "$HOME/Music/Music/Music Library.musiclibrary"
     "$HOME/Music/Music Library.musiclibrary"
     "$HOME/Movies"
+    # iCloud and cloud storage (P0-3)
+    "$HOME/Library/Mobile Documents"
+    "$HOME/Library/CloudStorage"
+    "$HOME/Dropbox"
+    "$HOME/OneDrive"
+    "$HOME/Google Drive"
+    "$HOME/Library/Application Support/Google/DriveFS"
     # Browser profiles (passwords, sessions, cookies, history)
     "$HOME/Library/Application Support/Google/Chrome"
     "$HOME/Library/Application Support/Firefox"
@@ -108,12 +115,34 @@ NEVER_TOUCH_PATHS=(
     # Developer signing & certificates
     "$HOME/Library/MobileDevice/Provisioning Profiles"
     "$HOME/Library/Keychains"
+    # Developer source trees (P0-3)
+    "$HOME/Developer"
+    "$HOME/Projects"
+    "$HOME/src"
+    "$HOME/code"
+    "$HOME/repos"
     # SSH keys and credentials
     "$HOME/.ssh"
     "$HOME/.gnupg"
     "$HOME/.aws/credentials"
+    "$HOME/.aws/config"
     # Git config (not cache)
     "$HOME/.gitconfig"
+    "$HOME/.git-credentials"
+    # Additional credential and config dotfiles (P0-3)
+    "$HOME/.config"
+    "$HOME/.kube"
+    "$HOME/.docker"
+    "$HOME/.netrc"
+    "$HOME/.zshrc"
+    "$HOME/.zprofile"
+    "$HOME/.zsh_history"
+    "$HOME/.bash_profile"
+    "$HOME/.bashrc"
+    "$HOME/.bash_history"
+    "$HOME/.profile"
+    "$HOME/.npmrc"
+    "$HOME/.config/gh"
 )
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,13 @@ PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 # Minimal env expected by lib/common.sh sourcing.
 LOG_LEVEL="INFO"
 LOG_FILE="$(mktemp -t macos_cleanup_testlog.XXXXXX)"
+_COMMON_TEST_TMPDIR="$(mktemp -d -t macos_cleanup_test_common.XXXXXX)"
+export LOGS_DIR="${_COMMON_TEST_TMPDIR}/logs"
+export REPORTS_DIR="${_COMMON_TEST_TMPDIR}/reports"
+export CLEANUP_JOURNAL_FILE="${_COMMON_TEST_TMPDIR}/reports/journal_test.jsonl"
+export CLEANUP_RESTORE_MANIFEST="${_COMMON_TEST_TMPDIR}/reports/restore_test.tsv"
+export QUARANTINE_ROOT="${_COMMON_TEST_TMPDIR}/quarantine"
+mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/config/defaults.sh"
 # shellcheck disable=SC1091
@@ -21,6 +28,7 @@ source "${TEST_DIR}/helpers.sh"
 cleanup() {
     rm -f "$LOG_FILE"
     [[ -n "${SANDBOX:-}" && -d "$SANDBOX" ]] && rm -rf "$SANDBOX"
+    [[ -n "${_COMMON_TEST_TMPDIR:-}" && -d "$_COMMON_TEST_TMPDIR" ]] && rm -rf "$_COMMON_TEST_TMPDIR"
 }
 trap cleanup EXIT
 

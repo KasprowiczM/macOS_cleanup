@@ -11,6 +11,12 @@ PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 SCRIPT_PATH="${PROJ_DIR}/cleanup_all.sh"
 CLI_HOME="$(mktemp -d -t macos_cleanup_test_cli_home.XXXXXX)"
 LOG_LEVEL="INFO"
+export LOGS_DIR="${CLI_HOME}/logs"
+export REPORTS_DIR="${CLI_HOME}/reports"
+export CLEANUP_JOURNAL_FILE="${CLI_HOME}/reports/journal_test.jsonl"
+export CLEANUP_RESTORE_MANIFEST="${CLI_HOME}/reports/restore_test.tsv"
+export QUARANTINE_ROOT="${CLI_HOME}/quarantine"
+mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT"
 
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/config/defaults.sh"
@@ -75,7 +81,7 @@ RC=$(run_cmd_capture "$AUTO_SAFE_OUTPUT" env HOME="$CLI_HOME" USER="${USER:-test
 assert_eq "$RC" "0"
 assert_file_exists "$GENERIC_CACHE/payload.txt" "generic cache should remain for interactive review"
 assert_file_absent "$SPOTIFY_CACHE" "explicit safe app cache should be moved to quarantine"
-assert_true "find \"$CLI_HOME/Library/Application Support/macOS_cleanup/quarantine\" -path '*com.spotify.client/payload.txt' -type f -print -quit | grep -q ."
+assert_true "find \"$QUARANTINE_ROOT\" -path '*com.spotify.client/payload.txt' -type f -print -quit | grep -q ."
 rm -f "$AUTO_SAFE_OUTPUT"
 
 print_test_summary
