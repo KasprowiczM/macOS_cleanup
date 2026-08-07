@@ -223,22 +223,24 @@ print_summary_report() {
         plan)
             echo -e "  ${C_BOLD}Mode:${C_RESET}                       Plan — plan file generated"
             ;;
+        list-quarantine|list)
+            echo -e "  ${C_BOLD}Mode:${C_RESET}                       Quarantine List — listing entries"
+            ;;
+        restore)
+            echo -e "  ${C_BOLD}Restored:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} (${TOTAL_RESTORED_ITEMS} items)"
+            ;;
+        purge)
+            echo -e "  ${C_BOLD}Purged:${C_RESET}                   ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+            ;;
         *)
-            if [[ "$REMOVE_MODE" == "quarantine" ]]; then
-                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
-            elif [[ "$MODE" == "restore" ]]; then
-                echo -e "  ${C_BOLD}Restored:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} (${TOTAL_RESTORED_ITEMS} items)"
-            elif [[ "$MODE" == "purge" ]]; then
-                echo -e "  ${C_BOLD}Purged:${C_RESET}                   ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-            else
-                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
-            fi
+            echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+            echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
             ;;
     esac
 
-    echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    if [[ "$MODE" != "list-quarantine" && "$MODE" != "list" ]]; then
+        echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    fi
     echo -e "  ${C_BOLD}Report File:${C_RESET}            ${C_DIM}${REPORT_FILE}${C_RESET}"
     echo -e "  ${C_BOLD}Journal File:${C_RESET}           ${C_DIM}${CLEANUP_JOURNAL_FILE}${C_RESET}"
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"

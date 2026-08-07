@@ -750,6 +750,19 @@ app_bundle_exists() {
         fi
     fi
 
+    # Direct check against FOUND_INSTALLED_APPS if available
+    if [[ -n "${FOUND_INSTALLED_APPS+x}" ]] && (( ${#FOUND_INSTALLED_APPS[@]} > 0 )); then
+        local app plist bid
+        for app in "${FOUND_INSTALLED_APPS[@]}"; do
+            plist="${app}/Contents/Info.plist"
+            [[ -f "$plist" ]] || continue
+            bid="$(defaults read "$plist" CFBundleIdentifier 2>/dev/null || true)"
+            if [[ "$bid" == "$bundle_id" ]]; then
+                return 0
+            fi
+        done
+    fi
+
     if (( APP_BUNDLE_ID_CACHE_LOADED == 0 )); then
         _load_app_bundle_id_cache
     fi
