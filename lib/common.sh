@@ -69,20 +69,24 @@ t() {
     local fn="i18n_get_${lang}"
     local val=""
     if declare -f "$fn" >/dev/null 2>&1; then
-        if val="$("$fn" "$key" 2>/dev/null)"; then
+        val="$("$fn" "$key" 2>/dev/null)"
+        if [[ -n "$val" ]]; then
             echo "$val"
             return 0
         fi
     fi
-    if val="$(i18n_get_en "$key" 2>/dev/null)"; then
+    if val="$(i18n_get_pl "$key" 2>/dev/null)" && [[ -n "$val" ]]; then
         echo "$val"
         return 0
     fi
-    if val="$(i18n_get_pl "$key" 2>/dev/null)"; then
+    if val="$(i18n_get_en "$key" 2>/dev/null)" && [[ -n "$val" ]]; then
         echo "$val"
         return 0
     fi
-    echo "$key"
+    log_warn "Missing i18n key: ${key}"
+    local humanized
+    humanized="$(echo "$key" | sed -E 's/^(cli_|mode_|_)?//g' | tr '_' ' ')"
+    echo "$humanized"
 }
 
 # Cached path size calculation to optimize filesystem du traversal
