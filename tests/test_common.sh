@@ -177,7 +177,20 @@ REMOVE_MODE=permanent
 prev_cleaned="$TOTAL_CLEANED_BYTES"
 safe_remove "$real_target" >/dev/null
 assert_file_absent "$real_target"                    "real mode must remove file"
-assert_true "(( TOTAL_CLEANED_BYTES > prev_cleaned ))" "cleaned counter incremented"
+assert_true "(( TOTAL_CLEANED_BYTES > prev_cleaned ))" "cleaned counter must increment"
+
+begin_test "safe_remove succeeds for non-cache disposable paths (HOTFIX-1 regression guard)"
+trash_item="${SANDBOX}/.Trash/trash_test_item.txt"
+log_item="${SANDBOX}/Library/Logs/old_log_item.log"
+mkdir -p "${SANDBOX}/.Trash" "${SANDBOX}/Library/Logs"
+echo "trash candidate" > "$trash_item"
+echo "log candidate" > "$log_item"
+DRY_RUN=0
+REMOVE_MODE=permanent
+safe_remove "$trash_item" >/dev/null
+assert_file_absent "$trash_item" "safe_remove must succeed for .Trash path outside cache roots"
+safe_remove "$log_item" >/dev/null
+assert_file_absent "$log_item" "safe_remove must succeed for Library/Logs path outside cache roots"
 
 begin_test "safe_remove on missing path is a no-op"
 DRY_RUN=0
@@ -192,20 +205,26 @@ begin_test "safe_remove skips on protected path (P1-12, return 1)"
 DRY_RUN=0
 REMOVE_MODE=quarantine
 prev_cleaned="$TOTAL_CLEANED_BYTES"
-# Use $HOME/Documents which is in NEVER_TOUCH_PATHS; ensure it exists
-mkdir -p "$HOME/Documents"
-_test_marker="${HOME}/Documents/_test_marker_safe_remove_$$"
+TEST_HOME="${_COMMON_TEST_TMPDIR}/sandbox_home"
+mkdir -p "$TEST_HOME/Documents"
+_test_marker="${TEST_HOME}/Documents/_test_marker_safe_remove_$$"
 echo "precious" > "$_test_marker"
+OLD_HOME="$HOME"
+export HOME="$TEST_HOME"
+OLD_NTP=("${NEVER_TOUCH_PATHS[@]:-}")
+NEVER_TOUCH_PATHS=("$TEST_HOME/Documents")
 set +e
 (
-    safe_remove "$HOME/Documents" >/dev/null 2>&1
+    safe_remove "$TEST_HOME/Documents" >/dev/null 2>&1
 )
 rc=$?
 set -u
+export HOME="$OLD_HOME"
+NEVER_TOUCH_PATHS=("${OLD_NTP[@]:-}")
 assert_eq "$rc" "1" "safe_remove must return 1 on protected path"
 assert_eq "$TOTAL_CLEANED_BYTES" "$prev_cleaned" "protected path must not change counter"
 assert_file_exists "$_test_marker" "protected directory contents must NOT be deleted"
-rm -f "$_test_marker"
+rm -rf "$TEST_HOME"
 
 # ---------------------------------------------------------------------------
 begin_test "log file receives plain-text (no ANSI escapes)"

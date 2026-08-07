@@ -650,15 +650,6 @@ assert_safe_path() {
         cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "parent of protected path"
         return 1
     fi
-    if type validate_cache_path >/dev/null 2>&1; then
-        if ! validate_cache_path "$path"; then
-            print_error "SAFETY VIOLATION: pathguard rejected candidate path: ${path}"
-            log_error "SAFETY VIOLATION: pathguard rejected candidate path: ${path}"
-            record_skipped_item "SAFETY VIOLATION (pathguard): ${path}"
-            cleanup_journal_event "safety_violation" "$path" "" "0" "blocked" "pathguard rejection"
-            return 1
-        fi
-    fi
     return 0
 }
 
