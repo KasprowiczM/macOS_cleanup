@@ -51,6 +51,39 @@ _on_interrupt() {
     exit 130
 }
 
+# ---------------------------------------------------------------------------
+# Privacy & Security Helpers
+# ---------------------------------------------------------------------------
+
+redact_path() {
+    local str="$1"
+    if [[ "${REDACT_PATHS:-0}" == "1" ]]; then
+        if [[ -n "${HOME:-}" ]]; then
+            str="${str//$HOME/~}"
+        fi
+        local user
+        user="$(whoami 2>/dev/null || echo "")"
+        if [[ -n "$user" ]]; then
+            str="${str//\/Users\/$user/~}"
+        fi
+    fi
+    echo "$str"
+}
+
+rotate_old_artifacts() {
+    local max_days="${1:-30}"
+    local logs_dir="${LOGS_DIR:-}"
+    local reports_dir="${REPORTS_DIR:-}"
+
+    if [[ -n "$logs_dir" && -d "$logs_dir" ]]; then
+        find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+    fi
+
+    if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
+        find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+    fi
+}
+
 print_header() {
     echo
     echo -e "${C_BOLD}${C_BLUE}══════════════════════════════════════════════════════════${C_RESET}"

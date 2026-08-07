@@ -387,6 +387,10 @@ parse_args() {
                 JSON_OUTPUT=1
                 shift
                 ;;
+            --redact)
+                REDACT_PATHS=1
+                shift
+                ;;
             --help|-h)
                 SHOW_HELP=1
                 shift
