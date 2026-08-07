@@ -25,6 +25,8 @@ source "${PROJ_DIR}/lib/interactive.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/analyzer.sh"
 # shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/json_summary.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/planner.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"

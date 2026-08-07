@@ -15,23 +15,6 @@ emit_json_summary() {
     local ts
     ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 
-    # Collect per-category bytes into a JSON object fragment.
-    # We build the fragment as a series of "key": value pairs.
-    local cat_fragment=""
-    local first=1
-    for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
-        local bytes
-        bytes="$(catbytes_get "$key")"
-        (( bytes == 0 )) && continue
-        local jkey="${key//-/_}"
-        if (( first )); then
-            cat_fragment="${jkey}: ${bytes}"
-            first=0
-        else
-            cat_fragment="${cat_fragment}, ${jkey}: ${bytes}"
-        fi
-    done
-
     # Plan summary counters (set by generate_plan_json if plan was built).
     local plan_ops="${_JSON_PLAN_OPERATIONS:-0}"
     local plan_safe="${_JSON_PLAN_SAFE:-0}"

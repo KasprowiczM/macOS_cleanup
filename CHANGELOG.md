@@ -5,6 +5,16 @@ All notable changes to `macOS_cleanup` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- `--json`: removed a dead per-category byte block in `lib/json_summary.sh` that
+  was assembled into `cat_fragment` but never emitted — and would have produced
+  invalid JSON (unquoted keys) if it ever had been wired in.
+- Test hermeticity: `tests/test_planner.sh` now sources `lib/json_summary.sh`
+  the same way `cleanup_all.sh` does, so the suite no longer prints
+  `json_summary_record_plan: command not found` to stderr while still passing.
+
 ## [2.1.0]
 
 ### Added
