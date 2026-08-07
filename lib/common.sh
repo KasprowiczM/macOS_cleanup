@@ -739,6 +739,35 @@ EOF
     done
 }
 
+get_plist_bundle_id() {
+    local plist="$1"
+    [[ -f "$plist" ]] || return 1
+    if command -v defaults >/dev/null 2>&1; then
+        local bid
+        bid="$(defaults read "$plist" CFBundleIdentifier 2>/dev/null || true)"
+        if [[ -n "$bid" ]]; then
+            echo "$bid"
+            return 0
+        fi
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        local pbid
+        pbid="$(python3 -c '
+import plistlib, sys
+try:
+    with open(sys.argv[1], "rb") as f:
+        p = plistlib.load(f)
+        print(p.get("CFBundleIdentifier", ""))
+except Exception:
+    pass' "$plist" 2>/dev/null || true)"
+        if [[ -n "$pbid" ]]; then
+            echo "$pbid"
+            return 0
+        fi
+    fi
+    grep -A1 "<key>CFBundleIdentifier</key>" "$plist" 2>/dev/null | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/\1/'
+}
+
 app_bundle_exists() {
     local bundle_id="$1"
 
@@ -756,7 +785,7 @@ app_bundle_exists() {
         for app in "${FOUND_INSTALLED_APPS[@]}"; do
             plist="${app}/Contents/Info.plist"
             [[ -f "$plist" ]] || continue
-            bid="$(defaults read "$plist" CFBundleIdentifier 2>/dev/null || true)"
+            bid="$(get_plist_bundle_id "$plist")"
             if [[ "$bid" == "$bundle_id" ]]; then
                 return 0
             fi
