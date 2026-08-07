@@ -333,7 +333,10 @@ i18n_get_de() {
         skipped_quarantine) echo "Quarantäne übersprungen" ;;
         tmp) echo "Temporäre Dateien" ;;
         would_remove) echo "Würde entfernen" ;;
-        yarn) echo "yarn-Cache" ;;
+        in_items) echo "$2 in $3 Elementen" ;;
+        items_count) echo "$2 Elem." ;;
+        tm_snapshots_count) echo "Lokale Time Machine-Snapshots: $2 Anzahl" ;;
+        yarn) echo "Yarn-Cache" ;;
         *) return 1 ;;
     esac
 }

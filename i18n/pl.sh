@@ -333,7 +333,10 @@ i18n_get_pl() {
         skipped_quarantine) echo "Pominięto kwarantannę" ;;
         tmp) echo "Pliki tymczasowe" ;;
         would_remove) echo "Zostałby usunięty" ;;
-        yarn) echo "yarn cache" ;;
+        in_items) echo "$2 w $3 elementach" ;;
+        items_count) echo "$2 elem." ;;
+        tm_snapshots_count) echo "Lokalne migawki Time Machine: $2 szt." ;;
+        yarn) echo "Pamięć podręczna Yarna" ;;
         *) return 1 ;;
     esac
 }

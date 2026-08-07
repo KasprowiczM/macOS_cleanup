@@ -12,13 +12,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 export PROJ_DIR
 
+# Development:   bash tools/verify_release.sh --quick        (~10s, no suite)
+# Per batch:     bash tools/verify_release.sh --summary      (1 suite run)
+# Pre-release:   bash tools/verify_release.sh --full         (2 suite runs, all 19 gates)
+
 QUICK_MODE=0
+SUMMARY_MODE=0
+FULL_MODE=0
 TARGET_GATE=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --quick)
             QUICK_MODE=1
+            shift
+            ;;
+        --summary)
+            SUMMARY_MODE=1
+            shift
+            ;;
+        --full)
+            FULL_MODE=1
             shift
             ;;
         --gate)
@@ -30,6 +44,9 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Ensure variables are referenced for shellcheck (SC2034)
+: "${SUMMARY_MODE:-0}"
 
 PASS=0
 FAIL=0
@@ -47,6 +64,11 @@ run_gate() {
     if [[ "$QUICK_MODE" -eq 1 && ("$id" == "G04" || "$id" == "G06" || "$id" == "G12") ]]; then
         echo "-----------------------------------------------------------"
         echo "Skipping ${id} (--quick mode): ${desc}"
+        return 0
+    fi
+    if [[ "$id" == "G12" && "$FULL_MODE" -ne 1 ]]; then
+        echo "-----------------------------------------------------------"
+        echo "Skipping G12 (use --full): Normalizer determinism"
         return 0
     fi
 
@@ -82,7 +104,7 @@ if [[ "$SUITE_RUN_NEEDED" -eq 1 ]]; then
     _SUITE_LOG="$(mktemp -t verify_suite.XXXXXX)"
     trap 'rm -f "$_SUITE_LOG"' EXIT
     _GIT_BEFORE="$(git status --porcelain)"
-    /bin/bash "${PROJ_DIR}/tests/run_all.sh" > "$_SUITE_LOG" 2>&1
+    QUIET=1 /bin/bash "${PROJ_DIR}/tests/run_all.sh" > "$_SUITE_LOG" 2>&1
     _SUITE_RC=$?
     _GIT_AFTER="$(git status --porcelain)"
 fi
@@ -158,6 +180,10 @@ run_gate "G17" "Plan risk vs policy parity (tests/test_plan_policy_parity.sh)" \
 # G18: Plan native_command round-trip preservation
 run_gate "G18" "Plan native_command round-trip preservation (apply_plan_file native_command)" \
     '_g18_tmp=$(mktemp -d) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && mkdir -p "${_g18_bin}" && echo "#!/bin/bash" > "${_g18_bin}/npm" && echo "echo NPM:\$* >> \"${_g18_rec}\"" >> "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && printf '\''{\n  "schema_version": "1.0",\n  "tool": "cleanup_all.sh",\n  "operations": [\n    {\n      "id": "op-g18", "category": "dev", "risk": "SAFE", "action": "native_command",\n      "path": "", "command": "npm cache clean --force", "estimated_bytes": 1024\n    }\n  ]\n}\n'\'' > "${_g18_plan}" && PATH="${_g18_bin}:${PATH}" DRY_RUN=0 /bin/bash -c '\''source "'"${PROJ_DIR}"'/config/defaults.sh"; source "'"${PROJ_DIR}"'/lib/common.sh"; source "'"${PROJ_DIR}"'/lib/policy.sh"; source "'"${PROJ_DIR}"'/lib/planner.sh"; apply_plan_file "$1"'\'' _ "${_g18_plan}" >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
+
+# G19: Protected path documentation sync
+run_gate "G19" "Protected paths docs sync (tools/gen_protected_docs.sh --check)" \
+    '/bin/bash "${PROJ_DIR}/tools/gen_protected_docs.sh" --check'
 
 echo
 echo "═══════════════════════════════════════════════════"

@@ -333,6 +333,9 @@ i18n_get_en() {
         skipped_quarantine) echo "Skipped quarantine" ;;
         tmp) echo "Temporary files" ;;
         would_remove) echo "Would remove" ;;
+        in_items) echo "$2 in $3 items" ;;
+        items_count) echo "$2 items" ;;
+        tm_snapshots_count) echo "Local Time Machine snapshots: $2 count" ;;
         yarn) echo "yarn cache" ;;
         *) return 1 ;;
     esac

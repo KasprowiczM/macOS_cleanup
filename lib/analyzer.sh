@@ -382,7 +382,7 @@ analyze_trash() {
         return
     fi
 
-    print_found "$(t "trash"): $(bytes_to_human "$total") in ${count} items"
+    print_found "$(t "trash"): $(t "in_items" "$(bytes_to_human "$total")" "$count")"
 
     # Show top 5 largest items in trash
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
@@ -429,7 +429,7 @@ analyze_user_caches() {
         return
     fi
 
-    print_found "$(t "user_caches_found"): $(bytes_to_human "$total") in ${#FOUND_USER_CACHES[@]} items"
+    print_found "$(t "user_caches_found"): $(t "in_items" "$(bytes_to_human "$total")" "${#FOUND_USER_CACHES[@]}")"
 
     echo -e "  ${C_DIM}$(t "user_caches_top10"):${C_RESET}"
     local top10=""
@@ -811,7 +811,7 @@ analyze_app_leftovers() {
         print_ok "$(t "leftovers_ok")"
         print_info "  $(t "leftovers_heuristic_note")"
     else
-        print_found "$(t "leftovers_found"): $(bytes_to_human "$total") in ${count} items"
+        print_found "$(t "leftovers_found"): $(t "in_items" "$(bytes_to_human "$total")" "$count")"
         print_warn  "  $(t "leftovers_warn")"
         # Show top 5
         echo -e "  ${C_DIM}Top 5:${C_RESET}"
@@ -1246,7 +1246,7 @@ analyze_time_machine() {
     local count=0
     count=$(echo "$snapshots" | grep -c "com.apple.TimeMachine" 2>/dev/null) || count=0
 
-    print_found "Local Time Machine snapshots: ${count} count"
+    print_info "$(t "tm_snapshots_count" "$count")"
 
     while IFS= read -r snap; do
         [[ -z "$snap" ]] && continue

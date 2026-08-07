@@ -69,17 +69,17 @@ t() {
     local fn="i18n_get_${lang}"
     local val=""
     if declare -f "$fn" >/dev/null 2>&1; then
-        val="$("$fn" "$key" 2>/dev/null)"
+        val="$("$fn" "$@" 2>/dev/null)"
         if [[ -n "$val" ]]; then
             echo "$val"
             return 0
         fi
     fi
-    if val="$(i18n_get_pl "$key" 2>/dev/null)" && [[ -n "$val" ]]; then
+    if val="$(i18n_get_pl "$@" 2>/dev/null)" && [[ -n "$val" ]]; then
         echo "$val"
         return 0
     fi
-    if val="$(i18n_get_en "$key" 2>/dev/null)" && [[ -n "$val" ]]; then
+    if val="$(i18n_get_en "$@" 2>/dev/null)" && [[ -n "$val" ]]; then
         echo "$val"
         return 0
     fi
@@ -661,12 +661,29 @@ assert_safe_path() {
 # File age helpers
 # ---------------------------------------------------------------------------
 
+file_mtime_seconds() {
+    local target="$1"
+    [[ -e "$target" ]] || return 1
+    local mtime=""
+    mtime=$(stat -f "%m" "$target" 2>/dev/null) || mtime=""
+    if [[ -z "$mtime" || "$mtime" == *[!0-9]* ]]; then
+        mtime=$(stat -c "%Y" "$target" 2>/dev/null) || mtime=""
+    fi
+    if [[ -z "$mtime" || "$mtime" == *[!0-9]* ]]; then
+        if command -v python3 >/dev/null 2>&1; then
+            mtime=$(python3 -c 'import os, sys; print(int(os.path.getmtime(sys.argv[1])))' "$target" 2>/dev/null || echo "0")
+        fi
+    fi
+    echo "${mtime:-0}"
+}
+
 file_older_than_days() {
     local file="$1"
     local days="$2"
     if [[ ! -e "$file" ]]; then return 1; fi
     local mtime now diff_days
-    mtime=$(stat -f "%m" "$file" 2>/dev/null) || return 1
+    mtime="$(file_mtime_seconds "$file")"
+    [[ -z "$mtime" || "$mtime" -eq 0 ]] && return 1
     now=$(date +%s)
     diff_days=$(( (now - mtime) / 86400 ))
     (( diff_days > days ))
@@ -677,7 +694,8 @@ file_older_than_hours() {
     local hours="$2"
     if [[ ! -e "$file" ]]; then return 1; fi
     local mtime now diff_hours
-    mtime=$(stat -f "%m" "$file" 2>/dev/null) || return 1
+    mtime="$(file_mtime_seconds "$file")"
+    [[ -z "$mtime" || "$mtime" -eq 0 ]] && return 1
     now=$(date +%s)
     diff_hours=$(( (now - mtime) / 3600 ))
     (( diff_hours > hours ))
@@ -1160,7 +1178,28 @@ restore_quarantine_manifest() {
         return 2
     fi
 
-    print_info "Restoring quarantine from manifest: ${manifest}"
+    if [[ "$requested" == "latest" ]]; then
+        local run_id=""
+        run_id="$(basename "$manifest" | sed 's/^restore_//;s/\.tsv$//')"
+        print_info "Restoring quarantine from latest run (run ID: ${run_id}): ${manifest}"
+
+        local -a other_manifests=()
+        while IFS= read -r m; do
+            [[ -n "$m" && "$m" != "$manifest" ]] && other_manifests+=("$m")
+        done < <(ls -t "${REPORTS_DIR}"/restore_*.tsv 2>/dev/null || true)
+
+        if (( ${#other_manifests[@]} > 0 )); then
+            print_info "Other available quarantine runs:"
+            for om in "${other_manifests[@]}"; do
+                local om_id
+                om_id="$(basename "$om" | sed 's/^restore_//;s/\.tsv$//')"
+                echo "  • ${om_id}"
+            done
+            print_info "Hint: Target a specific run with: bash cleanup_all.sh --restore <run_id>"
+        fi
+    else
+        print_info "Restoring quarantine from manifest: ${manifest}"
+    fi
 
     local q_b64 p_b64 bytes source_path target_path source_norm target_norm
     local quarantine_root_norm actual_size

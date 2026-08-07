@@ -333,7 +333,10 @@ i18n_get_es() {
         skipped_quarantine) echo "Cuarentena omitida" ;;
         tmp) echo "Archivos temporales" ;;
         would_remove) echo "Eliminaría" ;;
-        yarn) echo "Caché de yarn" ;;
+        in_items) echo "$2 en $3 elementos" ;;
+        items_count) echo "$2 elem." ;;
+        tm_snapshots_count) echo "Instantáneas locales de Time Machine: $2 recuento" ;;
+        yarn) echo "Caché de Yarn" ;;
         *) return 1 ;;
     esac
 }

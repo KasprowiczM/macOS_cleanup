@@ -333,7 +333,10 @@ i18n_get_pt() {
         skipped_quarantine) echo "Quarentena ignorada" ;;
         tmp) echo "Arquivos temporários" ;;
         would_remove) echo "Removeria" ;;
-        yarn) echo "Cache do yarn" ;;
+        in_items) echo "$2 em $3 itens" ;;
+        items_count) echo "$2 itens" ;;
+        tm_snapshots_count) echo "Instantâneos locais do Time Machine: $2 contagem" ;;
+        yarn) echo "Cache do Yarn" ;;
         *) return 1 ;;
     esac
 }
