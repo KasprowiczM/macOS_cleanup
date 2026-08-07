@@ -123,11 +123,11 @@ run_gate "G08" "Protected path assertions >= 60 (tests/test_path_protection.sh)"
 run_gate "G09" "plan.json validates against schemas/plan.schema.json" \
     '_g09_tmp=$(mktemp -d) && HOME="$_g09_tmp" /bin/bash "${PROJ_DIR}/cleanup_all.sh" plan --non-interactive --no-color >/dev/null 2>&1 && _plan=$(ls -t "${PROJ_DIR}/reports/plan_"*.json 2>/dev/null | head -1) && [[ -n "$_plan" ]] && jsonschema -i "$_plan" "${PROJ_DIR}/schemas/plan.schema.json" && rm -rf "${_g09_tmp}"'
 
-# G10: Risk parity (Must check category_max_risk wiring and parity assertions; FAILS until Batch A)
+# G10: Risk parity (Must check category_max_risk wiring and parity assertions)
 run_gate "G10" "Risk parity (tests/test_risk_parity.sh)" \
-    '[[ $(grep -c "category_max_risk\|policy_adjust_risk_for_path" "${PROJ_DIR}/lib/cleaner.sh") -ge 12 ]] && [[ -f "${PROJ_DIR}/tests/test_risk_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_risk_parity.sh"'
+    '[[ $(grep -c "category_max_risk\|policy_adjust_risk_for_path" "${PROJ_DIR}/lib/cleaner.sh") -ge 12 ]] && ! grep -qE -e '\''--risk "(LOW|MEDIUM|HIGH)"'\'' "${PROJ_DIR}/lib/cleaner.sh" && [[ -f "${PROJ_DIR}/tests/test_risk_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_risk_parity.sh"'
 
-# G11: i18n string coverage (Must check 7 lang files, key equality, and 0 Polish literals; FAILS until Batch C)
+# G11: i18n string coverage (Must check 7 lang files, key equality, and 0 Polish literals)
 run_gate "G11" "i18n string coverage (no literals outside i18n/)" \
     '[[ -d "${PROJ_DIR}/i18n" ]] && [[ -f "${PROJ_DIR}/i18n/en.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pl.sh" ]] && [[ -f "${PROJ_DIR}/i18n/de.sh" ]] && [[ -f "${PROJ_DIR}/i18n/es.sh" ]] && [[ -f "${PROJ_DIR}/i18n/fr.sh" ]] && [[ -f "${PROJ_DIR}/i18n/it.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pt.sh" ]] && [[ $(grep -rcE "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]" "${PROJ_DIR}/lib/"*.sh "${PROJ_DIR}/cleanup_all.sh" | awk -F: "{s+=\$2} END{print s}") -eq 0 ]]'
 
@@ -146,6 +146,10 @@ run_gate "G14" "Baseline diff (baseline/pre vs baseline/post)" \
 # G15: No runtime network usage
 run_gate "G15" "No network calls in cleanup code" \
     '! grep -rnE "curl|wget|nc |/dev/tcp|ftp " "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" | grep -v "^[[:space:]]*#" | grep -qv "^$"'
+
+# G16: Functional smoke gate (assert tool actually cleans and quarantines removable cache)
+run_gate "G16" "Functional deletion smoke gate (quarantine mode cleans candidate)" \
+    '_g16_tmp=$(mktemp -d) && mkdir -p "${_g16_tmp}/home/Library/Caches/smoke_app" && echo "smoke" > "${_g16_tmp}/home/Library/Caches/smoke_app/data.bin" && _g16_out=$(env HOME="${_g16_tmp}/home" LOGS_DIR="${_g16_tmp}/logs" REPORTS_DIR="${_g16_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g16_tmp}/reports/journal.jsonl" QUARANTINE_ROOT="${_g16_tmp}/quarantine" /bin/bash "${PROJ_DIR}/cleanup_all.sh" --category user-caches --interactive --no-color <<< "y" 2>&1) && [[ ! -d "${_g16_tmp}/home/Library/Caches/smoke_app" ]] && echo "$_g16_out" | grep -q "Quarantining" && rm -rf "${_g16_tmp}"'
 
 echo
 echo "═══════════════════════════════════════════════════"
