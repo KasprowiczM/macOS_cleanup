@@ -92,29 +92,36 @@ ask_yes_no() {
 # Returns human-readable Polish consequence string based on risk level and mode.
 # ---------------------------------------------------------------------------
 consequence_for_mode() {
-    local risk="${1:-LOW}"
-    local mode="${2:-${REMOVE_MODE:-permanent}}"
+    local risk="${1:-REVIEW}"
+    local mode="${2:-${REMOVE_MODE:-quarantine}}"
+
+    # Normalize legacy risk strings
+    case "$risk" in
+        LOW)  risk="SAFE" ;;
+        MEDIUM) risk="REVIEW" ;;
+        HIGH) risk="DANGEROUS" ;;
+    esac
 
     case "$risk" in
-        LOW)
+        SAFE)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je łatwo odzyskać poleceniem --restore."
+                echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je odzyskać poleceniem --restore. Miejsce nie jest zwalniane do momentu --purge-quarantine."
             else
-                echo "Pliki zostaną usunięte. Aplikacje automatycznie odtworzą je w razie potrzeby."
+                echo "Pliki zostaną usunięte. Aplikacje odtworzą je w razie potrzeby. Brak możliwości odzyskania tym narzędziem."
             fi
             ;;
-        MEDIUM)
+        REVIEW)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "Ostrzeżenie (ŚREDNIE RYZYKO): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania zasobów."
+                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania lub indeksowania."
             else
-                echo "Ostrzeżenie (ŚREDNIE RYZYKO): Pliki zostaną bezpowrotnie usunięte. Aplikacje odtworzą podstawowe zasoby na nowo."
+                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki zostaną trwale usunięte z dysku bez kwarantanny."
             fi
             ;;
-        HIGH|*)
+        DANGEROUS|*)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "UWAGA (WYSOKIE RYZYKO): Przenoszenie dużych zasobów do kwarantanny. Upewnij się, że posiadasz aktualną kopię zapasową."
+                echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej."
             else
-                echo "UWAGA (WYSOKIE RYZYKO): Ta operacja bezpowrotnie usuwa kluczowe dane i NIE MOŻE zostać cofnięta."
+                echo "UWAGA (RYZYKO DANGEROUS): Nieodwracalne usunięcie kluczowych danych systemowych lub użytkownika."
             fi
             ;;
     esac
@@ -124,7 +131,7 @@ consequence_for_mode() {
 # Full informed-consent confirmation for a cleanup category.
 # ---------------------------------------------------------------------------
 confirm_category() {
-    local title="" size="" paths_str="" what="" consequence="" safe_if="" risk="LOW"
+    local title="" size="" paths_str="" what="" consequence="" safe_if="" risk="REVIEW"
     local -a paths=()
 
     while [[ $# -gt 0 ]]; do
@@ -140,8 +147,27 @@ confirm_category() {
         esac
     done
 
+    # Normalize legacy risk labels
+    case "$risk" in
+        LOW)       risk="SAFE" ;;
+        MEDIUM)    risk="REVIEW" ;;
+        HIGH)      risk="DANGEROUS" ;;
+        SAFE|REVIEW|DANGEROUS) ;;
+        *)
+            log_error "Unknown risk level '${risk}' for ${title} — failing closed as DANGEROUS"
+            risk="DANGEROUS"
+            ;;
+    esac
+
+    if [[ "$risk" == "DANGEROUS" ]]; then
+        echo -e "${C_RED}✖  Kategoria DANGEROUS (${title}): Nie podlega automatycznemu ani interaktywnemu czyszczeniu.${C_RESET}"
+        record_user_decision "${title} (DANGEROUS - blocked)"
+        log_info "DANGEROUS risk level blocked from interactive prompt: ${title}"
+        return 1
+    fi
+
     if [[ -z "$consequence" ]]; then
-        consequence="$(consequence_for_mode "$risk" "${REMOVE_MODE:-permanent}")"
+        consequence="$(consequence_for_mode "$risk" "${REMOVE_MODE:-quarantine}")"
     fi
 
     local -a paths=()
@@ -152,16 +178,16 @@ confirm_category() {
     done
     IFS="${_oldIFS}"
 
-    # Risk colour
+    # Risk colour and text
     local risk_color="$C_GREEN"
-    [[ "$risk" == "MEDIUM" ]] && risk_color="$C_YELLOW"
-    [[ "$risk" == "HIGH" ]]   && risk_color="$C_RED"
+    [[ "$risk" == "REVIEW" ]] && risk_color="$C_YELLOW"
+    [[ "$risk" == "DANGEROUS" ]] && risk_color="$C_RED"
 
     echo
     echo -e "${C_BOLD}${C_BLUE}┌─ ${title} ──────────────────────────────────────────────────${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Rozmiar:${C_RESET}       ${C_YELLOW}${size}${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Ryzyko:${C_RESET}        ${risk_color}${risk}${C_RESET}"
+    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Poziom ryzyka:${C_RESET} ${risk_color}${C_BOLD}${risk}${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
 
     if [[ -n "$what" ]]; then
@@ -197,7 +223,7 @@ confirm_category() {
 
     echo -e "${C_BOLD}${C_BLUE}└──────────────────────────────────────────────────────────────${C_RESET}"
 
-    if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" && "$risk" != "LOW" ]]; then
+    if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" && "$risk" != "SAFE" ]]; then
         print_skip "Automatyczne --yes nie zatwierdza ryzyka ${risk}: ${title}"
         record_skipped_item "${title} (wymaga interaktywnego potwierdzenia)"
         log_info "Non-interactive AUTO_YES blocked for ${risk} cleanup: ${title}"
