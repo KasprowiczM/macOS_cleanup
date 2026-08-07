@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-08-07
+
 ### Changed
 - **[P0-1a] BREAKING: System cache cleanup is now report-only.** The interactive path
   no longer executes `sudo rm -rf` on `/Library/Caches` children. System caches are
@@ -21,16 +23,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   developer source trees (`~/Developer`, `~/Projects`, `~/src`, `~/code`, `~/repos`),
   and credential dotfiles (`~/.config`, `~/.kube`, `~/.docker`, `~/.netrc`,
   `~/.zshrc`, `~/.bashrc`, `~/.npmrc`, etc.).
-- **[P1-11] Test artifact isolation.** `LOGS_DIR` and `REPORTS_DIR` in
-  `config/defaults.sh` are now environment-overridable (`${LOGS_DIR:-...}`). All
-  test files export artifact directories into per-test sandboxes, preventing leakage
-  into production `logs/` and `reports/` directories.
+- **[P1-5] Consent copy accuracy.** Risk labels now match the policy engine (REVIEW
+  for caches, not LOW). Consequence text varies by REMOVE_MODE (quarantine vs
+  permanent). The false claim "Zawsze bezpieczne" for `~/Library/Caches` is removed.
+- **[P1-11] Fail-closed path normalization.** If `normalize_path` returns empty,
+  `safe_remove` blocks the operation and journals a `normalization_failed` event.
+  Test artifact isolation: `LOGS_DIR` and `REPORTS_DIR` are now env-overridable.
+- **[P1-12] Safety violations skip, not abort.** `assert_safe_path` returns 1 (skip)
+  instead of `exit 99` (abort). A single rogue path no longer crashes the entire run.
+  Violations are journalled with `safety_violation` event type.
 
 ### Added
 - `tests/test_path_protection.sh`: Table-driven test covering 80+ protected/unprotected
   path assertions including all P0-3 additions, broad roots, system paths, edge cases.
 - `tests/fixtures/make_fake_home.sh`: Deterministic fixture home generator for testing.
 - `tests/helpers.sh`: `setup_artifact_isolation()` helper function.
+- Signal handling: `INT`/`TERM` traps for clean Ctrl-C handling with proper exit 130.
 
 ### Fixed
 - `--json`: removed a dead per-category byte block in `lib/json_summary.sh` that
