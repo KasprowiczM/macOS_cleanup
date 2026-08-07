@@ -1,311 +1,247 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/reporter.sh — Markdown report generation
+# lib/reporter.sh — Markdown execution & summary report generator
+#
+# Generates a clear Markdown report at the end of every run.
+#
 # Bash 3.2 compatible.
 # =============================================================================
 
-write_report_journal_summary() {
-    local mode="$1"
-    local key bytes
-
-    cleanup_journal_event "report_generated" "$REPORT_FILE" "" 0 "ok" "mode=${mode}" ""
-
-    for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
-        bytes=$(catbytes_get "$key")
-        (( bytes == 0 )) && continue
-        cleanup_journal_event "category_total" "$key" "" "$bytes" "found" "mode=${mode}" "$key"
-    done
-}
-
 generate_report() {
-    local mode="$1"
-    # shellcheck disable=SC2034
-    local categories_run=("${@:2}")
+    local mode="${1:-${MODE}}"
+    local report_dir
+    report_dir="$(dirname "$REPORT_FILE")"
+    mkdir -p "$report_dir" 2>/dev/null || true
 
-    mkdir -p "$(dirname "$REPORT_FILE")"
-    write_report_journal_summary "$mode"
+    cat << EOF > "$REPORT_FILE"
+# macOS Cleanup — Session Report
 
-    cat > "$REPORT_FILE" << HEADER
-# macOS Cleanup Report
-**Skrypt:** \`${SCRIPT_NAME}\` v${SCRIPT_VERSION}
-**Data:** $(date '+%Y-%m-%d %H:%M:%S')
-**Tryb:** \`${mode}\`
-**Użytkownik:** $(whoami)
-**Host:** $(hostname)
-**macOS:** $(sw_vers -productVersion 2>/dev/null || echo "nieznana")
-
----
-
-## Podsumowanie
-
-| Metryka | Wartość |
-|---------|---------|
-HEADER
-
-    if [[ "$mode" == "dry-run" ]]; then
-        echo "| Potencjalnie do zwolnienia | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |" >> "$REPORT_FILE"
-    elif [[ "$mode" == "plan" ]]; then
-        echo "| Plan JSON | \`${PLAN_FILE:-$PLAN_FILE_DEFAULT}\` |" >> "$REPORT_FILE"
-    elif [[ "$mode" == "apply-plan" ]]; then
-        echo "| Plan źródłowy | \`${PLAN_FROM_FILE:-}\` |" >> "$REPORT_FILE"
-        echo "| Usunięte bezpośrednio      | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
-        echo "| Przeniesione do kwarantanny | **$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")** |" >> "$REPORT_FILE"
-    elif [[ "$mode" == "restore" ]]; then
-        echo "| Odtworzone z kwarantanny | **$(bytes_to_human "$TOTAL_RESTORED_BYTES")** |" >> "$REPORT_FILE"
-        echo "| Odtworzone elementy | ${TOTAL_RESTORED_ITEMS} |" >> "$REPORT_FILE"
-    elif [[ "$mode" == "list-quarantine" ]]; then
-        echo "| Katalog kwarantanny | \`${QUARANTINE_ROOT}\` |" >> "$REPORT_FILE"
-    elif [[ "$mode" == "purge-quarantine" ]]; then
-        echo "| Trwale usunięte z kwarantanny | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
-    else
-        echo "| Usunięte bezpośrednio      | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
-        echo "| Przeniesione do kwarantanny | **$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")** |" >> "$REPORT_FILE"
-        echo "| Elementy w kwarantannie    | ${TOTAL_QUARANTINED_ITEMS} |" >> "$REPORT_FILE"
-    fi
-
-    cat >> "$REPORT_FILE" << SUMMARY
-| Elementy wymagające decyzji | ${TOTAL_USER_DECISIONS_NEEDED} |
-| Pominięte elementy         | ${TOTAL_SKIPPED_ITEMS} |
-| Log pliku                  | \`${LOG_FILE}\` |
-| Journal JSONL              | \`${CLEANUP_JOURNAL_FILE}\` |
-| Manifest restore           | \`${CLEANUP_RESTORE_MANIFEST}\` |
+**Date:** $(date '+%Y-%m-%d %H:%M:%S')  
+**Mode:** \`${mode}\`  
+**Deletion Strategy:** \`${REMOVE_MODE:-quarantine}\`  
+**User:** $(whoami)  
+**Host:** $(hostname)  
+**OS Version:** $(sw_vers -productName 2>/dev/null || echo macOS) $(sw_vers -productVersion 2>/dev/null || echo "")  
 
 ---
 
-## Wyniki według kategorii
+## Session Summary
 
-SUMMARY
+| Metric | Value |
+|:-------|:------|
+| Potentially freeable space | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
+EOF
 
-    # Category breakdown
-    local all_cats=(
-        "trash:Kosz (~/.Trash)"
-        "user-caches:Cache użytkownika (~/Library/Caches)"
-        "app-caches:Cache aplikacji (Slack, VSCode, JetBrains...)"
-        "system-caches:Cache systemowe"
-        "user-logs:Logi użytkownika"
-        "system-logs:Logi systemowe"
-        "diagnostic-reports:Raporty diagnostyczne (crash logs)"
-        "tmp:Pliki tymczasowe"
-        "app-leftovers:Pozostałości po aplikacjach"
-        "xcode-derived:Xcode DerivedData"
+    case "$mode" in
+        apply-plan)
+            echo "| Source plan | \`${PLAN_FROM_FILE:-}\` |" >> "$REPORT_FILE"
+            echo "| Freed space | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
+            ;;
+        purge-quarantine)
+            echo "| Quarantined purged | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
+            ;;
+        *)
+            echo "| Freed space | **$(bytes_to_human "$TOTAL_CLEANED_BYTES")** |" >> "$REPORT_FILE"
+            ;;
+    esac
+
+    cat << EOF >> "$REPORT_FILE"
+| Items quarantined | ${TOTAL_QUARANTINED_ITEMS} ($(bytes_to_human "$TOTAL_QUARANTINED_BYTES")) |
+| Decisions needed | ${TOTAL_USER_DECISIONS_NEEDED} |
+| Skipped items | ${TOTAL_SKIPPED_ITEMS} |
+
+---
+
+## Results by Category
+
+| Category | Size | Status | Recommended Action |
+|:---------|:-----|:-------|:-------------------|
+EOF
+
+    local -a category_labels=(
+        "user-caches:User Caches (~/Library/Caches)"
+        "system-caches:System Caches (/Library/Caches)"
+        "logs:System & App Logs"
+        "diagnostic-reports:Diagnostic Reports"
+        "app-leftovers:App Leftovers"
+        "dev:Developer Caches & Artifacts"
+        "derived-data:Xcode DerivedData"
         "xcode-archives:Xcode Archives"
-        "simulators:iOS Symulatory"
-        "device-support:Xcode Device Support (symbole)"
-        "npm:npm cache"
-        "yarn:yarn cache"
-        "pnpm:pnpm store"
-        "pip:pip cache"
-        "brew:Homebrew cache"
-        "brew-stale:Homebrew stare wersje"
-        "gradle:Gradle cache"
-        "maven:Maven cache"
-        "cocoapods:CocoaPods cache"
-        "cargo:Cargo cache (Rust)"
-        "swift-pm:Swift Package Manager cache"
-        "gem:Ruby gems cache"
-        "bundler:Bundler cache"
-        "composer:Composer cache (PHP)"
-        "android-avd:Android AVD emulatory"
-        "docker:Docker (reclaimable)"
-        "time-machine:Time Machine snapshoty (szt.)"
-        "ios-backups:Backupy iOS"
-        "installers:Stare instalatory DMG/PKG"
-        "mail-total:Apple Mail (report-only)"
-        "mail-downloads:Mail Downloads (report-only)"
-        "browser-caches:Cache przeglądarek (review)"
-        "browser-data:Profile przeglądarek (DANGEROUS)"
+        "xcode-device-support:Xcode Device Support"
+        "simulators:iOS Simulators"
+        "android-avd:Android AVD Emulators"
+        "time-machine:Local TM Snapshots"
+        "ios-backups:iOS Backups"
+        "trash:Trash (~/.Trash)"
+        "tmp:Temporary Files (/tmp)"
+        "installers:Old Installers (~/Downloads)"
+        "browser-caches:Browser Caches (review)"
+        "browser-data:Browser Profiles (DANGEROUS)"
+        "mail-total:Apple Mail (DANGEROUS)"
     )
 
-    echo "| Kategoria | Znaleziono | Status |" >> "$REPORT_FILE"
-    echo "|-----------|-----------|--------|" >> "$REPORT_FILE"
-
-    local grand_total=0
-    for entry in "${all_cats[@]}"; do
+    for entry in "${category_labels[@]}"; do
         local key="${entry%%:*}"
         local label="${entry#*:}"
-        local bytes; bytes=$(catbytes_get "$key")
-        if (( bytes > 0 )); then
-            local display
-            # time-machine stores a snapshot count, not a byte size
-            if [[ "$key" == "time-machine" ]]; then
-                display="${bytes} szt."
-            elif [[ "$key" == mail-* || "$key" == browser-* ]]; then
-                display=$(bytes_to_human "$bytes")
-            else
-                display=$(bytes_to_human "$bytes")
-                grand_total=$(( grand_total + bytes ))
-            fi
-            if [[ "$key" == mail-* || "$key" == browser-* ]]; then
-                echo "| ${label} | ${display} | 🔒 Report-only |" >> "$REPORT_FILE"
-            else
-                echo "| ${label} | ${display} | 🔍 Znaleziono |" >> "$REPORT_FILE"
-            fi
-        fi
+        local bytes
+        bytes=$(catbytes_get "$key")
+        (( bytes == 0 )) && continue
+
+        local status_str="Reported"
+        local action_str="Review in interactive mode"
+
+        case "$key" in
+            user-caches|trash|tmp)
+                if [[ "$mode" == "auto-safe" || "$mode" == "interactive" || "$mode" == "apply-plan" ]]; then
+                    status_str="Cleaned/Quarantined"
+                    action_str="Done"
+                else
+                    status_str="Found"
+                    action_str="Safe to clean"
+                fi
+                ;;
+            system-caches|mail-total|browser-data)
+                status_str="Protected / Report-only"
+                action_str="Do not delete with rm"
+                ;;
+            app-leftovers|xcode-archives|android-avd)
+                status_str="Needs Decision"
+                action_str="Manual verification required"
+                ;;
+            *)
+                status_str="Found"
+                action_str="Run --interactive to process"
+                ;;
+        esac
+
+        echo "| ${label} | **$(bytes_to_human "$bytes")** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
     done
 
-    echo >> "$REPORT_FILE"
-    echo "**Łącznie potencjalnie do zwolnienia: $(bytes_to_human "$grand_total")**" >> "$REPORT_FILE"
-    echo >> "$REPORT_FILE"
+    cat << EOF >> "$REPORT_FILE"
 
-    # User decision items
-    if (( ${#USER_DECISION_ITEMS[@]} > 0 )); then
-        cat >> "$REPORT_FILE" << DECISIONS
 ---
 
-## ⚠️  Elementy wymagające Twojej decyzji
+**Total potentially freeable: $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
 
-Poniższe elementy **nie zostały automatycznie usunięte** — wymagają ręcznej weryfikacji:
+---
 
-DECISIONS
+## Items Requiring Your Decision
+
+The following items were **not automatically deleted** and require manual review:
+
+EOF
+
+    if (( ${#USER_DECISION_ITEMS[@]} == 0 )); then
+        echo "_No items require manual decision._" >> "$REPORT_FILE"
+    else
         for item in "${USER_DECISION_ITEMS[@]}"; do
-            echo "- ${item}" >> "$REPORT_FILE"
+            echo "- ⚠️  ${item}" >> "$REPORT_FILE"
         done
-        echo >> "$REPORT_FILE"
     fi
 
-    # Warnings
-    if (( ${#WARNINGS_LIST[@]} > 0 )); then
-        cat >> "$REPORT_FILE" << WARNS
+    cat << EOF >> "$REPORT_FILE"
+
 ---
 
-## ⚠️  Ostrzeżenia i uwagi
+## Warnings & Notes
 
-WARNS
-        for w in "${WARNINGS_LIST[@]}"; do
-            echo "- ${w}" >> "$REPORT_FILE"
+EOF
+
+    if (( ${#WARNINGS_LIST[@]} == 0 )); then
+        echo "_No warnings recorded for this session._" >> "$REPORT_FILE"
+    else
+        for warn in "${WARNINGS_LIST[@]}"; do
+            echo "- ⚠️  ${warn}" >> "$REPORT_FILE"
         done
-        echo >> "$REPORT_FILE"
     fi
 
-    if (( TOTAL_QUARANTINED_ITEMS > 0 )); then
-        cat >> "$REPORT_FILE" << QUARANTINE
+    if [[ "$REMOVE_MODE" == "quarantine" && "$TOTAL_QUARANTINED_ITEMS" -gt 0 ]]; then
+        cat << EOF >> "$REPORT_FILE"
+
 ---
 
-## Kwarantanna i rollback
+## Quarantine Information
 
-Elementy użytkownika nie zostały trwale skasowane. Zostały przeniesione do:
+Items were moved to quarantine instead of permanent deletion:
 
-\`${QUARANTINE_RUN_DIR}\`
+- **Quarantine Directory:** \`${QUARANTINE_RUN_DIR}\`
+- **Restore Manifest:** \`${CLEANUP_RESTORE_MANIFEST}\`
+- **Restoration Command:** \`bash cleanup_all.sh --restore ${QUARANTINE_RUN_ID:-latest}\`
 
-Manifest odtwarzania:
+EOF
+    fi
 
-\`${CLEANUP_RESTORE_MANIFEST}\`
+    cat << EOF >> "$REPORT_FILE"
 
-Odtwarzanie:
+---
+
+## Protected Paths & Exclusions
+
+The script **never touches** the following locations:
+
+- \`~/Library/Keychains\` — Keychains & passwords
+- Browser profiles & credentials (cookies, logins, stored history)
+- Password managers: 1Password, Bitwarden, LastPass, Dashlane, etc.
+- Primary user documents: Documents, Desktop, Pictures, Movies, Music
+- iOS backups — only with explicit warnings & confirmations
+
+---
+
+## How to Re-Run Cleanup
 
 \`\`\`bash
-bash cleanup_all.sh --restore "${CLEANUP_RESTORE_MANIFEST}"
-\`\`\`
-
-QUARANTINE
-    fi
-
-    # Safety section
-    cat >> "$REPORT_FILE" << SAFETY
----
-
-## 🔒 Nigdy nie dotknięte
-
-Skrypt z założenia **nie czyści** następujących obszarów:
-
-- \`~/Library/Mail\` — dane Apple Mail
-- \`~/Library/Keychains\` — pęk kluczy
-- Dane przeglądarek (Chrome, Firefox, Safari, Edge, Brave): cookies, hasła, profile
-- \`~/Library/Application Support\` aktywnych aplikacji i \`~/Library/Preferences\`
-- Menedżery haseł: 1Password, Bitwarden, LastPass, Dashlane, itp.
-- \`~/Documents\`, \`~/Desktop\`
-- Biblioteka Photos, Music, Movies
-- Provisioning Profiles i certyfikaty deweloperskie
-- Klucze SSH (\`~/.ssh\`), klucze GPG (\`~/.gnupg\`)
-- Backupy iOS — tylko z dodatkowym ostrzeżeniem i potwierdzeniem
-
----
-
-## Jak ponownie uruchomić czyszczenie
-
-\`\`\`bash
-# Tylko analiza (bezpieczna)
-bash cleanup_all.sh --dry-run
-bash cleanup_all.sh analyze
-
-# Strukturalny plan do recenzji/agenta
-bash cleanup_all.sh plan
-
-# Wykonanie planu: domyślnie tylko SAFE
-bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json
-
-# Interaktywne czyszczenie (zalecane)
+# Interactive mode (step-by-step confirmation for each category)
 bash cleanup_all.sh --interactive
 
-# Konkretna kategoria
-bash cleanup_all.sh --interactive --category dev
-bash cleanup_all.sh --interactive --category trash
-bash cleanup_all.sh --interactive --category user-caches
+# Apply plan mode
+bash cleanup_all.sh --from-plan build/plan.json
 
-# Automatyczne czyszczenie tylko bezpiecznych elementów
+# Auto-safe mode (clean only allowlisted caches)
 bash cleanup_all.sh --auto-safe
 
-# Odtwarzanie elementów przeniesionych do kwarantanny
-bash cleanup_all.sh --restore reports/restore_<run_id>.tsv
+# Restore quarantined files
+bash cleanup_all.sh --restore ${QUARANTINE_RUN_ID:-latest}
 
-# Lista i trwały purge kwarantanny
-bash cleanup_all.sh --list-quarantine
-bash cleanup_all.sh --purge-quarantine latest --apply
-bash cleanup_all.sh --purge-quarantine expired --retention-days 30 --apply
+# Purge quarantine
+bash cleanup_all.sh --purge-quarantine latest
 \`\`\`
 
----
-*Raport wygenerowany przez \`${SCRIPT_NAME}\` v${SCRIPT_VERSION}*
-SAFETY
+EOF
 
-    print_ok "Raport zapisany: ${REPORT_FILE}"
-    log_info "Report written: ${REPORT_FILE}"
+    log_info "Session report written to: ${REPORT_FILE}"
 }
 
-# ---------------------------------------------------------------------------
-# print_final_summary — terminal summary at script end
-# ---------------------------------------------------------------------------
-print_final_summary() {
-    local mode="$1"
-
+print_summary_report() {
     echo
-    echo -e "${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BOLD}${C_GREEN}  PODSUMOWANIE KOŃCOWE${C_RESET}"
-    echo -e "${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════${C_RESET}"
-    echo
+    echo -e "${C_BOLD}${C_GREEN}  FINAL SESSION SUMMARY${C_RESET}"
+    echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
 
-    if [[ "$mode" == "dry-run" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       Analiza (dry-run) — nic nie usunięto"
-        echo -e "  ${C_BOLD}Potencjalnie do zwolnienia:${C_RESET} ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
-    elif [[ "$mode" == "plan" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       plan — nic nie usunięto"
-        echo -e "  ${C_BOLD}Plan:${C_RESET}                       ${C_DIM}${PLAN_FILE:-$PLAN_FILE_DEFAULT}${C_RESET}"
-    elif [[ "$mode" == "apply-plan" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       apply plan"
-        echo -e "  ${C_BOLD}Usunięto bezpośrednio:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-        echo -e "  ${C_BOLD}W kwarantannie:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} elementów)"
-    elif [[ "$mode" == "restore" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       restore"
-        echo -e "  ${C_BOLD}Odtworzono:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} (${TOTAL_RESTORED_ITEMS} elementów)"
-    elif [[ "$mode" == "list-quarantine" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       list-quarantine"
-    elif [[ "$mode" == "purge-quarantine" ]]; then
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       purge-quarantine"
-        echo -e "  ${C_BOLD}Trwale usunięto:${C_RESET}            ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-    else
-        echo -e "  ${C_BOLD}Tryb:${C_RESET}                       ${mode}"
-        echo -e "  ${C_BOLD}Usunięto bezpośrednio:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-        echo -e "  ${C_BOLD}W kwarantannie:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} elementów)"
-    fi
+    case "$MODE" in
+        dry-run)
+            echo -e "  ${C_BOLD}Mode:${C_RESET}                       Analysis (dry-run) — nothing deleted"
+            ;;
+        plan)
+            echo -e "  ${C_BOLD}Mode:${C_RESET}                       Plan — plan file generated"
+            ;;
+        *)
+            if [[ "$REMOVE_MODE" == "quarantine" ]]; then
+                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
+            elif [[ "$MODE" == "restore" ]]; then
+                echo -e "  ${C_BOLD}Restored:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} (${TOTAL_RESTORED_ITEMS} items)"
+            elif [[ "$MODE" == "purge" ]]; then
+                echo -e "  ${C_BOLD}Purged:${C_RESET}                   ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+            else
+                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
+            fi
+            ;;
+    esac
 
-    echo -e "  ${C_BOLD}Elementy do decyzji:${C_RESET}        ${TOTAL_USER_DECISIONS_NEEDED}"
-    echo -e "  ${C_BOLD}Log:${C_RESET}                        ${C_DIM}${LOG_FILE}${C_RESET}"
-    echo -e "  ${C_BOLD}Raport:${C_RESET}                     ${C_DIM}${REPORT_FILE}${C_RESET}"
-    echo -e "  ${C_BOLD}Journal:${C_RESET}                    ${C_DIM}${CLEANUP_JOURNAL_FILE}${C_RESET}"
-    if (( TOTAL_QUARANTINED_ITEMS > 0 )); then
-        echo -e "  ${C_BOLD}Restore manifest:${C_RESET}           ${C_DIM}${CLEANUP_RESTORE_MANIFEST}${C_RESET}"
-    fi
-    echo
-    echo -e "${C_DIM}  Aby otworzyć raport w przeglądarce: open \"${REPORT_FILE}\"${C_RESET}"
+    echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    echo -e "  ${C_BOLD}Report File:${C_RESET}            ${C_DIM}${REPORT_FILE}${C_RESET}"
+    echo -e "  ${C_BOLD}Journal File:${C_RESET}           ${C_DIM}${CLEANUP_JOURNAL_FILE}${C_RESET}"
+    echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_DIM}  To open report: open \"${REPORT_FILE}\"${C_RESET}"
     echo
 }

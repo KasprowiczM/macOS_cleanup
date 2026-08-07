@@ -11,6 +11,14 @@
 # Bash 3.2 compatible — no ${var,,}, no declare -A, no mapfile
 # =============================================================================
 
+if ! command -v validate_cache_path >/dev/null 2>&1; then
+    _ANALYZER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    if [[ -f "${_ANALYZER_LIB_DIR}/pathguard.sh" ]]; then
+        # shellcheck disable=SC1091
+        source "${_ANALYZER_LIB_DIR}/pathguard.sh"
+    fi
+fi
+
 # Global arrays populated by analyzers; used by cleaner and reporter
 declare -a FOUND_USER_CACHES=()
 declare -a FOUND_SYSTEM_CACHES=()
@@ -147,7 +155,7 @@ analyze_application_inventory() {
     if command -v mas >/dev/null 2>&1; then
         local mas_count=0 mas_output=""
         if ! mas_output="$(optional_command_with_timeout 8 mas list 2>/dev/null)"; then
-            print_warn "Pominięto inwentarz Mac App Store (mas list przekroczył limit czasu albo zwrócił błąd)."
+            print_warn "$(t "mas_warn")"
             return
         fi
         while IFS= read -r mas_line; do
@@ -175,7 +183,7 @@ analyze_mail_storage() {
         catbytes_set "mail-data" "$bytes"
         total=$(( total + bytes ))
         print_found "Mail store: $(bytes_to_human "$bytes")"
-        print_warn "  Nie usuwać przez rm: zawiera wiadomości, załączniki, indeksy i konta."
+        print_warn "  $(t "mail_warn_1")"
     fi
 
     if [[ -d "$mail_container" ]]; then
@@ -192,19 +200,19 @@ analyze_mail_storage() {
         FOUND_MAIL_ITEMS+=("mail-downloads:$mail_downloads")
         catbytes_set "mail-downloads" "$bytes"
         print_found "Mail Downloads: $(bytes_to_human "$bytes")"
-        print_info "  Rekomendacja: zarządzaj załącznikami z Mail.app/Finder po ręcznym sprawdzeniu."
+        print_info "  $(t "mail_warn_2")"
     fi
 
     if (( ${#FOUND_MAIL_ITEMS[@]} == 0 )); then
-        print_ok "Nie znaleziono lokalnych danych Apple Mail w standardowych ścieżkach."
+        print_ok "$(t "mail_ok")"
     else
         catbytes_set "mail-total" "$total"
-        print_info "Mail jest klasyfikowany jako DANGEROUS/report-only."
+        print_info "$(t "mail_danger")"
     fi
 }
 
 analyze_browser_storage() {
-    print_section "Przeglądarki — cache i profile"
+    print_section "$(t "browsers_section")"
 
     FOUND_BROWSER_CACHE_ITEMS=()
     FOUND_BROWSER_DATA_ITEMS=()
@@ -249,16 +257,17 @@ analyze_browser_storage() {
     done
 
     catbytes_set "browser-caches" "$total_cache"
-    catbytes_set "browser-data" "$total_data"
+    catbytes_set "browser-data"   "$total_data"
 
-    if (( total_cache == 0 && total_data == 0 )); then
-        print_ok "Brak standardowych cache/profili przeglądarek do raportowania."
-        return
+    if (( total_cache > 0 )); then
+        print_found "Browser Caches: $(bytes_to_human "$total_cache")"
     fi
-
     if (( total_data > 0 )); then
-        print_warn "Profile/cookies/hasła/historia: $(bytes_to_human "$total_data") — DANGEROUS, tylko raport."
-        print_info "  Preferuj czyszczenie przez ustawienia prywatności danej przeglądarki."
+        print_warn "$(t "browsers_data_warn") ($(bytes_to_human "$total_data"))"
+        print_info "  $(t "browsers_data_rec")"
+    fi
+    if (( total_cache == 0 && total_data == 0 )); then
+        print_ok "$(t "browsers_ok")"
     fi
 }
 
@@ -275,12 +284,12 @@ _is_full_scan() {
 # analyze_disk_overview — df summary, APFS free/purgeable, largest top-level dirs
 # ---------------------------------------------------------------------------
 analyze_disk_overview() {
-    print_section "Przegląd dysku"
+    print_section "$(t "disk_overview")"
 
     # --- Basic disk usage ---
-    echo -e "  ${C_BOLD}Wolumeny (/ główny):${C_RESET}"
+    echo -e "  ${C_BOLD}$(t "disk_volumes_header")${C_RESET}"
     df -h / 2>/dev/null | awk 'NR==1{next} {
-        printf "    Rozmiar: %s  |  Użyte: %s  |  Wolne: %s  (%s)\n", $2, $3, $4, $5
+        printf "    Size: %s  |  Used: %s  |  Free: %s  (%s)\n", $2, $3, $4, $5
     }' || true
     echo
 
@@ -301,22 +310,22 @@ analyze_disk_overview() {
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || purgeable_space=""
 
-        echo -e "  ${C_BOLD}Wolne miejsce (APFS):${C_RESET}"
+        echo -e "  ${C_BOLD}APFS Space:${C_RESET}"
         if [[ -n "$free_space" ]]; then
-            echo -e "    ${C_GREEN}Wolne:     ${free_space}${C_RESET}"
+            echo -e "    ${C_GREEN}Free:      ${free_space}${C_RESET}"
         else
-            echo -e "    ${C_DIM}(Nie można odczytać z diskutil)${C_RESET}"
+            echo -e "    ${C_DIM}$(t "disk_util_err")${C_RESET}"
         fi
         if [[ -n "$purgeable_space" ]]; then
             echo -e "    ${C_YELLOW}Purgeable: ${purgeable_space}${C_RESET}"
-            echo -e "    ${C_DIM}↑ APFS odzyska automatycznie: lokalne snapshoty TM, pliki iCloud${C_RESET}"
+            echo -e "    ${C_DIM}^ APFS will reclaim automatically: TM local snapshots, iCloud files${C_RESET}"
         fi
         echo
     fi
 
     # --- Largest directories in home (PF2: skip for --category X) ---
     if _is_full_scan; then
-        print_info "Największe katalogi w katalogu domowym (top 10):"
+        print_info "$(t "disk_home_top10")"
         du -sh "$HOME"/*/ 2>/dev/null | sort -rh 2>/dev/null | head -10 | \
             while IFS= read -r line; do
                 echo "    $line"
@@ -360,11 +369,11 @@ analyze_trash() {
         return
     fi
 
-    print_found "Kosz: $(bytes_to_human "$total") w ${count} elementach"
+    print_found "$(t "trash"): $(bytes_to_human "$total") in ${count} items"
 
     # Show top 5 largest items in trash
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
-        echo -e "  ${C_DIM}Największe elementy w koszu:${C_RESET}"
+        echo -e "  ${C_DIM}$(t "trash_top_items"):${C_RESET}"
         local top5=""
         top5=$(printf '%s' "$size_list" | sort -rn | head -5) || true
         while IFS=' ' read -r bytes path; do
@@ -378,10 +387,10 @@ analyze_trash() {
 # analyze_user_caches — ~/Library/Caches (per-app breakdown)
 # ---------------------------------------------------------------------------
 analyze_user_caches() {
-    print_section "Cache użytkownika (~/Library/Caches)"
+    print_section "$(t "user_caches_section")"
 
     local cache_base="$HOME/Library/Caches"
-    [[ -d "$cache_base" ]] || { print_skip "Katalog nie istnieje: $cache_base"; return; }
+    [[ -d "$cache_base" ]] || { print_skip "Directory does not exist: $cache_base"; return; }
 
     local total=0
     local size_list=""   # PF1: accumulate sizes to avoid double-du
@@ -400,13 +409,13 @@ analyze_user_caches() {
     catbytes_set "user-caches" "$total"
 
     if (( ${#FOUND_USER_CACHES[@]} == 0 )); then
-        print_ok "Brak istotnych elementów w cache użytkownika."
+        print_ok "$(t "user_caches_ok")"
         return
     fi
 
-    print_found "Cache użytkownika: $(bytes_to_human "$total") w ${#FOUND_USER_CACHES[@]} elementach"
+    print_found "$(t "user_caches_found"): $(bytes_to_human "$total") in ${#FOUND_USER_CACHES[@]} items"
 
-    echo -e "  ${C_DIM}Top 10 największych:${C_RESET}"
+    echo -e "  ${C_DIM}$(t "user_caches_top10"):${C_RESET}"
     local top10=""
     top10=$(printf '%s' "$size_list" | sort -rn | head -10) || true
     while IFS=' ' read -r bytes path; do
@@ -556,11 +565,11 @@ analyze_system_caches() {
 
     catbytes_set "system-caches" "$total"
     if (( total > 0 )); then
-        print_found "Cache systemowe: $(bytes_to_human "$total")"
-        print_info  "  Uwaga: /Library/Caches jest częściowo chroniony przez SIP"
-        print_info  "  Czyszczenie: sudo periodic daily  lub  sudo purge"
+        print_found "System Caches: $(bytes_to_human "$total")"
+        print_info  "  $(t "system_caches_sip_warn")"
+        print_info  "  Cleanup: sudo periodic daily  or  sudo purge"
     else
-        print_ok "Brak danych lub brak dostępu do cache systemowych."
+        print_ok "$(t "system_caches_ok")"
     fi
 }
 
@@ -633,11 +642,11 @@ analyze_logs() {
     local total_count=$(( ${#FOUND_APP_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
 
     if (( total_count == 0 )); then
-        print_ok "Brak starych logów (kryterium: starsze niż ${LOG_MAX_AGE_DAYS} dni)."
+        print_ok "$(t "logs_ok") (criterion: > ${LOG_MAX_AGE_DAYS} days)."
     else
-        print_found "Stare logi: $(bytes_to_human "$total_all") (${total_count} plików)"
-        print_info  "  Użytkownik: $(bytes_to_human "$total_user") (${#FOUND_APP_LOGS[@]} plików)"
-        print_info  "  System:     $(bytes_to_human "$total_system") (${#FOUND_SYSTEM_LOGS[@]} plików)"
+        print_found "$(t "logs_found"): $(bytes_to_human "$total_all") (${total_count} files)"
+        print_info  "  $(t "logs_user"): $(bytes_to_human "$total_user") (${#FOUND_APP_LOGS[@]} files)"
+        print_info  "  $(t "logs_system"): $(bytes_to_human "$total_system") (${#FOUND_SYSTEM_LOGS[@]} files)"
     fi
 }
 
@@ -646,7 +655,7 @@ analyze_logs() {
 # Crash logs, spin dumps, hang reports — often accumulate unnoticed
 # ---------------------------------------------------------------------------
 analyze_diagnostic_reports() {
-    print_section "Raporty diagnostyczne (crash logs, hang reports)"
+    print_section "Diagnostic Reports (crash logs, hang reports)"
 
     local diag_dirs=(
         "$HOME/Library/Logs/DiagnosticReports"
@@ -674,10 +683,10 @@ analyze_diagnostic_reports() {
     catbytes_set "diagnostic-reports" "$total"
 
     if (( count == 0 )); then
-        print_ok "Brak starych raportów diagnostycznych."
+        print_ok "$(t "crash_reports_ok")"
     else
-        print_found "Raporty diagnostyczne: $(bytes_to_human "$total") (${count} plików)"
-        print_info  "  Crash logs, spin dumps, hang reports starsze niż ${LOG_MAX_AGE_DAYS} dni"
+        print_found "$(t "crash_reports_found"): $(bytes_to_human "$total") (${count} files)"
+        print_info  "  $(t "crash_reports_info")"
     fi
 }
 
@@ -723,9 +732,9 @@ analyze_tmp() {
     catbytes_set "tmp" "$total"
 
     if (( ${#FOUND_TMP_FILES[@]} == 0 )); then
-        print_ok "Brak starych plików tymczasowych."
+        print_ok "$(t "tmp_ok")"
     else
-        print_found "Stare pliki tmp: $(bytes_to_human "$total") (${#FOUND_TMP_FILES[@]} plików)"
+        print_found "$(t "tmp_found"): $(bytes_to_human "$total") (${#FOUND_TMP_FILES[@]} files)"
     fi
 }
 
@@ -733,7 +742,7 @@ analyze_tmp() {
 # analyze_app_leftovers — orphaned app support/prefs/containers
 # ---------------------------------------------------------------------------
 analyze_app_leftovers() {
-    print_section "Pozostałości po odinstalowanych aplikacjach"
+    print_section "$(t "leftovers_section")"
 
     local search_dirs=(
         "$HOME/Library/Application Support"
@@ -782,11 +791,11 @@ analyze_app_leftovers() {
     catbytes_set "app-leftovers" "$total"
 
     if (( count == 0 )); then
-        print_ok "Brak wyraźnych pozostałości po odinstalowanych aplikacjach."
-        print_info "  (Analiza heurystyczna — może nie wykryć wszystkiego)"
+        print_ok "$(t "leftovers_ok")"
+        print_info "  $(t "leftovers_heuristic_note")"
     else
-        print_found "Potencjalne pozostałości: $(bytes_to_human "$total") w ${count} elementach"
-        print_warn  "  Uwaga: heurystyka — zweryfikuj przed usunięciem"
+        print_found "$(t "leftovers_found"): $(bytes_to_human "$total") in ${count} items"
+        print_warn  "  $(t "leftovers_warn")"
         # Show top 5
         echo -e "  ${C_DIM}Top 5:${C_RESET}"
         local top5=""
@@ -802,7 +811,7 @@ analyze_app_leftovers() {
 # analyze_dev_environment — Xcode, iOS Device Support, npm, brew, pip, etc.
 # ---------------------------------------------------------------------------
 analyze_dev_environment() {
-    print_section "Środowisko developerskie"
+    print_section "$(t "dev_section")"
 
     # --- Xcode DerivedData ---
     local dd="$HOME/Library/Developer/Xcode/DerivedData"
@@ -825,7 +834,7 @@ analyze_dev_environment() {
             FOUND_DEV_ITEMS+=("xcode_archives:$archives")
             catbytes_set "xcode-archives" "$ar_size"
             print_found "Xcode Archives (.xcarchive): $(bytes_to_human "$ar_size")"
-            print_info  "  ↑ Archiwa buildów — sprawdź czy nadal potrzebne"
+            print_info  "  ^ $(t "archives_check_needed")"
         fi
     fi
 
@@ -848,7 +857,7 @@ analyze_dev_environment() {
         if (( sim_size > 0 )); then
             FOUND_DEV_ITEMS+=("ios_simulators:$sims")
             catbytes_set "simulators" "$sim_size"
-            print_found "Niedostępne symulatory iOS/watchOS/tvOS: $(bytes_to_human "$sim_size") (${sim_count})"
+            print_found "$(t "simulators_found"): $(bytes_to_human "$sim_size") (${sim_count})"
         fi
     fi
 
@@ -1128,7 +1137,7 @@ analyze_dev_environment() {
         fi
     fi
 
-    # --- Android AVD (emulators) ---
+    # --- Android AVD ---
     local avd_dir="$HOME/.android/avd"
     if [[ -d "$avd_dir" ]] && ! is_protected_path "$avd_dir"; then
         local avd_size
@@ -1136,13 +1145,13 @@ analyze_dev_environment() {
         if (( avd_size > 0 )); then
             FOUND_DEV_ITEMS+=("android_avd:$avd_dir")
             catbytes_set "android-avd" "$avd_size"
-            print_found "Android AVD emulatory: $(bytes_to_human "$avd_size")"
-            print_info  "  ↑ Review-only: emulatory mogą zawierać stan lokalny aplikacji"
+            print_found "Android AVD emulators: $(bytes_to_human "$avd_size")"
+            print_info  "  ^ $(t "avd_review_note")"
         fi
     fi
 
     if (( ${#FOUND_DEV_ITEMS[@]} == 0 )); then
-        print_ok "Brak istotnych danych developerskich do wyczyszczenia."
+        print_ok "No significant dev data to clean."
     fi
 }
 
@@ -1151,7 +1160,7 @@ analyze_dev_environment() {
 # These symbol files for old iOS versions can take up 10-50+ GB
 # ---------------------------------------------------------------------------
 analyze_ios_device_support() {
-    print_section "Pliki Device Support (Xcode — symbole debugowania)"
+    print_section "Device Support (Xcode debug symbols)"
 
     local dev_base="$HOME/Library/Developer/Xcode"
     local total=0
@@ -1180,18 +1189,18 @@ analyze_ios_device_support() {
             count=$(( count + 1 ))
             local ver_name
             ver_name=$(basename "$version_dir")
-            printf "  ${C_YELLOW}→${C_RESET}  %-45s  %s\n" "${ds_type} / ${ver_name}" "$(bytes_to_human "$b")"
+            printf "  ${C_YELLOW}->${C_RESET}  %-45s  %s\n" "${ds_type} / ${ver_name}" "$(bytes_to_human "$b")"
         done < <(find "$ds_base" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
     done
 
     catbytes_set "device-support" "$total"
 
     if (( count == 0 )); then
-        print_ok "Brak plików Device Support lub zajmują minimalnie miejsca."
+        print_ok "$(t "device_support_ok")"
     else
-        print_found "Xcode Device Support: $(bytes_to_human "$total") w ${count} wersjach OS"
-        print_info  "  ↑ Symbole debugowania starsze niż ${DEVICE_SUPPORT_MIN_AGE_DAYS} dni"
-        print_info  "  Bezpieczne jeśli nie debugujesz urządzeń z tymi wersjami systemu"
+        print_found "Xcode Device Support: $(bytes_to_human "$total") in ${count} OS versions"
+        print_info  "  ^ $(t "device_support_info_1")"
+        print_info  "  $(t "device_support_info_2")"
     fi
 }
 
@@ -1199,10 +1208,10 @@ analyze_ios_device_support() {
 # analyze_time_machine — local snapshots
 # ---------------------------------------------------------------------------
 analyze_time_machine() {
-    print_section "Time Machine — lokalne snapshoty"
+    print_section "Time Machine — local snapshots"
 
     if ! command -v tmutil &>/dev/null; then
-        print_skip "tmutil niedostępny — pomijam."
+        print_skip "$(t "tmutil_missing")"
         return
     fi
 
@@ -1210,7 +1219,7 @@ analyze_time_machine() {
     snapshots=$(tmutil listlocalsnapshots / 2>/dev/null) || snapshots=""
 
     if [[ -z "$snapshots" ]]; then
-        print_ok "Brak lokalnych snapshotów Time Machine."
+        print_ok "$(t "tmutil_ok")"
         catbytes_set "time-machine" 0
         return
     fi
@@ -1218,7 +1227,7 @@ analyze_time_machine() {
     local count=0
     count=$(echo "$snapshots" | grep -c "com.apple.TimeMachine" 2>/dev/null) || count=0
 
-    print_found "Lokalne snapshoty Time Machine: ${count} szt."
+    print_found "Local Time Machine snapshots: ${count} count"
 
     while IFS= read -r snap; do
         [[ -z "$snap" ]] && continue
@@ -1235,7 +1244,7 @@ analyze_time_machine() {
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || purgeable=""
         if [[ -n "$purgeable" ]]; then
-            print_info "Purgeable (APFS): ${purgeable}  ← macOS odzyska to automatycznie gdy zabraknie miejsca"
+            print_info "Purgeable (APFS): ${purgeable}  <- macOS will reclaim automatically"
         fi
     fi
 
@@ -1246,12 +1255,12 @@ analyze_time_machine() {
 # analyze_ios_backups — ~/Library/Application Support/MobileSync/Backup
 # ---------------------------------------------------------------------------
 analyze_ios_backups() {
-    print_section "Lokalne backupy iOS/iPadOS"
+    print_section "iOS/iPadOS Backups"
 
     local backup_base="$HOME/Library/Application Support/MobileSync/Backup"
 
     if [[ ! -d "$backup_base" ]]; then
-        print_ok "Brak lokalnych backupów iOS."
+        print_ok "$(t "ios_backups_ok")"
         catbytes_set "ios-backups" 0
         return
     fi
@@ -1268,23 +1277,24 @@ analyze_ios_backups() {
         count=$(( count + 1 ))
 
         local info_plist="${backup_dir}/Info.plist"
-        local device_name="Nieznane urządzenie"
-        local last_backup="Nieznana data"
+        local device_name
+        device_name="$(t "unknown_device")"
+        local last_backup="Unknown date"
         if [[ -f "$info_plist" ]]; then
-            device_name=$(defaults read "$info_plist" "Device Name" 2>/dev/null || echo "Nieznane urządzenie")
-            last_backup=$(defaults read "$info_plist" "Last Backup Date" 2>/dev/null || echo "Nieznana data")
+            device_name=$(defaults read "$info_plist" "Device Name" 2>/dev/null || echo "$(t "unknown_device")")
+            last_backup=$(defaults read "$info_plist" "Last Backup Date" 2>/dev/null || echo "Unknown date")
         fi
 
-        print_found "  ${device_name}  $(bytes_to_human "$bytes")  (ostatni: ${last_backup})"
+        print_found "  ${device_name}  $(bytes_to_human "$bytes")  (last: ${last_backup})"
     done < <(find "$backup_base" -maxdepth 1 -mindepth 1 -type d -print0 2>/dev/null)
 
     catbytes_set "ios-backups" "$total"
 
     if (( count == 0 )); then
-        print_ok "Brak lokalnych backupów iOS."
+        print_ok "$(t "ios_backups_ok")"
     else
-        print_found "Łącznie: $(bytes_to_human "$total") w ${count} backupach"
-        print_warn  "WAŻNE: To są kopie Twoich urządzeń Apple. Usuń tylko po weryfikacji!"
+        print_found "$(t "ios_backups_found_total"): $(bytes_to_human "$total") in ${count} backups"
+        print_warn  "$(t "ios_backups_warn")"
     fi
 }
 
@@ -1292,7 +1302,7 @@ analyze_ios_backups() {
 # analyze_large_dmg_pkg — old installers in ~/Downloads
 # ---------------------------------------------------------------------------
 analyze_large_dmg_pkg() {
-    print_section "Stare instalatory (DMG, PKG) w ~/Downloads"
+    print_section "Old installers (DMG, PKG) in ~/Downloads"
 
     [[ -d "$HOME/Downloads" ]] || return
 
@@ -1318,9 +1328,9 @@ analyze_large_dmg_pkg() {
     catbytes_set "installers" "$total"
 
     if (( count == 0 )); then
-        print_ok "Brak dużych starych instalatorów w ~/Downloads (kryterium: >10 MB, >$DMG_MAX_AGE_DAYS dni)."
+        print_ok "$(t "downloads_ok")"
     else
-        print_found "Stare instalatory: $(bytes_to_human "$total") (${count} plików)"
+        print_found "Old installers: $(bytes_to_human "$total") (${count} files)"
         local top5=""
         top5=$(printf '%s' "$size_list" | sort -rn | head -5) || true
         while IFS=' ' read -r bytes path; do
@@ -1336,7 +1346,7 @@ analyze_large_dmg_pkg() {
 _run_analyzer() {
     local fn="$1"
     "$fn" || {
-        print_warn "Analiza '${fn}' zakończona z błędem (pomijam, kontynuuję)."
+        print_warn "Analysis '${fn}' failed (skipping, continuing)."
         log_warn "Analyzer function '${fn}' failed — continuing."
     }
 }

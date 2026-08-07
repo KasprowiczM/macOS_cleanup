@@ -154,7 +154,7 @@ TOTAL_SKIPPED_ITEMS=0
 WARNINGS_LIST=()
 record_skipped_item "Pominięto test"
 assert_eq "$TOTAL_SKIPPED_ITEMS" "1"
-assert_array_var_contains_exact "WARNINGS_LIST" "Pominięto: Pominięto test"
+assert_array_var_contains_exact "WARNINGS_LIST" "Skipped: Pominięto test"
 
 # ---------------------------------------------------------------------------
 begin_test "safe_remove in dry-run does not delete"

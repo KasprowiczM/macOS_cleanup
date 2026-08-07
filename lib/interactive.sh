@@ -15,35 +15,35 @@
 # Prints detailed explanation of all cleanup categories (--explain)
 # ---------------------------------------------------------------------------
 explain_categories() {
-    print_header "Objaśnienie kategorii czyszczenia (System Explanations)"
+    print_header "$(t "explain_title")"
 
-    cat << 'EOF'
+    cat << EOF
 ▶ User Caches (user-caches)
-  • Opis: Pamięć podręczna aplikacji w ~/Library/Caches.
-  • Ryzyko: LOW (pliki są odtwarzane przez aplikacje po uruchomieniu).
-  • Kwarantanna: Pełne wsparcie odzyskiwania przez --restore.
+  • $(t "user_caches_desc")
+  • Risk: LOW
+  • Quarantine: Full restore support via --restore.
 
 ▶ Developer Caches (dev)
-  • Opis: Pamięć podręczna npm, pip, cargo, Homebrew oraz niedostępne symulatory iOS.
-  • Ryzyko: LOW / MEDIUM (wymaga ponownego pobrania pakietów przy budowaniu).
-  • Kwarantanna: Kwarantanna przenosi zasoby do odzyskania.
+  • $(t "dev_caches_desc")
+  • Risk: LOW / MEDIUM
+  • Quarantine: Quarantine moves assets for recovery.
 
 ▶ Xcode Device Support (dev / xcode)
-  • Opis: Symbole debugowania starsze niż 180 dni dla podłączanych urządzeń iOS.
-  • Ryzyko: HIGH (duży rozmiar, ponowne pobieranie po podłączeniu starzejącego się urządzenia).
-  • Kwarantanna: Zalecana ręczna weryfikacja.
+  • $(t "xcode_support_desc")
+  • Risk: HIGH
+  • Quarantine: Manual verification recommended.
 
 ▶ Logs (user-logs / system-logs)
-  • Opis: Pliki dzienników systemowych oraz aplikacji starsze niż 30 dni.
-  • Ryzyko: LOW.
+  • $(t "logs_desc")
+  • Risk: LOW
 
 ▶ System Caches (system-caches)
-  • Opis: Pamięć podręczna w /Library/Caches (SIP protected).
-  • Ryzyko: REPORT ONLY (tylko raportowanie, brak usuwania).
+  • $(t "system_caches_desc")
+  • Risk: REPORT ONLY
 
 ▶ Docker (docker)
-  • Opis: Czyszczenie nieużywanych kontenerów, obrazów i wolumenów (system prune).
-  • Ryzyko: HIGH (trwałe usunięcie skontenerowanych środowisk).
+  • $(t "docker_desc")
+  • Risk: HIGH
 EOF
 }
 
@@ -82,14 +82,14 @@ ask_yes_no() {
             y|yes) return 0 ;;
             n|no)  return 1 ;;
             *)
-                echo -e "  ${C_RED}✖${C_RESET}  Wpisz 'y' (tak) lub 'n' (nie)."
+                echo -e "  ${C_RED}✖${C_RESET}  $(t "prompt_yes_no_err")"
                 ;;
         esac
     done
 }
 
 # ---------------------------------------------------------------------------
-# Returns human-readable Polish consequence string based on risk level and mode.
+# Returns human-readable consequence string based on risk level and mode.
 # ---------------------------------------------------------------------------
 consequence_for_mode() {
     local risk="${1:-REVIEW}"
@@ -105,23 +105,23 @@ consequence_for_mode() {
     case "$risk" in
         SAFE)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je odzyskać poleceniem --restore. Miejsce nie jest zwalniane do momentu --purge-quarantine."
+                t "consequence_safe_quarantine"
             else
-                echo "Pliki zostaną usunięte. Aplikacje odtworzą je w razie potrzeby. Brak możliwości odzyskania tym narzędziem."
+                t "consequence_safe_permanent"
             fi
             ;;
         REVIEW)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania lub indeksowania."
+                t "consequence_review_quarantine"
             else
-                echo "Ostrzeżenie (RYZYKO REVIEW): Pliki zostaną trwale usunięte z dysku bez kwarantanny."
+                t "consequence_review_permanent"
             fi
             ;;
         DANGEROUS|*)
             if [[ "$mode" == "quarantine" ]]; then
-                echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej."
+                t "consequence_dangerous_quarantine"
             else
-                echo "UWAGA (RYZYKO DANGEROUS): Nieodwracalne usunięcie kluczowych danych systemowych lub użytkownika."
+                t "consequence_dangerous_permanent"
             fi
             ;;
     esac
@@ -160,7 +160,7 @@ confirm_category() {
     esac
 
     if [[ "$risk" == "DANGEROUS" ]]; then
-        echo -e "${C_RED}✖  Kategoria DANGEROUS (${title}): Nie podlega automatycznemu ani interaktywnemu czyszczeniu.${C_RESET}"
+        echo -e "${C_RED}✖  Category DANGEROUS (${title}): $(t "dangerous_blocked")${C_RESET}"
         record_user_decision "${title} (DANGEROUS - blocked)"
         log_info "DANGEROUS risk level blocked from interactive prompt: ${title}"
         return 1
@@ -186,30 +186,30 @@ confirm_category() {
     echo
     echo -e "${C_BOLD}${C_BLUE}┌─ ${title} ──────────────────────────────────────────────────${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Rozmiar:${C_RESET}       ${C_YELLOW}${size}${C_RESET}"
-    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Poziom ryzyka:${C_RESET} ${risk_color}${C_BOLD}${risk}${C_RESET}"
+    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Size:${C_RESET}       ${C_YELLOW}${size}${C_RESET}"
+    echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Risk Level:${C_RESET} ${risk_color}${C_BOLD}${risk}${C_RESET}"
     echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
 
     if [[ -n "$what" ]]; then
-        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Co to jest?${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}What is this?${C_RESET}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}    ${what}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
     fi
 
     if [[ -n "$consequence" ]]; then
-        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Skutki usunięcia:${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Consequences:${C_RESET}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}    ${C_YELLOW}${consequence}${C_RESET}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
     fi
 
     if [[ -n "$safe_if" ]]; then
-        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Bezpieczne jeśli:${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Safe if:${C_RESET}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}    ${C_GREEN}${safe_if}${C_RESET}"
         echo -e "${C_BOLD}${C_BLUE}│${C_RESET}"
     fi
 
     if [[ ${#paths[@]} -gt 0 ]]; then
-        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Ścieżki do usunięcia:${C_RESET}"
+        echo -e "${C_BOLD}${C_BLUE}│${C_RESET}  ${C_BOLD}Paths to remove:${C_RESET}"
         for p in "${paths[@]}"; do
             [[ -z "$p" ]] && continue
             if [[ -e "$p" ]]; then
@@ -224,17 +224,17 @@ confirm_category() {
     echo -e "${C_BOLD}${C_BLUE}└──────────────────────────────────────────────────────────────${C_RESET}"
 
     if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" && "$risk" != "SAFE" ]]; then
-        print_skip "Automatyczne --yes nie zatwierdza ryzyka ${risk}: ${title}"
-        record_skipped_item "${title} (wymaga interaktywnego potwierdzenia)"
+        print_skip "$(t "auto_yes_blocked") ${risk}: ${title}"
+        record_skipped_item "${title} (requires interactive confirmation)"
         log_info "Non-interactive AUTO_YES blocked for ${risk} cleanup: ${title}"
         return 1
     fi
 
-    if ask_yes_no "Czy chcesz wyczyścić tę kategorię? (${title})" "no"; then
+    if ask_yes_no "$(t "ask_clean_category") (${title})" "no"; then
         log_info "User approved cleanup: ${title}"
         return 0
     else
-        print_skip "Pominięto: ${title}"
+        print_skip "$(t "skipped_category"): ${title}"
         record_skipped_item "${title}"
         log_info "User skipped cleanup: ${title}"
         return 1
@@ -249,19 +249,19 @@ confirm_time_machine_snapshots() {
     local total_size="$2"
 
     echo
-    print_warning_box "Lokalne snapshoty Time Machine" \
-        "Te dane to lokalne kopie bezpieczeństwa Twojego systemu." \
-        "Mogą być potrzebne do odtworzenia plików, które usunąłeś" \
-        "lub zmieniłeś PRZED ostatnim backupem na dysk zewnętrzny." \
+    print_warning_box "$(t "time_machine_title")" \
+        "$(t "time_machine_box_1")" \
+        "$(t "time_machine_box_2")" \
+        "$(t "time_machine_box_3")" \
         "" \
-        "UWAGA: Snapshoty są trwale usuwane (nie podlegają kwarantannie)." \
+        "$(t "time_machine_box_4")" \
         "" \
-        "Rozmiar: ${total_size}" \
+        "$(t "time_machine_box_5"): ${total_size}" \
         "" \
-        "WAŻNE: macOS usuwa snapshoty automatycznie, gdy" \
-        "brakuje miejsca na dysku (mechanizm APFS purge)."
+        "$(t "time_machine_box_6")" \
+        "$(t "time_machine_box_7")"
 
-    echo -e "  ${C_BOLD}Znalezione snapshoty:${C_RESET}"
+    echo -e "  ${C_BOLD}$(t "time_machine_found"):${C_RESET}"
     while IFS= read -r snap; do
         [[ -z "$snap" ]] && continue
         echo -e "    ${C_DIM}• ${snap}${C_RESET}"
@@ -269,12 +269,12 @@ confirm_time_machine_snapshots() {
     echo
 
     if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" ]]; then
-        print_skip "Snapshoty Time Machine wymagają interaktywnego potwierdzenia."
-        record_skipped_item "Lokalne snapshoty Time Machine (wymagają interaktywnego potwierdzenia)"
+        print_skip "$(t "time_machine_interactive_req")"
+        record_skipped_item "$(t "time_machine_title") ($(t "time_machine_interactive_req"))"
         return 1
     fi
 
-    ask_yes_no "Czy potwierdzasz, że masz aktualny backup na dysku zewnętrznym i chcesz usunąć lokalne snapshoty?" "no"
+    ask_yes_no "$(t "time_machine_prompt")" "no"
 }
 
 # ---------------------------------------------------------------------------
@@ -284,18 +284,17 @@ confirm_ios_backups() {
     local backups_list="$1"
     local total_size="$2"
 
-    print_warning_box "Lokalne backupy iOS/iPadOS/watchOS" \
-        "To są kopie Twoich iPhone / iPad / Apple Watch." \
-        "Po usunięciu nie odtworzysz zawartości urządzenia" \
-        "bez nowego backupu (iTunes/Finder lub iCloud)." \
+    print_warning_box "$(t "ios_backups_title")" \
+        "$(t "ios_backups_box_1")" \
+        "$(t "ios_backups_box_2")" \
+        "$(t "ios_backups_box_3")" \
         "" \
-        "Rozmiar: ${total_size}" \
+        "Size: ${total_size}" \
         "" \
-        "Bezpieczne TYLKO jeśli masz backup w iCloud LUB" \
-        "właśnie zrobiłeś backup w Finderze i nie potrzebujesz" \
-        "odtwarzać urządzeń z tego komputera."
+        "$(t "ios_backups_box_4")" \
+        "$(t "ios_backups_box_5")"
 
-    echo -e "  ${C_BOLD}Znalezione backupy:${C_RESET}"
+    echo -e "  ${C_BOLD}$(t "ios_backups_found"):${C_RESET}"
     while IFS= read -r bk; do
         [[ -z "$bk" ]] && continue
         local bk_size
@@ -305,12 +304,12 @@ confirm_ios_backups() {
     echo
 
     if [[ "${NON_INTERACTIVE:-0}" == "1" && "${AUTO_YES:-0}" == "1" ]]; then
-        print_skip "Backupy iOS wymagają interaktywnego potwierdzenia."
-        record_skipped_item "Backupy iOS (wymagają interaktywnego potwierdzenia)"
+        print_skip "$(t "ios_backups_interactive_req")"
+        record_skipped_item "$(t "ios_backups_title") ($(t "ios_backups_interactive_req"))"
         return 1
     fi
 
-    ask_yes_no "Rozumiem ryzyko i chcę usunąć wybrane backupy iOS?" "no"
+    ask_yes_no "$(t "ios_backups_prompt")" "no"
 }
 
 # ---------------------------------------------------------------------------
@@ -322,7 +321,7 @@ show_dry_run_summary() {
     local total_size="$3"
 
     echo
-    echo -e "${C_BOLD}  Analiza – ${category}${C_RESET}"
+    echo -e "${C_BOLD}  $(t "dryrun_summary_title") – ${category}${C_RESET}"
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
 
     local -a items=()
@@ -338,7 +337,7 @@ show_dry_run_summary() {
     done
 
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}Łącznie do zwolnienia: ${C_YELLOW}${total_size}${C_RESET}"
+    echo -e "  ${C_BOLD}$(t "dryrun_summary_total"): ${C_YELLOW}${total_size}${C_RESET}"
     echo
 }
 
@@ -348,15 +347,15 @@ show_dry_run_summary() {
 ask_proceed_to_interactive() {
     echo
     echo -e "${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════${C_RESET}"
-    echo -e "${C_BOLD}${C_GREEN}  Analiza zakończona. Czas na czyszczenie?${C_RESET}"
+    echo -e "${C_BOLD}${C_GREEN}  $(t "proceed_interactive_title")${C_RESET}"
     echo -e "${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════${C_RESET}"
     echo
-    echo -e "  Skrypt znalazł do zwolnienia: ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    echo -e "  $(t "proceed_interactive_found"): ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
     echo
-    echo -e "  ${C_DIM}Jeśli odpowiesz 'tak', przejdziemy przez każdą kategorię${C_RESET}"
-    echo -e "  ${C_DIM}osobno — zobaczysz ostrzeżenia i będziesz mógł decydować.${C_RESET}"
-    echo -e "  ${C_DIM}Domyślna odpowiedź to zawsze NIE — bezpiecznie naciśnij Enter.${C_RESET}"
+    echo -e "  ${C_DIM}$(t "proceed_interactive_note_1")${C_RESET}"
+    echo -e "  ${C_DIM}$(t "proceed_interactive_note_2")${C_RESET}"
+    echo -e "  ${C_DIM}$(t "proceed_interactive_note_3")${C_RESET}"
     echo
 
-    ask_yes_no "Chcesz teraz przejść do interaktywnego czyszczenia?" "no"
+    ask_yes_no "$(t "proceed_interactive_prompt")" "no"
 }

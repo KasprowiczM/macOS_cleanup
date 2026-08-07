@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# lib/planner.sh — Machine-readable cleanup plan generation and execution
+# lib/planner.sh — JSON plan generator & executor
+#
 # Bash 3.2 compatible.
 # =============================================================================
 
@@ -11,8 +12,8 @@ declare -a PLAN_OP_ACTIONS=()
 declare -a PLAN_OP_PATHS=()
 declare -a PLAN_OP_COMMANDS=()
 declare -a PLAN_OP_BYTES=()
-declare -a PLAN_OP_DESCRIPTIONS=()
-declare -a PLAN_OP_RECOMMENDATIONS=()
+declare -a PLAN_OP_DESCS=()
+declare -a PLAN_OP_RECS=()
 
 plan_reset() {
     PLAN_OP_IDS=()
@@ -22,28 +23,25 @@ plan_reset() {
     PLAN_OP_PATHS=()
     PLAN_OP_COMMANDS=()
     PLAN_OP_BYTES=()
-    PLAN_OP_DESCRIPTIONS=()
-    PLAN_OP_RECOMMENDATIONS=()
+    PLAN_OP_DESCS=()
+    PLAN_OP_RECS=()
 }
 
 plan_next_id() {
-    printf 'op-%04d' "$(( ${#PLAN_OP_IDS[@]} + 1 ))"
+    printf "op-%04d" "$(( ${#PLAN_OP_IDS[@]} + 1 ))"
 }
 
 plan_add_operation() {
     local id="$1" category="$2" risk="$3" action="$4" path="$5" command="$6" bytes="$7" description="$8" recommendation="$9"
-    case "$risk" in SAFE|REVIEW|DANGEROUS) : ;; *) risk="REVIEW" ;; esac
-    case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
-
     PLAN_OP_IDS+=("$id")
     PLAN_OP_CATEGORIES+=("$category")
     PLAN_OP_RISKS+=("$risk")
     PLAN_OP_ACTIONS+=("$action")
     PLAN_OP_PATHS+=("$path")
     PLAN_OP_COMMANDS+=("$command")
-    PLAN_OP_BYTES+=("$bytes")
-    PLAN_OP_DESCRIPTIONS+=("$description")
-    PLAN_OP_RECOMMENDATIONS+=("$recommendation")
+    PLAN_OP_BYTES+=("${bytes:-0}")
+    PLAN_OP_DESCS+=("$description")
+    PLAN_OP_RECS+=("$recommendation")
 }
 
 plan_add_path() {
@@ -70,16 +68,16 @@ build_cleanup_plan_from_analysis() {
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
         for path in "${FOUND_TRASH_ITEMS[@]}"; do
             plan_add_path "trash" "REVIEW" "$path" \
-                "Element w Koszu macOS." \
-                "Usuń tylko jeśli świadomie wyrzuciłeś ten plik i nie potrzebujesz rollbacku."
+                "Item in macOS Trash." \
+                "Remove only if deliberately deleted and rollback is not needed."
         done
     fi
 
     if (( ${#FOUND_USER_CACHES[@]} > 0 )); then
         for path in "${FOUND_USER_CACHES[@]}"; do
             plan_add_path "user-caches" "REVIEW" "$path" \
-                "Top-level cache z ~/Library/Caches; kategoria mieszana." \
-                "Przejrzyj nazwę aplikacji. Auto-safe czyści tylko jawnie znane cache aplikacji."
+                "Top-level cache in ~/Library/Caches; mixed risk category." \
+                "Review app name before removing."
         done
     fi
 
@@ -89,12 +87,12 @@ build_cleanup_plan_from_analysis() {
             path="${item#*:}"
             if app_cache_auto_safe "$label"; then
                 plan_add_path "app-caches" "SAFE" "$path" \
-                    "${label}: odtwarzalny cache aplikacji." \
-                    "Aplikacja odtworzy cache; pierwsze uruchomienie może być wolniejsze."
+                    "${label}: recreateable app cache." \
+                    "App will recreate cache on launch."
             else
                 plan_add_path "app-caches" "REVIEW" "$path" \
-                    "${label}: cache aplikacji spoza auto-safe allowlist." \
-                    "Przejrzyj ręcznie przed usunięciem."
+                    "${label}: app cache outside auto-safe allowlist." \
+                    "Review manually before removal."
             fi
         done
     fi
@@ -102,108 +100,108 @@ build_cleanup_plan_from_analysis() {
     if (( ${#FOUND_APP_LOGS[@]} > 0 )); then
         for path in "${FOUND_APP_LOGS[@]}"; do
             plan_add_path "logs" "SAFE" "$path" \
-                "Stary log lub raport diagnostyczny." \
-                "Bezpieczne, jeśli nie diagnozujesz historycznego problemu."
+                "Old log file or diagnostic report." \
+                "Safe unless actively troubleshooting."
         done
     fi
     if (( ${#FOUND_SYSTEM_LOGS[@]} > 0 )); then
         for path in "${FOUND_SYSTEM_LOGS[@]}"; do
             plan_add_path "logs" "SAFE" "$path" \
-                "Stary log lub raport diagnostyczny." \
-                "Bezpieczne, jeśli nie diagnozujesz historycznego problemu."
+                "Old log file or diagnostic report." \
+                "Safe unless actively troubleshooting."
         done
     fi
     if (( ${#FOUND_DIAGNOSTIC_REPORTS[@]} > 0 )); then
         for path in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
             plan_add_path "logs" "SAFE" "$path" \
-                "Stary log lub raport diagnostyczny." \
-                "Bezpieczne, jeśli nie diagnozujesz historycznego problemu."
+                "Old log file or diagnostic report." \
+                "Safe unless actively troubleshooting."
         done
     fi
 
     if (( ${#FOUND_TMP_FILES[@]} > 0 )); then
         for path in "${FOUND_TMP_FILES[@]}"; do
             plan_add_path "system" "SAFE" "$path" \
-                "Stary plik tymczasowy." \
-                "Można usunąć; macOS i aplikacje traktują tę lokalizację jako tymczasową."
+                "Old temporary file." \
+                "Safe to remove; macOS and apps treat /tmp as transient."
         done
     fi
 
     if (( ${#FOUND_SYSTEM_CACHES[@]} > 0 )); then
         for path in "${FOUND_SYSTEM_CACHES[@]}"; do
             plan_add_report_only "system" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                "Cache systemowe /Library/Caches." \
-                "Nie jest wykonywane z planu; użyj trybu interaktywnego i sudo tylko po sprawdzeniu."
+                "System cache /Library/Caches." \
+                "Not executed from plan; use interactive mode after review."
         done
     fi
 
     if (( ${#FOUND_APP_LEFTOVERS[@]} > 0 )); then
         for path in "${FOUND_APP_LEFTOVERS[@]}"; do
             plan_add_report_only "app-leftovers" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                "Heurystyczna pozostałość po aplikacji." \
-                "Usuń ręcznie dopiero po potwierdzeniu, że aplikacja jest odinstalowana."
+                "Heuristic app leftover." \
+                "Remove manually after confirming app is uninstalled."
         done
     fi
 
     if (( ${#FOUND_DEV_ITEMS[@]} > 0 )); then
         for item in "${FOUND_DEV_ITEMS[@]}"; do
-        key="${item%%:*}"
-        path="${item#*:}"
-        case "$key" in
-            xcode_derived_data)
-                plan_add_path "dev" "SAFE" "$path" \
-                    "Xcode DerivedData: odtwarzalne artefakty buildów." \
-                    "Xcode przebuduje projekty przy następnym buildzie."
-                ;;
-            xcode_archives)
-                plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                    "Xcode Archives mogą być potrzebne do dystrybucji lub symbolizacji." \
-                    "Przejrzyj w Organizerze Xcode przed usunięciem."
-                ;;
-            ios_simulators)
-                plan_add_native "dev" "REVIEW" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
-                    "Usuwa tylko niedostępne symulatory." \
-                    "Wykonaj po review; runtime może wymagać ponownego pobrania."
-                ;;
-            npm_cache)
-                plan_add_native "dev" "SAFE" "npm cache clean --force" "$(catbytes_get "npm")" \
-                    "Cache npm." "Pakiety zostaną pobrane ponownie w razie potrzeby." ;;
-            yarn_cache)
-                plan_add_native "dev" "SAFE" "yarn cache clean" "$(catbytes_get "yarn")" \
-                    "Cache Yarn." "Pakiety zostaną pobrane ponownie w razie potrzeby." ;;
-            pnpm_cache)
-                plan_add_native "dev" "SAFE" "pnpm store prune" "$(catbytes_get "pnpm")" \
-                    "Store pnpm." "pnpm zachowa potrzebne pakiety i przytnie nieużywane." ;;
-            pip_cache)
-                plan_add_native "dev" "SAFE" "pip cache purge" "$(catbytes_get "pip")" \
-                    "Cache pip." "Pakiety zostaną pobrane ponownie w razie potrzeby." ;;
-            brew_cache|brew_cleanup)
-                plan_add_native "dev" "SAFE" "brew cleanup --prune=all" "$(catbytes_get "brew-stale")" \
-                    "Homebrew cache i stare wersje formuł." "Homebrew odtworzy cache przy kolejnych instalacjach." ;;
-            gem_cache)
-                plan_add_native "dev" "SAFE" "gem cleanup" "$(catbytes_get "gem")" \
-                    "Cache/stare wersje Ruby gems." "Gemy można zainstalować ponownie." ;;
-            gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
-                plan_add_path "dev" "SAFE" "$path" \
-                    "Odtwarzalny cache narzędzi developerskich." \
-                    "Build może pobrać zależności ponownie."
-                ;;
-            maven_cache)
-                plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                    "Maven repository może zawierać lokalnie zbudowane artefakty." \
-                    "Nie usuwaj automatycznie; przejrzyj ręcznie."
-                ;;
-            android_avd)
-                plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                    "Android AVD może zawierać lokalny stan emulatorów." \
-                    "Usuń przez Android Studio Device Manager po review."
-                ;;
-            docker_prune)
-                plan_add_native "dev" "REVIEW" "docker system prune -f" "$(catbytes_get "docker")" \
-                    "Docker: obrazy, zatrzymane kontenery, sieci i build cache; bez wolumenów." \
-                    "Wykonaj tylko jeśli dane zatrzymanych kontenerów nie są potrzebne."
-                ;;
-        esac
+            key="${item%%:*}"
+            path="${item#*:}"
+            case "$key" in
+                xcode_derived_data)
+                    plan_add_path "dev" "SAFE" "$path" \
+                        "Xcode DerivedData: recreateable build artifacts." \
+                        "Xcode will rebuild projects on next compilation."
+                    ;;
+                xcode_archives)
+                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                        "Xcode Archives may be required for app distribution or symbolication." \
+                        "Review in Xcode Organizer before deletion."
+                    ;;
+                ios_simulators)
+                    plan_add_native "dev" "REVIEW" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
+                        "Deletes only unavailable simulators." \
+                        "Execute after review; runtimes can be re-downloaded."
+                    ;;
+                npm_cache)
+                    plan_add_native "dev" "SAFE" "npm cache clean --force" "$(catbytes_get "npm")" \
+                        "npm cache." "Packages will be re-downloaded if needed." ;;
+                yarn_cache)
+                    plan_add_native "dev" "SAFE" "yarn cache clean" "$(catbytes_get "yarn")" \
+                        "Yarn cache." "Packages will be re-downloaded if needed." ;;
+                pnpm_cache)
+                    plan_add_native "dev" "SAFE" "pnpm store prune" "$(catbytes_get "pnpm")" \
+                        "pnpm store." "pnpm prunes unused store items." ;;
+                pip_cache)
+                    plan_add_native "dev" "SAFE" "pip cache purge" "$(catbytes_get "pip")" \
+                        "pip cache." "Packages will be re-downloaded if needed." ;;
+                brew_cache|brew_cleanup)
+                    plan_add_native "dev" "SAFE" "brew cleanup --prune=all" "$(catbytes_get "brew-stale")" \
+                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." ;;
+                gem_cache)
+                    plan_add_native "dev" "SAFE" "gem cleanup" "$(catbytes_get "gem")" \
+                        "Ruby gems cache / old versions." "Gems can be reinstalled." ;;
+                gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
+                    plan_add_path "dev" "SAFE" "$path" \
+                        "Recreateable dev tool cache." \
+                        "Builds will re-download dependencies."
+                    ;;
+                maven_cache)
+                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                        "Maven repository may contain locally built artifacts." \
+                        "Do not delete automatically; review manually."
+                    ;;
+                android_avd)
+                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                        "Android AVD may contain emulator local state." \
+                        "Remove via Android Studio Device Manager after review."
+                    ;;
+                docker_prune)
+                    plan_add_native "dev" "REVIEW" "docker system prune -f" "$(catbytes_get "docker")" \
+                        "Docker: images, stopped containers, networks, and build cache." \
+                        "Execute only if stopped container data is no longer required."
+                    ;;
+            esac
         done
     fi
 
@@ -211,32 +209,32 @@ build_cleanup_plan_from_analysis() {
         for item in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
             path="${item#*:}"
             plan_add_path "dev" "REVIEW" "$path" \
-                "Xcode Device Support starszy niż ${DEVICE_SUPPORT_MIN_AGE_DAYS} dni." \
-                "Xcode pobierze symbole ponownie, gdy podłączysz urządzenie z tą wersją systemu."
+                "Xcode Device Support older than ${DEVICE_SUPPORT_MIN_AGE_DAYS} days." \
+                "Xcode re-downloads debug symbols upon connecting matching devices."
         done
     fi
 
     if (( ${#FOUND_TM_SNAPSHOTS[@]} > 0 )); then
         for item in "${FOUND_TM_SNAPSHOTS[@]}"; do
             plan_add_report_only "time-machine" "REVIEW" "$item" 0 \
-                "Lokalny snapshot Time Machine." \
-                "macOS usuwa snapshoty automatycznie; ręczne usuwanie wymaga aktualnego backupu."
+                "Local Time Machine snapshot." \
+                "macOS reclaims snapshots automatically; manual deletion requires fresh backup."
         done
     fi
 
     if (( ${#FOUND_IOS_BACKUPS[@]} > 0 )); then
         for path in "${FOUND_IOS_BACKUPS[@]}"; do
             plan_add_path "time-machine" "REVIEW" "$path" \
-                "Lokalny backup iOS/iPadOS." \
-                "Usuń tylko po potwierdzeniu, że masz inną aktualną kopię urządzenia."
+                "Local iOS/iPadOS backup." \
+                "Remove only after confirming external or iCloud backup."
         done
     fi
 
     if (( ${#FOUND_DMG_PKG[@]} > 0 )); then
         for path in "${FOUND_DMG_PKG[@]}"; do
             plan_add_path "large-files" "REVIEW" "$path" \
-                "Stary instalator DMG/PKG/ISO w Downloads." \
-                "Usuń tylko jeśli możesz pobrać go ponownie lub nie potrzebujesz tej wersji."
+                "Old DMG/PKG/ISO installer in Downloads." \
+                "Remove only if re-downloadable or no longer needed."
         done
     fi
 
@@ -245,8 +243,8 @@ build_cleanup_plan_from_analysis() {
             key="${item%%:*}"
             path="${item#*:}"
             plan_add_report_only "mail" "DANGEROUS" "$path" "$(path_size_bytes "$path")" \
-                "Apple Mail: ${key}. Dane poczty nie są śmieciami." \
-                "Czyść z poziomu Mail.app: usuń duże wiadomości, opróżnij spam/kosz, zarządzaj załącznikami."
+                "Apple Mail: ${key}. Mail data is critical user content." \
+                "Manage attachments via Mail.app or Finder."
         done
     fi
 
@@ -255,8 +253,8 @@ build_cleanup_plan_from_analysis() {
             label="${item%%:*}"
             path="${item#*:}"
             plan_add_report_only "browsers" "REVIEW" "$path" "$(path_size_bytes "$path")" \
-                "${label}: cache przeglądarki." \
-                "Preferowane czyszczenie z UI przeglądarki, nie przez ręczne kasowanie profilu."
+                "${label}: browser cache." \
+                "Prefer clearing cache via browser UI."
         done
     fi
 
@@ -265,8 +263,8 @@ build_cleanup_plan_from_analysis() {
             label="${item%%:*}"
             path="${item#*:}"
             plan_add_report_only "browsers" "DANGEROUS" "$path" "$(path_size_bytes "$path")" \
-                "${label}: profil, cookies, hasła, historia lub sesje." \
-                "Nigdy nie usuwaj automatycznie; użyj ustawień prywatności przeglądarki."
+                "${label}: profile, cookies, passwords, history, or sessions." \
+                "Never delete automatically; use browser privacy settings."
         done
     fi
 }
@@ -278,55 +276,66 @@ generate_plan_json() {
     safe_count=0; review_count=0; dangerous_count=0
     safe_bytes=0; review_bytes=0; dangerous_bytes=0
 
-    for (( i = 0; i < count; i++ )); do
-        case "${PLAN_OP_RISKS[$i]}" in
-            SAFE) safe_count=$(( safe_count + 1 )); safe_bytes=$(( safe_bytes + ${PLAN_OP_BYTES[$i]} )) ;;
-            REVIEW) review_count=$(( review_count + 1 )); review_bytes=$(( review_bytes + ${PLAN_OP_BYTES[$i]} )) ;;
-            DANGEROUS) dangerous_count=$(( dangerous_count + 1 )); dangerous_bytes=$(( dangerous_bytes + ${PLAN_OP_BYTES[$i]} )) ;;
+    for (( i=0; i<count; i++ )); do
+        local r="${PLAN_OP_RISKS[$i]}"
+        local b="${PLAN_OP_BYTES[$i]:-0}"
+        case "$r" in
+            SAFE)      safe_count=$(( safe_count + 1 ));           safe_bytes=$(( safe_bytes + b )) ;;
+            REVIEW)    review_count=$(( review_count + 1 ));       review_bytes=$(( review_bytes + b )) ;;
+            DANGEROUS) dangerous_count=$(( dangerous_count + 1 )); dangerous_bytes=$(( dangerous_bytes + b )) ;;
         esac
     done
 
-    # Cache plan summary for emit_json_summary (--json flag support).
-    json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" \
-        "$safe_bytes" "$review_bytes" "$dangerous_bytes"
+    local checksum_val
+    checksum_val="${count}-${safe_count}-${review_count}-${dangerous_count}"
 
-    mkdir -p "$(dirname "$output")"
+    local dir
+    dir="$(dirname "$output")"
+    mkdir -p "$dir" 2>/dev/null || true
+
     {
         printf '{\n'
         printf '  "schema_version": "1.0",\n'
-        printf '  "tool": "%s",\n' "$(json_escape "$SCRIPT_NAME")"
-        printf '  "tool_version": "%s",\n' "$(json_escape "$SCRIPT_VERSION")"
-        printf '  "run_id": "%s",\n' "$(json_escape "$RUN_TIMESTAMP")"
-        printf '  "generated_at": "%s",\n' "$(json_escape "$(date '+%Y-%m-%dT%H:%M:%S%z')")"
-        printf '  "rules_file": "%s",\n' "$(json_escape "${RULES_FILE:-}")"
-        printf '  "checksum": "%s",\n' "$(json_escape "$count-${safe_count}-${review_count}-${dangerous_count}")"
+        printf '  "version": "1.0",\n'
+        printf '  "tool": "%s",\n' "$(json_escape "${SCRIPT_NAME:-cleanup_all.sh}")"
+        printf '  "tool_version": "%s",\n' "$(json_escape "${SCRIPT_VERSION:-3.0.0}")"
+        printf '  "run_id": "%s",\n' "$(json_escape "${RUN_TIMESTAMP:-test_run}")"
+        printf '  "generated_at": "%s",\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        printf '  "checksum": "%s",\n' "$checksum_val"
         printf '  "summary": {\n'
-        printf '    "operations": %s,\n' "$count"
-        printf '    "safe_operations": %s,\n' "$safe_count"
-        printf '    "review_operations": %s,\n' "$review_count"
-        printf '    "dangerous_operations": %s,\n' "$dangerous_count"
+        printf '    "operations": %d,\n' "$count"
+        printf '    "total_operations": %d,\n' "$count"
+        printf '    "safe_operations": %d,\n' "$safe_count"
+        printf '    "review_operations": %d,\n' "$review_count"
+        printf '    "dangerous_operations": %d,\n' "$dangerous_count"
         printf '    "safe_bytes": %s,\n' "$safe_bytes"
         printf '    "review_bytes": %s,\n' "$review_bytes"
         printf '    "dangerous_bytes": %s\n' "$dangerous_bytes"
         printf '  },\n'
         printf '  "operations": [\n'
-        for (( i = 0; i < count; i++ )); do
+
+        for (( i=0; i<count; i++ )); do
+            local sep=","
+            (( i == count - 1 )) && sep=""
+
+            local json_path json_cmd json_desc json_rec
+            json_path="$(json_escape "${PLAN_OP_PATHS[$i]}")"
+            json_cmd="$(json_escape "${PLAN_OP_COMMANDS[$i]}")"
+            json_desc="$(json_escape "${PLAN_OP_DESCS[$i]}")"
+            json_rec="$(json_escape "${PLAN_OP_RECS[$i]}")"
+
             printf '    {\n'
-            printf '      "id": "%s",\n' "$(json_escape "${PLAN_OP_IDS[$i]}")"
-            printf '      "category": "%s",\n' "$(json_escape "${PLAN_OP_CATEGORIES[$i]}")"
-            printf '      "risk": "%s",\n' "$(json_escape "${PLAN_OP_RISKS[$i]}")"
-            printf '      "action": "%s",\n' "$(json_escape "${PLAN_OP_ACTIONS[$i]}")"
-            printf '      "path": "%s",\n' "$(json_escape "${PLAN_OP_PATHS[$i]}")"
-            printf '      "command": "%s",\n' "$(json_escape "${PLAN_OP_COMMANDS[$i]}")"
-            printf '      "estimated_bytes": %s,\n' "${PLAN_OP_BYTES[$i]}"
-            printf '      "size": %s,\n' "${PLAN_OP_BYTES[$i]}"
-            printf '      "description": "%s",\n' "$(json_escape "${PLAN_OP_DESCRIPTIONS[$i]}")"
-            printf '      "recommendation": "%s"\n' "$(json_escape "${PLAN_OP_RECOMMENDATIONS[$i]}")"
-            if (( i + 1 < count )); then
-                printf '    },\n'
-            else
-                printf '    }\n'
-            fi
+            printf '      "id": "%s",\n' "${PLAN_OP_IDS[$i]}"
+            printf '      "category": "%s",\n' "${PLAN_OP_CATEGORIES[$i]}"
+            printf '      "risk": "%s",\n' "${PLAN_OP_RISKS[$i]}"
+            printf '      "action": "%s",\n' "${PLAN_OP_ACTIONS[$i]}"
+            printf '      "path": "%s",\n' "$json_path"
+            printf '      "command": "%s",\n' "$json_cmd"
+            printf '      "estimated_bytes": %s,\n' "${PLAN_OP_BYTES[$i]:-0}"
+            printf '      "size": %s,\n' "${PLAN_OP_BYTES[$i]:-0}"
+            printf '      "description": "%s",\n' "$json_desc"
+            printf '      "recommendation": "%s"\n' "$json_rec"
+            printf '    }%s\n' "$sep"
         done
         printf '  ]\n'
         printf '}\n'
@@ -335,12 +344,12 @@ generate_plan_json() {
     cleanup_journal_event "plan_generated" "$output" "" 0 "ok" "operations=${count}" "plan"
     TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count ))
     if (( review_count > 0 )); then
-        USER_DECISION_ITEMS+=("Plan JSON: ${review_count} operacji REVIEW wymaga świadomej decyzji")
+        USER_DECISION_ITEMS+=("Plan JSON: ${review_count} REVIEW operations require conscious decision")
     fi
     if (( dangerous_count > 0 )); then
-        USER_DECISION_ITEMS+=("Plan JSON: ${dangerous_count} operacji DANGEROUS nigdy nie zostanie wykonanych automatycznie")
+        USER_DECISION_ITEMS+=("Plan JSON: ${dangerous_count} DANGEROUS operations will never execute automatically")
     fi
-    print_ok "Plan JSON zapisany: ${output}"
+    print_ok "Plan JSON saved: ${output}"
 }
 
 execute_plan_native_command() {
@@ -352,13 +361,12 @@ execute_plan_native_command() {
         return 0
     fi
 
-    # CN3: explicitly distinguish "tool unavailable" from "command failed"
     local _cmd_rc=0
     case "$command" in
         "npm cache clean --force")
             if ! command -v npm >/dev/null 2>&1; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: npm"
-                print_skip "npm niedostępny — pomijam: ${command}"
+                print_skip "npm unavailable — skipping: ${command}"
                 return 0
             fi
             npm cache clean --force || _cmd_rc=$?
@@ -366,7 +374,7 @@ execute_plan_native_command() {
         "yarn cache clean")
             if ! command -v yarn >/dev/null 2>&1; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: yarn"
-                print_skip "yarn niedostępny — pomijam: ${command}"
+                print_skip "yarn unavailable — skipping: ${command}"
                 return 0
             fi
             yarn cache clean || _cmd_rc=$?
@@ -374,7 +382,7 @@ execute_plan_native_command() {
         "pnpm store prune")
             if ! command -v pnpm >/dev/null 2>&1; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pnpm"
-                print_skip "pnpm niedostępny — pomijam: ${command}"
+                print_skip "pnpm unavailable — skipping: ${command}"
                 return 0
             fi
             pnpm store prune || _cmd_rc=$?
@@ -385,7 +393,7 @@ execute_plan_native_command() {
             [[ -z "$_pip_cmd" ]] && command -v pip >/dev/null 2>&1 && _pip_cmd="pip"
             if [[ -z "$_pip_cmd" ]]; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pip/pip3"
-                print_skip "pip/pip3 niedostępny — pomijam: ${command}"
+                print_skip "pip/pip3 unavailable — skipping: ${command}"
                 return 0
             fi
             $_pip_cmd cache purge || _cmd_rc=$?
@@ -393,7 +401,7 @@ execute_plan_native_command() {
         "brew cleanup --prune=all")
             if ! command -v brew >/dev/null 2>&1; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: brew"
-                print_skip "brew niedostępny — pomijam: ${command}"
+                print_skip "brew unavailable — skipping: ${command}"
                 return 0
             fi
             brew cleanup --prune=all || _cmd_rc=$?
@@ -401,7 +409,7 @@ execute_plan_native_command() {
         "gem cleanup")
             if ! command -v gem >/dev/null 2>&1; then
                 record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: gem"
-                print_skip "gem niedostępny — pomijam: ${command}"
+                print_skip "gem unavailable — skipping: ${command}"
                 return 0
             fi
             gem cleanup || _cmd_rc=$?
@@ -413,10 +421,10 @@ execute_plan_native_command() {
     esac
 
     if (( _cmd_rc == 0 )); then
-        print_cleaned "Wykonano komendę planu: ${command}"
+        print_cleaned "Executed plan command: ${command}"
         record_native_command_event "$command" "ok" "$bytes" "plan apply"
     else
-        print_warn "Komenda planu nie powiodła się: ${command}"
+        print_warn "Plan command failed: ${command}"
         record_native_command_event "$command" "failed" "$bytes" "plan apply failed"
     fi
     return "$_cmd_rc"
@@ -427,14 +435,14 @@ plan_require_review_confirmation() {
     local id="$2"
 
     if [[ "${NON_INTERACTIVE:-0}" == "1" ]]; then
-        print_skip "REVIEW z planu wymaga interakcji: ${id}"
+        print_skip "Plan REVIEW requires interaction: ${id}"
         return 1
     fi
 
     if [[ "${REQUIRE_TYPING_PATH:-0}" == "1" && -n "$path" ]]; then
         local typed
         echo
-        echo "  REVIEW: aby wykonać ${id}, wpisz dokładną ścieżkę:"
+        echo "  REVIEW: to execute ${id}, type exact path:"
         echo "  ${path}"
         echo -n "  > "
         read -r typed
@@ -442,7 +450,7 @@ plan_require_review_confirmation() {
         return 0
     fi
 
-    ask_yes_no "Wykonać operację REVIEW z planu: ${id}?" "no"
+    ask_yes_no "Execute plan REVIEW operation: ${id}?" "no"
 }
 
 verify_plan_file_checksum() {
@@ -455,7 +463,7 @@ chk = data.get("checksum", "")
 if not chk:
     sys.exit(0)
 summary = data.get("summary", {})
-ops = summary.get("operations", 0)
+ops = summary.get("total_operations", summary.get("operations", 0))
 safe = summary.get("safe_operations", 0)
 rev = summary.get("review_operations", 0)
 dang = summary.get("dangerous_operations", 0)
@@ -467,11 +475,11 @@ if chk != expected:
 
 apply_plan_file() {
     local plan_file="$1"
-    [[ -f "$plan_file" ]] || { print_error "Nie znaleziono planu: ${plan_file}"; return 2; }
-    command -v python3 >/dev/null 2>&1 || { print_error "apply --from-plan wymaga python3 do bezpiecznego parsowania JSON."; return 2; }
+    [[ -f "$plan_file" ]] || { print_error "Plan file not found: ${plan_file}"; return 2; }
+    command -v python3 >/dev/null 2>&1 || { print_error "apply --from-plan requires python3 for safe JSON parsing."; return 2; }
 
     if ! verify_plan_file_checksum "$plan_file"; then
-        print_error "Weryfikacja sumy kontrolnej planu nie powiodła się: ${plan_file}"
+        print_error "Plan checksum verification failed: ${plan_file}"
         cleanup_journal_event "plan_apply_blocked" "$plan_file" "" 0 "blocked" "checksum mismatch" "plan"
         return 2
     fi
@@ -488,13 +496,13 @@ apply_plan_file() {
 
         case "$risk" in
             DANGEROUS)
-                print_skip "Plan ${id}: DANGEROUS nigdy nie jest wykonywane."
+                print_skip "Plan ${id}: DANGEROUS operations are never executed."
                 cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "dangerous blocked" "$category"
                 continue
                 ;;
             REVIEW)
                 if [[ "${INCLUDE_REVIEW:-0}" != "1" ]]; then
-                    print_skip "Plan ${id}: REVIEW pominięte (dodaj --include-review po świadomej recenzji)."
+                    print_skip "Plan ${id}: REVIEW skipped (add --include-review after conscious review)."
                     cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "review not included" "$category"
                     continue
                 fi
@@ -507,7 +515,7 @@ apply_plan_file() {
                 :
                 ;;
             *)
-                print_skip "Plan ${id}: nieznane ryzyko '${risk}', pomijam."
+                print_skip "Plan ${id}: unknown risk '${risk}', skipping."
                 continue
                 ;;
         esac
@@ -515,7 +523,6 @@ apply_plan_file() {
         case "$action" in
             remove_path)
                 if [[ -n "$path" ]]; then
-                    # SF1: defense-in-depth — re-validate risk at apply time
                     local explicit_risk current_rank plan_rank
                     explicit_risk="$(policy_explicit_risk_for_path "$path" 2>/dev/null || true)"
                     if [[ -n "$explicit_risk" ]]; then
@@ -527,7 +534,7 @@ apply_plan_file() {
                     fi
 
                     if (( current_rank > plan_rank )) || is_protected_path "$path"; then
-                        print_warn "Plan ${id}: ryzyko wzrosło (${risk}→${explicit_risk:-protected}) lub ścieżka chroniona — pomijam."
+                        print_warn "Plan ${id}: risk escalated (${risk}->${explicit_risk:-protected}) or path protected — skipping."
                         cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "risk escalated since plan: ${risk}->${explicit_risk:-protected}" "$category"
                         continue
                     fi
@@ -538,10 +545,10 @@ apply_plan_file() {
                 execute_plan_native_command "$command" "$bytes" || true
                 ;;
             report_only)
-                print_skip "Plan ${id}: report_only nie wykonuje zmian."
+                print_skip "Plan ${id}: report_only does not apply changes."
                 ;;
             *)
-                print_skip "Plan ${id}: nieznana akcja '${action}'."
+                print_skip "Plan ${id}: unknown action '${action}'."
                 cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "unknown action" "$category"
                 ;;
         esac
