@@ -1158,7 +1158,14 @@ safe_remove() {
     local dry="${DRY_RUN:-0}"
     local normalized_target
 
-    normalized_target="$(normalize_path "$target" || echo "$target")"
+    normalized_target="$(normalize_path "$target")" || normalized_target=""
+    if [[ -z "$normalized_target" ]]; then
+        print_error "safe_remove: path normalization failed for: ${target}"
+        log_error "safe_remove: normalize_path returned empty for: ${target}"
+        record_skipped_item "Normalization failed (fail-closed): ${target}"
+        cleanup_journal_event "normalization_failed" "$target" "" "0" "blocked" "fail-closed (P1-11)"
+        return 1
+    fi
 
     if is_quarantine_path "$normalized_target"; then
         print_skip "Skipping cleanup quarantine path: ${normalized_target}"

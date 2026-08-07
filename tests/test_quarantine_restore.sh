@@ -383,7 +383,7 @@ mkdir -p "$HOME/Library/Caches/allowed-child"
 for protected_root in "$HOME" "$HOME/Library" "$HOME/Library/Caches"; do
     PROTECTED_OUTPUT="${CASE_DIR}/protected_${protected_root##*/}.out"
     RC="$(run_safe_remove_capture_rc "$protected_root" "$PROTECTED_OUTPUT")"
-    assert_eq "$RC" "99" "safe_remove should abort on protected root: ${protected_root}"
+    assert_eq "$RC" "1" "safe_remove should block protected root (P1-12): ${protected_root}"
     assert_file_exists "$protected_root" "protected root should remain present: ${protected_root}"
 done
 

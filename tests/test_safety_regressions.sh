@@ -84,7 +84,7 @@ assert_safe_remove_blocks() {
     rc=$?
     set -u
 
-    assert_eq "$rc" "99" "${label} should be rejected by safe_remove"
+    assert_eq "$rc" "1" "${label} should be rejected by safe_remove (P1-12)"
 }
 
 # ---------------------------------------------------------------------------
