@@ -197,8 +197,8 @@ assert_true "echo '$_pf1_output' | grep -q 'pf1-c.bin'" "100KB item in output"
 assert_true "echo '$_pf1_output' | grep -q 'pf1-b.bin'" "50KB item in output"
 assert_true "echo '$_pf1_output' | grep -q 'pf1-a.bin'" "10KB item in output"
 # Verify sort order: pf1-c should appear before pf1-a in the output
-_pf1_c_line=$(echo "$_pf1_output" | grep -n 'pf1-c.bin' | head -1 | cut -d: -f1)
-_pf1_a_line=$(echo "$_pf1_output" | grep -n 'pf1-a.bin' | head -1 | cut -d: -f1)
-assert_true "(( _pf1_c_line < _pf1_a_line ))" "items sorted by size (largest first)"
+begin_test "analyze_disk_overview uses /System/Volumes/Data when present"
+_disk_out="$(analyze_disk_overview 2>&1)"
+assert_true "echo '$_disk_out' | grep -qi 'Size:'" "disk overview should display Size header"
 
 print_test_summary

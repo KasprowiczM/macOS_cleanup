@@ -289,9 +289,12 @@ _is_full_scan() {
 analyze_disk_overview() {
     print_section "$(t "disk_overview")"
 
+    local target_vol="/"
+    [[ -d "/System/Volumes/Data" ]] && target_vol="/System/Volumes/Data"
+
     # --- Basic disk usage ---
     echo -e "  ${C_BOLD}$(t "disk_volumes_header")${C_RESET}"
-    df -h / 2>/dev/null | awk 'NR==1{next} {
+    df -h "$target_vol" 2>/dev/null | awk 'NR==1{next} {
         printf "    Size: %s  |  Used: %s  |  Free: %s  (%s)\n", $2, $3, $4, $5
     }' || true
     echo
@@ -299,7 +302,7 @@ analyze_disk_overview() {
     # --- APFS Free & Purgeable space ---
     if command -v diskutil &>/dev/null; then
         local diskinfo=""
-        diskinfo=$(diskutil info / 2>/dev/null) || diskinfo=""
+        diskinfo=$(diskutil info "$target_vol" 2>/dev/null) || diskinfo=""
 
         local free_space=""
         free_space=$(printf '%s\n' "$diskinfo" | \
@@ -1246,8 +1249,10 @@ analyze_time_machine() {
 
     # Show purgeable space
     if command -v diskutil &>/dev/null; then
+        local target_vol="/"
+        [[ -d "/System/Volumes/Data" ]] && target_vol="/System/Volumes/Data"
         local purgeable=""
-        purgeable=$(diskutil info / 2>/dev/null | grep -i "Purgeable" | \
+        purgeable=$(diskutil info "$target_vol" 2>/dev/null | grep -i "Purgeable" | \
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || purgeable=""
         if [[ -n "$purgeable" ]]; then
