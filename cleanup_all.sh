@@ -83,6 +83,7 @@ SCRIPT_SELF="${BASH_SOURCE[0]}"
 # ---------------------------------------------------------------------------
 source "${SCRIPT_DIR}/config/defaults.sh"
 source "${SCRIPT_DIR}/lib/common.sh"
+source "${SCRIPT_DIR}/lib/pathguard.sh"
 source "${SCRIPT_DIR}/lib/policy.sh"
 source "${SCRIPT_DIR}/lib/interactive.sh"
 source "${SCRIPT_DIR}/lib/analyzer.sh"
