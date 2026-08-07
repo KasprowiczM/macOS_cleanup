@@ -355,6 +355,8 @@ RC="$(run_cmd_capture "$LIST_OUTPUT" env \
     bash "$SCRIPT_PATH" --list-quarantine --non-interactive --no-color)"
 assert_eq "$RC" "0" "cleanup_all --list-quarantine should exit 0"
 assert_true "grep -q \"$RUN_TIMESTAMP\" \"$LIST_OUTPUT\"" "list output should include run id"
+assert_true "grep -q \"Quarantine List — listing entries\" \"$LIST_OUTPUT\"" "list output should show Quarantine List mode in summary"
+assert_false "grep -q \"Freed directly\" \"$LIST_OUTPUT\"" "list output should not claim Freed directly in summary"
 assert_file_exists "$list_payload" "list should not mutate quarantine"
 
 # ---------------------------------------------------------------------------
