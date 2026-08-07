@@ -52,6 +52,7 @@ emit_json_summary() {
         printf '  "counters": {\n'
         printf '    "would_free_bytes": %s,\n'      "${TOTAL_WOULD_FREE_BYTES:-0}"
         printf '    "cleaned_bytes": %s,\n'         "${TOTAL_CLEANED_BYTES:-0}"
+        printf '    "informational_bytes": %s,\n'   "${TOTAL_INFORMATIONAL_BYTES:-0}"
         printf '    "quarantined_bytes": %s,\n'     "${TOTAL_QUARANTINED_BYTES:-0}"
         printf '    "quarantined_items": %s,\n'     "${TOTAL_QUARANTINED_ITEMS:-0}"
         printf '    "restored_bytes": %s,\n'        "${TOTAL_RESTORED_BYTES:-0}"

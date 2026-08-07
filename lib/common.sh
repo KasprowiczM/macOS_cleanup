@@ -359,6 +359,60 @@ add_never_touch_path() {
     NEVER_TOUCH_PATHS+=("$normalized")
 }
 
+# ---------------------------------------------------------------------------
+# Claimed path registry — prevents double-counting across categories
+# ---------------------------------------------------------------------------
+_CLAIMED_PATHS=()
+_CLAIMED_BYTES=()
+
+claim_path() {
+    local target="$1"
+    local bytes="${2:-0}"
+    local norm
+    norm="$(normalize_path "$target" 2>/dev/null || echo "$target")"
+    [[ -z "$norm" ]] && return 1
+
+    if is_path_claimed "$norm"; then
+        return 1
+    fi
+
+    _CLAIMED_PATHS+=("$norm")
+    _CLAIMED_BYTES+=("$bytes")
+    return 0
+}
+
+is_path_claimed() {
+    local target="$1"
+    local norm
+    norm="$(normalize_path "$target" 2>/dev/null || echo "$target")"
+    [[ -z "$norm" ]] && return 1
+
+    if (( ${#_CLAIMED_PATHS[@]} == 0 )); then
+        return 1
+    fi
+
+    local p
+    for p in "${_CLAIMED_PATHS[@]}"; do
+        if [[ "$p" == "$norm" || "$norm" == "$p"/* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+reset_claimed_paths() {
+    _CLAIMED_PATHS=()
+    _CLAIMED_BYTES=()
+}
+
+add_informational_bytes() {
+    local bytes="${1:-0}"
+    case "$bytes" in
+        ''|*[!0-9]*) bytes=0 ;;
+    esac
+    TOTAL_INFORMATIONAL_BYTES=$(( TOTAL_INFORMATIONAL_BYTES + bytes ))
+}
+
 # Parse cleanup_rules.yaml and append all paths with safety: never.
 load_never_paths_from_rules() {
     local rules_file="${RULES_FILE:-}"

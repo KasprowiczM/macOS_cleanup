@@ -43,6 +43,11 @@ readonly QUARANTINE_RUN_DIR="${QUARANTINE_RUN_DIR:-${QUARANTINE_ROOT}/${RUN_TIME
 DEFAULT_MODE="dry-run"
 REMOVE_MODE="${REMOVE_MODE:-quarantine}"  # quarantine | permanent
 
+# Global accounting totals (bytes)
+TOTAL_WOULD_FREE_BYTES=0
+TOTAL_FREED_BYTES=0
+TOTAL_INFORMATIONAL_BYTES=0
+
 # Interactive control (safe defaults: no destructive prompts in automation context)
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"
 AUTO_YES="${AUTO_YES:-0}"
