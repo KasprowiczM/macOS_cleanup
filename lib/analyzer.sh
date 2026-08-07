@@ -317,11 +317,33 @@ analyze_disk_overview() {
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || free_space=""
 
+        # Purgeable: macOS <= 12 exposes a "Purgeable" field in `diskutil info`.
+        # macOS 13+ (verified absent on 26.6.1) removed it, so fall back to
+        # deriving it: APFS container free space counts snapshot-retained
+        # bytes, df's available figure does not. The difference is what macOS
+        # can reclaim on demand.
         local purgeable_space=""
         purgeable_space=$(printf '%s\n' "$diskinfo" | \
             grep -i "Purgeable" | \
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || purgeable_space=""
+
+        if [[ -z "$purgeable_space" ]]; then
+            local container_bytes="" avail_bytes="" delta=0
+            # diskutil prints byte counts with thousands separators, e.g.
+            # "(53,500,000,000 Bytes)" — strip them before extracting.
+            container_bytes=$(printf '%s\n' "$diskinfo" | \
+                grep -i "Container Free Space" | head -1 | tr -d ',' | \
+                sed -n 's/.*(\([0-9][0-9]*\) Bytes).*/\1/p') || container_bytes=""
+            avail_bytes=$(df -k "$target_vol" 2>/dev/null | awk 'NR==2{print $4*1024}') || avail_bytes=""
+            case "${container_bytes:-}" in ''|*[!0-9]*) container_bytes="" ;; esac
+            case "${avail_bytes:-}" in ''|*[!0-9]*) avail_bytes="" ;; esac
+            if [[ -n "$container_bytes" && -n "$avail_bytes" ]] && (( container_bytes > avail_bytes )); then
+                delta=$(( container_bytes - avail_bytes ))
+                # Only report a meaningful delta; small differences are noise.
+                (( delta > 1073741824 )) && purgeable_space="$(bytes_to_human "$delta")"
+            fi
+        fi
 
         echo -e "  ${C_BOLD}APFS Space:${C_RESET}"
         if [[ -n "$free_space" ]]; then
@@ -332,6 +354,22 @@ analyze_disk_overview() {
         if [[ -n "$purgeable_space" ]]; then
             echo -e "    ${C_YELLOW}Purgeable: ${purgeable_space}${C_RESET}"
             echo -e "    ${C_DIM}^ APFS will reclaim automatically: TM local snapshots, iCloud files${C_RESET}"
+        fi
+
+        # Snapshot-retention notice. This is the single most common source of
+        # "I cleaned and df did not change", so surface it whenever local
+        # snapshots exist — independently of whether a purgeable figure was
+        # obtainable on this macOS version.
+        if command -v tmutil >/dev/null 2>&1; then
+            local snap_count=0
+            snap_count=$(tmutil listlocalsnapshots / 2>/dev/null | grep -c "com.apple.TimeMachine") || snap_count=0
+            case "${snap_count:-}" in ''|*[!0-9]*) snap_count=0 ;; esac
+            if (( snap_count > 0 )); then
+                echo -e "    ${C_DIM}${snap_count} local Time Machine snapshot(s) present.${C_RESET}"
+                echo -e "    ${C_DIM}Deleted files retained by a snapshot stay on disk until it${C_RESET}"
+                echo -e "    ${C_DIM}expires (usually within 24h, or sooner under disk pressure),${C_RESET}"
+                echo -e "    ${C_DIM}so free space may not change immediately after a cleanup.${C_RESET}"
+            fi
         fi
         echo
     fi
