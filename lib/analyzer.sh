@@ -856,13 +856,18 @@ analyze_dev_environment() {
     if command -v npm &>/dev/null; then
         local npm_cache_dir
         npm_cache_dir=$(npm config get cache 2>/dev/null || echo "$HOME/.npm")
-        if [[ -d "$npm_cache_dir" ]] && ! is_protected_path "$npm_cache_dir"; then
-            local npm_size
-            npm_size=$(path_size_bytes "$npm_cache_dir")
-            if (( npm_size > 0 )); then
-                FOUND_DEV_ITEMS+=("npm_cache:$npm_cache_dir")
-                catbytes_set "npm" "$npm_size"
-                print_found "npm cache: $(bytes_to_human "$npm_size")  ${C_DIM}← $(bytes_to_human "$npm_size") do zwolnienia!${C_RESET}"
+        if [[ -d "$npm_cache_dir" ]]; then
+            if validate_cache_path "$npm_cache_dir"; then
+                local npm_size
+                npm_size=$(path_size_bytes "$npm_cache_dir")
+                if (( npm_size > 0 )); then
+                    FOUND_DEV_ITEMS+=("npm_cache:$npm_cache_dir")
+                    catbytes_set "npm" "$npm_size"
+                    print_found "npm cache: $(bytes_to_human "$npm_size")  ${C_DIM}← $(bytes_to_human "$npm_size") do zwolnienia!${C_RESET}"
+                fi
+            else
+                log_warn "Pathguard rejected candidate npm cache path provenance: $npm_cache_dir"
+                cleanup_journal_event "path_provenance_rejected" "$npm_cache_dir" "" "0" "blocked" "pathguard provenance validation failed"
             fi
         fi
     fi
@@ -871,13 +876,18 @@ analyze_dev_environment() {
     if command -v yarn &>/dev/null; then
         local yarn_cache
         yarn_cache=$(yarn cache dir 2>/dev/null || echo "")
-        if [[ -n "$yarn_cache" && -d "$yarn_cache" ]] && ! is_protected_path "$yarn_cache"; then
-            local yarn_size
-            yarn_size=$(path_size_bytes "$yarn_cache")
-            if (( yarn_size > 0 )); then
-                FOUND_DEV_ITEMS+=("yarn_cache:$yarn_cache")
-                catbytes_set "yarn" "$yarn_size"
-                print_found "yarn cache: $(bytes_to_human "$yarn_size")"
+        if [[ -n "$yarn_cache" && -d "$yarn_cache" ]]; then
+            if validate_cache_path "$yarn_cache"; then
+                local yarn_size
+                yarn_size=$(path_size_bytes "$yarn_cache")
+                if (( yarn_size > 0 )); then
+                    FOUND_DEV_ITEMS+=("yarn_cache:$yarn_cache")
+                    catbytes_set "yarn" "$yarn_size"
+                    print_found "yarn cache: $(bytes_to_human "$yarn_size")"
+                fi
+            else
+                log_warn "Pathguard rejected candidate yarn cache path provenance: $yarn_cache"
+                cleanup_journal_event "path_provenance_rejected" "$yarn_cache" "" "0" "blocked" "pathguard provenance validation failed"
             fi
         fi
     fi
@@ -886,13 +896,18 @@ analyze_dev_environment() {
     if command -v pnpm &>/dev/null; then
         local pnpm_cache
         pnpm_cache=$(pnpm store path 2>/dev/null || echo "")
-        if [[ -n "$pnpm_cache" && -d "$pnpm_cache" ]] && ! is_protected_path "$pnpm_cache"; then
-            local pnpm_size
-            pnpm_size=$(path_size_bytes "$pnpm_cache")
-            if (( pnpm_size > 0 )); then
-                FOUND_DEV_ITEMS+=("pnpm_cache:$pnpm_cache")
-                catbytes_set "pnpm" "$pnpm_size"
-                print_found "pnpm store: $(bytes_to_human "$pnpm_size")"
+        if [[ -n "$pnpm_cache" && -d "$pnpm_cache" ]]; then
+            if validate_cache_path "$pnpm_cache"; then
+                local pnpm_size
+                pnpm_size=$(path_size_bytes "$pnpm_cache")
+                if (( pnpm_size > 0 )); then
+                    FOUND_DEV_ITEMS+=("pnpm_cache:$pnpm_cache")
+                    catbytes_set "pnpm" "$pnpm_size"
+                    print_found "pnpm store: $(bytes_to_human "$pnpm_size")"
+                fi
+            else
+                log_warn "Pathguard rejected candidate pnpm cache path provenance: $pnpm_cache"
+                cleanup_journal_event "path_provenance_rejected" "$pnpm_cache" "" "0" "blocked" "pathguard provenance validation failed"
             fi
         fi
     fi
@@ -900,13 +915,18 @@ analyze_dev_environment() {
     # --- pip cache ---
     if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
         local pip_cache="$HOME/Library/Caches/pip"
-        if [[ -d "$pip_cache" ]] && ! is_protected_path "$pip_cache"; then
-            local pip_size
-            pip_size=$(path_size_bytes "$pip_cache")
-            if (( pip_size > 0 )); then
-                FOUND_DEV_ITEMS+=("pip_cache:$pip_cache")
-                catbytes_set "pip" "$pip_size"
-                print_found "pip cache: $(bytes_to_human "$pip_size")"
+        if [[ -d "$pip_cache" ]]; then
+            if validate_cache_path "$pip_cache"; then
+                local pip_size
+                pip_size=$(path_size_bytes "$pip_cache")
+                if (( pip_size > 0 )); then
+                    FOUND_DEV_ITEMS+=("pip_cache:$pip_cache")
+                    catbytes_set "pip" "$pip_size"
+                    print_found "pip cache: $(bytes_to_human "$pip_size")"
+                fi
+            else
+                log_warn "Pathguard rejected candidate pip cache path provenance: $pip_cache"
+                cleanup_journal_event "path_provenance_rejected" "$pip_cache" "" "0" "blocked" "pathguard provenance validation failed"
             fi
         fi
     fi
@@ -916,14 +936,19 @@ analyze_dev_environment() {
         local brew_cache
         local brew_cache_found=0
         brew_cache=$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")
-        if [[ -d "$brew_cache" ]] && ! is_protected_path "$brew_cache"; then
-            local brew_size
-            brew_size=$(path_size_bytes "$brew_cache")
-            if (( brew_size > 0 )); then
-                FOUND_DEV_ITEMS+=("brew_cache:$brew_cache")
-                brew_cache_found=1
-                catbytes_set "brew" "$brew_size"
-                print_found "Homebrew cache: $(bytes_to_human "$brew_size")"
+        if [[ -d "$brew_cache" ]]; then
+            if validate_cache_path "$brew_cache"; then
+                local brew_size
+                brew_size=$(path_size_bytes "$brew_cache")
+                if (( brew_size > 0 )); then
+                    FOUND_DEV_ITEMS+=("brew_cache:$brew_cache")
+                    brew_cache_found=1
+                    catbytes_set "brew" "$brew_size"
+                    print_found "Homebrew cache: $(bytes_to_human "$brew_size")"
+                fi
+            else
+                log_warn "Pathguard rejected candidate brew cache path provenance: $brew_cache"
+                cleanup_journal_event "path_provenance_rejected" "$brew_cache" "" "0" "blocked" "pathguard provenance validation failed"
             fi
         fi
         # Also check for outdated formula installations

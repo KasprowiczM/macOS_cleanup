@@ -3,7 +3,8 @@
 # tests/test_pathguard.sh — Unit tests for Path Provenance Engine [P0-2]
 #
 # Validates validate_cache_path() behavior against symlink traversal,
-# out-of-bounds paths, protected system/user targets, and valid cache roots.
+# out-of-bounds paths, protected system/user targets, hostile project overrides (.npmrc),
+# and valid cache roots.
 # Bash 3.2 compatible.
 # =============================================================================
 
@@ -29,7 +30,15 @@ source "${PROJ_DIR}/config/defaults.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/common.sh"
 # shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/policy.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/pathguard.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/interactive.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/analyzer.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/cleaner.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
 
@@ -96,5 +105,39 @@ assert_path_valid "$HOME/Library/Caches/symlink_valid_cache" "Symlink pointing w
 begin_test "Empty or invalid input arguments"
 assert_path_invalid "" "Empty string candidate"
 assert_path_invalid "relative/path/cache" "Relative path"
+
+begin_test "Hostile .npmrc / project directory override rejected"
+HOSTILE_PROJECT="$HOME/Projects/untrusted_app"
+mkdir -p "$HOSTILE_PROJECT/.git"
+touch "$HOSTILE_PROJECT/package.json"
+
+assert_path_invalid "$HOSTILE_PROJECT" "Hostile project directory configured as npm cache"
+
+# Test direct analyzer behavior with hostile path
+FOUND_DEV_ITEMS=()
+npm_cache_dir="$HOSTILE_PROJECT"
+if validate_cache_path "$npm_cache_dir"; then
+    FOUND_DEV_ITEMS+=("npm_cache:$npm_cache_dir")
+else
+    cleanup_journal_event "path_provenance_rejected" "$npm_cache_dir" "" "0" "blocked" "pathguard provenance validation failed"
+fi
+
+if [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]]; then
+    _pass
+else
+    _fail "Hostile project path MUST NOT be added to FOUND_DEV_ITEMS"
+fi
+
+if [[ -f "$CLEANUP_JOURNAL_FILE" ]] && grep -q "path_provenance_rejected" "$CLEANUP_JOURNAL_FILE"; then
+    _pass
+else
+    _fail "path_provenance_rejected event MUST be recorded in journal"
+fi
+
+if [[ -d "$HOSTILE_PROJECT" && -f "$HOSTILE_PROJECT/package.json" ]]; then
+    _pass
+else
+    _fail "Hostile project directory MUST survive on disk intact"
+fi
 
 print_test_summary

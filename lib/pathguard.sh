@@ -24,6 +24,32 @@ _get_path_owner_uid() {
     echo "-1"
 }
 
+# Helper: Check if path contains project or credential markers (hostile override check)
+_has_hostile_content_markers() {
+    local target="$1"
+    [[ -z "$target" ]] && return 1
+
+    local user_home="${HOME:-}"
+    if [[ -n "$user_home" ]]; then
+        # Cannot be $HOME itself or /Users
+        [[ "$target" == "$user_home" || "$target" == "/Users" ]] && return 0
+    fi
+
+    # Direct project/repo markers at depth 1
+    if [[ -e "$target/.git" || -e "$target/package.json" || -e "$target/Cargo.toml" || \
+          -e "$target/CMakeLists.txt" || -e "$target/go.mod" || -e "$target/pom.xml" || \
+          -e "$target/Makefile" || -e "$target/.ssh" || -e "$target/.gnupg" ]]; then
+        return 0
+    fi
+
+    # Check for Xcode project files at depth 1
+    if ls "$target"/*.xcodeproj "$target"/*.xcworkspace >/dev/null 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
 # Helper: Check if path is within authorized disposable roots
 _is_within_allowed_cache_root() {
     local norm="$1"
@@ -80,10 +106,11 @@ _is_within_allowed_cache_root() {
 # 1. Rejects empty or relative paths.
 # 2. Normalizes candidate path using normalize_path.
 # 3. Fails closed if is_protected_path returns true (0).
-# 4. Ensures path resides within allowed cache/log/disposable root.
-# 5. Inspects symlinks (both leaf and parent ancestors) to prevent symlink
+# 4. Rejects paths containing hostile project markers (.git, package.json, etc.).
+# 5. Ensures path resides within allowed cache/log/disposable root.
+# 6. Inspects symlinks (both leaf and parent ancestors) to prevent symlink
 #    traversal out of allowed boundaries into protected user data or system paths.
-# 6. Checks file ownership (must match current UID or root).
+# 7. Checks file ownership (must match current UID or root).
 #
 # Returns 0 if safe to clean, 1 if invalid/protected/dangerous.
 # =============================================================================
@@ -100,19 +127,21 @@ validate_cache_path() {
     norm_path="$(normalize_path "$raw_path" 2>/dev/null || echo "$raw_path")"
 
     # 3. Protected path check (FAIL CLOSED)
-    if is_protected_path "$norm_path"; then
-        return 1
-    fi
-    if is_protected_path "$raw_path"; then
+    if is_protected_path "$norm_path" || is_protected_path "$raw_path"; then
         return 1
     fi
 
-    # 4. Allowed cache root check
+    # 4. Hostile content / project marker check
+    if _has_hostile_content_markers "$norm_path" || _has_hostile_content_markers "$raw_path"; then
+        return 1
+    fi
+
+    # 5. Allowed cache root check
     if ! _is_within_allowed_cache_root "$norm_path"; then
         return 1
     fi
 
-    # 5. Symlink & Traversal Check
+    # 6. Symlink & Traversal Check
     # If target is a symlink, check where it points
     if [[ -L "$raw_path" || -L "$norm_path" ]]; then
         local link_target
@@ -131,6 +160,10 @@ validate_cache_path() {
             if is_protected_path "$norm_target"; then
                 return 1
             fi
+            # Symlink target MUST NOT contain hostile project markers
+            if _has_hostile_content_markers "$norm_target"; then
+                return 1
+            fi
             # Symlink target MUST be within allowed cache root
             if ! _is_within_allowed_cache_root "$norm_target"; then
                 return 1
@@ -138,7 +171,7 @@ validate_cache_path() {
         fi
     fi
 
-    # 6. Owner check (if path exists)
+    # 7. Owner check (if path exists)
     if [[ -e "$raw_path" || -L "$raw_path" ]]; then
         local current_uid owner_uid
         current_uid="$(id -u 2>/dev/null || echo "501")"
