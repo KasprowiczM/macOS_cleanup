@@ -46,28 +46,37 @@ _on_error() {
 }
 
 _on_interrupt() {
-    log_warn "Interrupted by signal (SIGINT/SIGTERM), exiting cleanly."
-    print_warn "Przerwano działanie skryptu (sygnał INT/TERM)."
+    echo
+    print_warn "Script interrupted (signal INT/TERM)."
     exit 130
 }
 
 # Sourcing i18n dictionaries
-_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_PROJ_ROOT="$(cd "${_COMMON_DIR}/.." && pwd)"
-# shellcheck disable=SC1091
-if [[ -f "${_PROJ_ROOT}/i18n/pl.sh" ]]; then source "${_PROJ_ROOT}/i18n/pl.sh"; fi
-# shellcheck disable=SC1091
-if [[ -f "${_PROJ_ROOT}/i18n/en.sh" ]]; then source "${_PROJ_ROOT}/i18n/en.sh"; fi
+_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+_PROJ_ROOT="$(cd "${_COMMON_DIR}/.." && pwd -P)"
+if [[ -d "${_PROJ_ROOT}/i18n" ]]; then
+    for _lang_file in "${_PROJ_ROOT}/i18n/"*.sh; do
+        if [[ -f "$_lang_file" ]]; then
+            # shellcheck disable=SC1090
+            source "$_lang_file"
+        fi
+    done
+fi
 
 t() {
     local key="${1:-}"
     local lang="${LANG_CODE:-pl}"
+    local fn="i18n_get_${lang}"
     local val=""
-    if [[ "$lang" == "en" ]]; then
-        if val="$(i18n_get_en "$key" 2>/dev/null)"; then
+    if declare -f "$fn" >/dev/null 2>&1; then
+        if val="$("$fn" "$key" 2>/dev/null)"; then
             echo "$val"
             return 0
         fi
+    fi
+    if val="$(i18n_get_en "$key" 2>/dev/null)"; then
+        echo "$val"
+        return 0
     fi
     if val="$(i18n_get_pl "$key" 2>/dev/null)"; then
         echo "$val"
@@ -534,7 +543,7 @@ add_informational_bytes() {
 load_never_paths_from_rules() {
     local rules_file="${RULES_FILE:-}"
     [[ -z "$rules_file" ]] && return 0
-    [[ -f "$rules_file" ]] || { log_warn "Nie znaleziono pliku reguł: ${rules_file}"; return 0; }
+    [[ -f "$rules_file" ]] || { log_warn "Rules file not found: ${rules_file}"; return 0; }
 
     local line
     local candidate_path=""
@@ -805,15 +814,15 @@ warn_if_no_fresh_backup() {
         return 0
     fi
 
-    print_warning_box "Brak potwierdzonego świeżego backupu" \
-        "Nie udało się potwierdzić backupu Time Machine" \
-        "z ostatnich ${BACKUP_MAX_AGE_DAYS} dni." \
+    print_warning_box "No confirmed fresh backup" \
+        "Could not verify Time Machine backup" \
+        "from the last ${BACKUP_MAX_AGE_DAYS} days." \
         "" \
-        "Kontekst: ${context}" \
+        "Context: ${context}" \
         "" \
-        "Kontynuuję tylko po guardrailach; REVIEW/DANGEROUS" \
-        "nie są wykonywane automatycznie."
-    WARNINGS_LIST+=("Nie potwierdzono świeżego backupu Time Machine przed: ${context}")
+        "Proceeding only under guardrails; REVIEW/DANGEROUS" \
+        "are not executed automatically."
+    WARNINGS_LIST+=("No fresh Time Machine backup confirmed before: ${context}")
     cleanup_journal_event "backup_check" "" "" 0 "warning" "fresh Time Machine backup missing for ${context}" "safety"
     return 1
 }
@@ -992,13 +1001,13 @@ quarantine_remove() {
     dest="$(quarantine_destination_for "$target" 2>/dev/null || true)"
     if [[ -z "$dest" ]]; then
         print_warn "Quarantine is not configured; skipping: ${target}"
-        record_skipped_item "Kwarantanna nie jest skonfigurowana: ${target}"
+        record_skipped_item "Quarantine is not configured: ${target}"
         cleanup_journal_event "quarantine_failed" "$target" "" "$size" "failed" "quarantine not configured"
         return 1
     fi
     mkdir -p "$(dirname "$dest")" 2>/dev/null || {
         print_warn "Could not create quarantine directory for: ${target}"
-        record_skipped_item "Nie można utworzyć kwarantanny dla ${target}"
+        record_skipped_item "Cannot create quarantine directory for ${target}"
         cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mkdir failed"
         return 1
     }
@@ -1014,7 +1023,7 @@ quarantine_remove() {
 
     print_warn "Could not quarantine: ${target}"
     log_warn "mv to quarantine failed for: ${target}"
-    record_skipped_item "Nie udało się przenieść do kwarantanny: ${target}"
+    record_skipped_item "Failed to move to quarantine: ${target}"
     cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mv failed"
     return 1
 }
@@ -1042,7 +1051,7 @@ direct_remove() {
 
     print_warn "Could not remove: ${target}"
     log_warn "rm failed for: ${target}"
-    record_skipped_item "Nie udało się usunąć: ${target}"
+    record_skipped_item "Failed to remove: ${target}"
     cleanup_journal_event "${action}_failed" "$target" "" "$size" "failed" "rm failed"
     return 1
 }
@@ -1089,11 +1098,11 @@ restore_quarantine_manifest() {
 
     manifest="$(resolve_restore_manifest "$requested" 2>/dev/null || true)"
     if [[ -z "$manifest" ]]; then
-        print_error "Nie znaleziono manifestu restore: ${requested}"
+        print_error "Restore manifest not found: ${requested}"
         return 2
     fi
 
-    print_info "Odtwarzam kwarantannę z manifestu: ${manifest}"
+    print_info "Restoring quarantine from manifest: ${manifest}"
 
     local q_b64 p_b64 bytes source_path target_path source_norm target_norm
     local quarantine_root_norm actual_size
@@ -1105,7 +1114,7 @@ restore_quarantine_manifest() {
         source_path="$(base64_decode_string "$q_b64" || true)"
         target_path="$(base64_decode_string "$p_b64" || true)"
         [[ -z "$source_path" || -z "$target_path" ]] && {
-            record_skipped_item "Nieprawidłowy rekord restore w ${manifest}"
+            record_skipped_item "Invalid restore record in ${manifest}"
             continue
         }
 
@@ -1118,68 +1127,68 @@ restore_quarantine_manifest() {
                 :
                 ;;
             *)
-                print_warn "Pomijam źródło spoza katalogu items kwarantanny: ${source_norm}"
-                record_skipped_item "Źródło restore spoza items kwarantanny: ${source_norm}"
+                print_warn "Skipping source outside quarantine items directory: ${source_norm}"
+                record_skipped_item "Restore source outside quarantine items: ${source_norm}"
                 cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "source outside quarantine items"
                 continue
                 ;;
         esac
 
         if [[ "$source_norm" == "$quarantine_root_norm" ]]; then
-            print_warn "Pomijam niebezpieczne źródło restore: ${source_norm}"
-            record_skipped_item "Niebezpieczne źródło restore: ${source_norm}"
+            print_warn "Skipping dangerous restore source: ${source_norm}"
+            record_skipped_item "Dangerous restore source: ${source_norm}"
             cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "source is quarantine root"
             continue
         fi
 
         if ! path_is_within "$source_norm" "$QUARANTINE_ROOT"; then
-            print_warn "Pomijam źródło spoza kwarantanny: ${source_norm}"
-            record_skipped_item "Źródło restore poza kwarantanną: ${source_norm}"
+            print_warn "Skipping source outside quarantine: ${source_norm}"
+            record_skipped_item "Restore source outside quarantine: ${source_norm}"
             cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "source outside quarantine"
             continue
         fi
 
         if is_protected_path "$target_norm" || path_contains_protected_descendant "$target_norm"; then
-            print_warn "Pomijam odtworzenie do chronionej ścieżki: ${target_norm}"
-            record_skipped_item "Restore do chronionej ścieżki: ${target_norm}"
+            print_warn "Skipping restore to protected path: ${target_norm}"
+            record_skipped_item "Restore to protected path: ${target_norm}"
             cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "target protected"
             continue
         fi
 
         if ! is_user_space_path "$target_norm"; then
-            print_warn "Pomijam odtworzenie poza katalog użytkownika: ${target_norm}"
-            record_skipped_item "Restore poza HOME: ${target_norm}"
+            print_warn "Skipping restore outside user directory: ${target_norm}"
+            record_skipped_item "Restore outside HOME: ${target_norm}"
             cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "target outside user scope"
             continue
         fi
 
         if [[ ! -e "$source_norm" && ! -L "$source_norm" ]]; then
-            print_warn "Brak pliku w kwarantannie: ${source_norm}"
-            record_skipped_item "Brak pliku w kwarantannie: ${source_norm}"
+            print_warn "Quarantine file does not exist: ${source_norm}"
+            record_skipped_item "Quarantine file does not exist: ${source_norm}"
             cleanup_journal_event "restore_missing" "$target_norm" "$source_norm" "$bytes" "missing" "source missing"
             continue
         fi
 
         if [[ -e "$target_norm" || -L "$target_norm" ]]; then
-            print_warn "Ścieżka docelowa już istnieje, pomijam: ${target_norm}"
-            record_skipped_item "Konflikt restore: ${target_norm}"
+            print_warn "Target path already exists, skipping: ${target_norm}"
+            record_skipped_item "Restore conflict: ${target_norm}"
             cleanup_journal_event "restore_conflict" "$target_norm" "$source_norm" "$bytes" "conflict" "target exists"
             continue
         fi
 
         if path_has_symlink_ancestor_under_home "$target_norm"; then
-            print_warn "Pomijam restore przez symlinkowany katalog nadrzędny: ${target_norm}"
-            record_skipped_item "Restore przez symlinkowany katalog nadrzędny: ${target_norm}"
+            print_warn "Skipping restore through symlinked parent directory: ${target_norm}"
+            record_skipped_item "Restore through symlinked parent directory: ${target_norm}"
             cleanup_journal_event "restore_blocked" "$target_norm" "$source_norm" "$bytes" "blocked" "target has symlink ancestor"
             continue
         fi
 
-        mkdir -p "$(dirname "$target_norm")" 2>/dev/null || {
-            print_warn "Nie można utworzyć katalogu docelowego: $(dirname "$target_norm")"
-            record_skipped_item "Nie można utworzyć katalogu restore: ${target_norm}"
+        if ! mkdir -p "$(dirname "$target_norm")" 2>/dev/null; then
+            print_warn "Cannot create target directory: $(dirname "$target_norm")"
+            record_skipped_item "Cannot create directory for restore: ${target_norm}"
             cleanup_journal_event "restore_failed" "$target_norm" "$source_norm" "$bytes" "failed" "mkdir failed"
             continue
-        }
+        fi
 
         actual_size="$(path_size_bytes "$source_norm")"
         if mv "$source_norm" "$target_norm" 2>/dev/null; then
@@ -1188,8 +1197,8 @@ restore_quarantine_manifest() {
             print_cleaned "Restored: ${target_norm}  ($(bytes_to_human "$actual_size"))"
             cleanup_journal_event "restored" "$target_norm" "$source_norm" "$actual_size" "ok" ""
         else
-            print_warn "Nie udało się odtworzyć: ${target_norm}"
-            record_skipped_item "Nie udało się odtworzyć: ${target_norm}"
+            print_warn "Failed to restore: ${target_norm}"
+            record_skipped_item "Failed to restore: ${target_norm}"
             cleanup_journal_event "restore_failed" "$target_norm" "$source_norm" "$bytes" "failed" "mv failed"
         fi
     done < "$manifest"
@@ -1244,10 +1253,10 @@ list_quarantine_runs() {
     local count=0
     local dir size
 
-    print_info "Kwarantanna: ${QUARANTINE_ROOT}"
+    print_info "Quarantine: ${QUARANTINE_ROOT}"
 
     if [[ ! -d "$QUARANTINE_ROOT" ]]; then
-        print_skip "Brak katalogu kwarantanny."
+        print_skip "Quarantine directory does not exist."
         return 0
     fi
 
@@ -1259,7 +1268,7 @@ list_quarantine_runs() {
     done
 
     if (( count == 0 )); then
-        print_skip "Brak zapisanych runów kwarantanny."
+        print_skip "No saved quarantine runs."
     fi
 }
 
@@ -1270,8 +1279,8 @@ purge_one_quarantine_run() {
 
     normalized="$(normalize_path "$run_dir" || echo "$run_dir")"
     if ! is_quarantine_run_dir "$normalized"; then
-        print_warn "Pomijam nieprawidłowy katalog kwarantanny: ${run_dir}"
-        record_skipped_item "Nieprawidłowy purge kwarantanny: ${run_dir}"
+        print_warn "Skipping invalid quarantine directory: ${run_dir}"
+        record_skipped_item "Invalid quarantine purge: ${run_dir}"
         cleanup_journal_event "purge_blocked" "$normalized" "" 0 "blocked" "not an immediate quarantine run directory"
         return 1
     fi
@@ -1294,13 +1303,13 @@ purge_quarantine() {
     local run_dir failures=0
 
     if [[ -z "$requested" ]]; then
-        print_error "Brak selektora purge kwarantanny."
+        print_error "Missing quarantine purge selector."
         return 2
     fi
 
     if [[ "$requested" == "all" ]]; then
         if [[ ! -d "$QUARANTINE_ROOT" ]]; then
-            print_skip "Brak katalogu kwarantanny."
+            print_skip "Quarantine directory does not exist."
             return 0
         fi
         for run_dir in "${QUARANTINE_ROOT}"/*; do
@@ -1312,7 +1321,7 @@ purge_quarantine() {
 
     if [[ "$requested" == "expired" ]]; then
         if [[ ! -d "$QUARANTINE_ROOT" ]]; then
-            print_skip "Brak katalogu kwarantanny."
+            print_skip "Quarantine directory does not exist."
             return 0
         fi
         for run_dir in "${QUARANTINE_ROOT}"/*; do
@@ -1326,7 +1335,7 @@ purge_quarantine() {
 
     run_dir="$(resolve_quarantine_run_dir "$requested" 2>/dev/null || true)"
     if [[ -z "$run_dir" ]]; then
-        print_error "Nie znaleziono runu kwarantanny: ${requested}"
+        print_error "Quarantine run not found: ${requested}"
         return 2
     fi
 
@@ -1353,7 +1362,7 @@ safe_remove() {
 
     if is_quarantine_path "$normalized_target"; then
         print_skip "Skipping cleanup quarantine path: ${normalized_target}"
-        record_skipped_item "Kwarantanna cleanup jest chroniona przed rekurencyjnym czyszczeniem: ${normalized_target}"
+        record_skipped_item "Quarantine cleanup is protected from recursive cleaning: ${normalized_target}"
         cleanup_journal_event "skipped_quarantine" "$normalized_target" "" 0 "skipped" "target is cleanup quarantine"
         return 0
     fi
@@ -1380,7 +1389,7 @@ safe_remove() {
             fi
 
             print_skip "Skipping non-user path in quarantine mode: ${normalized_target}"
-            record_skipped_item "Tryb kwarantanny nie usuwa ścieżek systemowych/poza HOME: ${normalized_target}"
+            record_skipped_item "Quarantine mode does not remove system/non-HOME paths: ${normalized_target}"
             cleanup_journal_event "skipped_non_user_scope" "$normalized_target" "" "$size" "skipped" "quarantine mode only supports user-scope paths"
             return
         fi
@@ -1488,10 +1497,10 @@ record_user_decision() {
 }
 
 record_skipped_item() {
-    local item="$1"
+    local item="${1:-}"
     local msg
-    msg="${item:-Nieokreślony element}"
+    msg="${item:-Unspecified item}"
     # keep a compact list in WARNINGS_LIST for auditability
-    WARNINGS_LIST+=("Pominięto: ${msg}")
+    WARNINGS_LIST+=("Skipped: ${msg}")
     inc_skipped_items
 }

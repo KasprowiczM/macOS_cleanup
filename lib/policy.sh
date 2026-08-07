@@ -245,39 +245,39 @@ app_cache_description() {
 
     case "$label" in
         Slack*)
-            echo "Slack/Electron cache: miniatury, skompilowany JavaScript i GPU cache. Nie zawiera historii rozmów ani workspace settings." ;;
+            t "app_cache_desc_slack" ;;
         "VS Code (Cache)"|"VS Code (Code Cache)"|"VS Code (CachedData)")
-            echo "VS Code cache: odtwarzalne dane UI, extension host i skompilowany kod JS. Nie usuwa projektów, ustawień ani rozszerzeń." ;;
+            t "app_cache_desc_vscode" ;;
         "VS Code (CachedExtensionVSIXs)")
-            echo "VS Code CachedExtensionVSIXs: lokalne kopie paczek rozszerzeń. Usunięcie może wymusić ponowne pobranie rozszerzeń przy update/reinstall." ;;
+            t "app_cache_desc_vscode_vsix" ;;
         Cursor*)
-            echo "Cursor cache: odtwarzalne cache aplikacji opartej o VS Code/Electron. Nie usuwa projektów ani ustawień edytora." ;;
+            t "app_cache_desc_cursor" ;;
         "Figma (Cache)")
-            echo "Figma cache: lokalne cache plików i zasobów UI. Zwykle odtwarzalne, ale może spowolnić ponowne otwieranie dużych projektów offline." ;;
+            t "app_cache_desc_figma" ;;
         "JetBrains IDEs (Cache)")
-            echo "JetBrains cache: indeksy, symbole i cache IDE. Projekty nie znikną, ale IDE może długo odbudowywać indeksy." ;;
+            t "app_cache_desc_jetbrains" ;;
         "JetBrains IDEs (Logs)")
-            echo "JetBrains logs: stare logi diagnostyczne IDE. Usuń tylko jeśli nie diagnozujesz problemów z IDE/pluginami." ;;
+            t "app_cache_desc_jetbrains_logs" ;;
         "Adobe (Cache)")
-            echo "Adobe cache: cache aplikacji Adobe. Zwykle odtwarzalne, ale pierwsze uruchomienie lub otwarcie projektów może być wolniejsze." ;;
+            t "app_cache_desc_adobe" ;;
         "Adobe Media Cache Files"|"Adobe Media Cache")
-            echo "Adobe Media Cache: podglądy, conform audio/video i media cache. Usunięcie nie usuwa źródłowych projektów, ale Premiere/After Effects może długo odbudowywać cache." ;;
+            t "app_cache_desc_adobe_media" ;;
         "Microsoft Teams"*)
-            echo "Teams cache: cache Electron, web assets i skompilowany JS. Nie usuwa czatów z chmury ani konta." ;;
+            t "app_cache_desc_teams" ;;
         "Spotify (Cache)")
-            echo "Spotify cache: streaming cache muzyki/podcastów. Aplikacja pobierze dane ponownie; ustawienia i konto zostają." ;;
+            t "app_cache_desc_spotify" ;;
         "Spotify (PersistentCache)")
-            echo "Spotify PersistentCache: większy cache offline/streaming. Review zalecany, bo może wpływać na lokalnie pobrane dane i ponowne pobieranie." ;;
+            t "app_cache_desc_spotify_persistent" ;;
         Discord*)
-            echo "Discord cache: odtwarzalne web assets, obrazy i skompilowany JS. Nie usuwa konta ani historii z serwera." ;;
+            t "app_cache_desc_discord" ;;
         "Zoom (Cache)")
-            echo "Zoom cache: tymczasowe cache klienta. Nie usuwa nagrań zapisanych w Documents/Zoom ani konfiguracji konta." ;;
+            t "app_cache_desc_zoom" ;;
         "Xcode (Cache)")
-            echo "Xcode cache: odtwarzalne cache narzędzi deweloperskich. Nie usuwa kodu źródłowego ani DerivedData." ;;
+            t "app_cache_desc_xcode" ;;
         "CleanMyMac (Cache)")
-            echo "CleanMyMac cache: odtwarzalne cache aplikacji. Nie usuwa ustawień ani licencji." ;;
+            t "app_cache_desc_cleanmymac" ;;
         *)
-            echo "Cache aplikacji: potencjalnie odtwarzalne dane pomocnicze. Przejrzyj ścieżkę i nazwę aplikacji przed usunięciem." ;;
+            t "app_cache_desc_default" ;;
     esac
 }
 
@@ -286,22 +286,22 @@ app_cache_recommendation() {
 
     case "$label" in
         "VS Code (CachedExtensionVSIXs)")
-            echo "REVIEW: usuń tylko jeśli akceptujesz ponowne pobieranie paczek rozszerzeń." ;;
+            t "app_cache_rec_vscode_vsix" ;;
         "Figma (Cache)")
-            echo "REVIEW: bezpieczne technicznie, ale sprawdź, czy nie polegasz na pracy offline w Figmie." ;;
+            t "app_cache_rec_figma" ;;
         "JetBrains IDEs (Cache)")
-            echo "REVIEW: usuń gdy masz czas na odbudowę indeksów; pierwszy start IDE/build może być wolniejszy." ;;
+            t "app_cache_rec_jetbrains" ;;
         "JetBrains IDEs (Logs)")
-            echo "REVIEW: zachowaj, jeśli diagnozujesz awarie IDE lub pluginów." ;;
+            t "app_cache_rec_jetbrains_logs" ;;
         "Adobe (Cache)"|"Adobe Media Cache Files"|"Adobe Media Cache")
-            echo "REVIEW: usuń, jeśli masz źródłowe media/projekty i akceptujesz ponowne generowanie podglądów." ;;
+            t "app_cache_rec_adobe" ;;
         "Spotify (PersistentCache)")
-            echo "REVIEW: usuń, jeśli akceptujesz ponowne pobieranie większych danych Spotify." ;;
+            t "app_cache_rec_spotify_persistent" ;;
         *)
             if app_cache_auto_safe "$label"; then
-                echo "SAFE: można usunąć przez auto-safe; aplikacja odtworzy cache bez utraty danych użytkownika."
+                t "app_cache_rec_default_safe"
             else
-                echo "REVIEW: skrypt pokaże tę pozycję w planie, ale nie usunie automatycznie."
+                t "app_cache_rec_default_review"
             fi
             ;;
     esac

@@ -2,6 +2,7 @@
 
 i18n_get_en() {
     case "${1:-}" in
+        # General & Banner
         banner_title) echo "macOS Cleanup — Professional System Cleaner" ;;
         mode_dry_run) echo "Mode: ANALYSIS (dry-run) — nothing will be deleted" ;;
         mode_plan) echo "Mode: PLAN (plan) — execution plan generated" ;;
@@ -13,7 +14,230 @@ i18n_get_en() {
         developer_env) echo "Developer Environment" ;;
         system_caches) echo "System Caches (/Library/Caches)" ;;
         trash) echo "Trash" ;;
+        header_phase1) echo "PHASE 1: System Analysis" ;;
+        header_phase2) echo "PHASE 2: Cleanup" ;;
         total_potential) echo "Total space that can be freed" ;;
+
+        # Explain categories
+        explain_title) echo "Cleanup Category Explanations (System Explanations)" ;;
+        user_caches_desc) echo "Application cache files in ~/Library/Caches." ;;
+        dev_caches_desc) echo "Cache for npm, pip, cargo, Homebrew, and unavailable iOS simulators." ;;
+        xcode_support_desc) echo "Debugging symbols older than 180 days for connected iOS devices." ;;
+        logs_desc) echo "System and application log files older than 30 days." ;;
+        system_caches_desc) echo "System cache in /Library/Caches (SIP protected)." ;;
+        docker_desc) echo "Cleanup unused containers, images, and volumes (system prune)." ;;
+
+        # Prompts & Interactive
+        prompt_yes_no_err) echo "Please type 'y' (yes) or 'n' (no)." ;;
+        ask_clean_category) echo "Do you want to clean this category?" ;;
+        skipped_category) echo "Skipped" ;;
+
+        # Consequences
+        consequence_safe_quarantine) echo "Files will be safely moved to quarantine. You can restore them with --restore. Space is not freed until --purge-quarantine." ;;
+        consequence_safe_permanent) echo "Files will be deleted. Applications will recreate them if needed. No recovery with this tool." ;;
+        consequence_review_quarantine) echo "Warning (REVIEW RISK): Files will be moved to quarantine. Some applications may require redownloading or reindexing." ;;
+        consequence_review_permanent) echo "Warning (REVIEW RISK): Files will be permanently deleted from disk without quarantine." ;;
+        consequence_dangerous_quarantine) echo "WARNING (DANGEROUS RISK): High risk of data damage. Quarantine requires an up-to-date backup." ;;
+        consequence_dangerous_permanent) echo "WARNING (DANGEROUS RISK): Irreversible deletion of critical system or user data." ;;
+        dangerous_blocked) echo "Not subject to automatic or interactive cleaning." ;;
+        auto_yes_blocked) echo "Automatic --yes does not approve risk" ;;
+        category_review_title) echo "Application caches requiring review (REVIEW)" ;;
+        category_review_what) echo "Application cache resources requiring informed consent (e.g., Adobe Media Cache, JetBrains, Figma)." ;;
+        category_review_safe_if) echo "Review the recommendations for individual applications above." ;;
+
+        # Cleaner specific prompts
+        clean_trash_what) echo "Files in the macOS Trash. These are items you previously deleted but have not emptied." ;;
+        clean_trash_safe_if) echo "Safe if you intentionally deleted these files and do not need to restore them." ;;
+        clean_user_cache_what) echo "Cache files created by applications in ~/Library/Caches. Used to speed up programs." ;;
+        clean_user_cache_safe_if) echo "Most cache is recreateable after approval in quarantine mode." ;;
+        clean_auto_safe_what) echo "Cache for known applications from the auto-safe allowlist (Slack, VS Code, Discord, Zoom, Spotify...)." ;;
+        clean_auto_safe_safe_if) echo "Applications will automatically recreate these files on restart." ;;
+        system_cache_notice_1) echo "System caches are reported but not removed by this script." ;;
+        system_cache_notice_2) echo "macOS manages these files automatically." ;;
+        clean_logs_what) echo "System and application log files older than 30 days." ;;
+        clean_logs_safe_if) echo "Safe if you are not actively troubleshooting older system issues." ;;
+        clean_crash_logs_what) echo "Files .crash, .spin, .hang generated when applications freeze or crash." ;;
+        clean_crash_logs_safe_if) echo "Safe if you are not currently diagnosing application issues." ;;
+        clean_tmp_what) echo "Temporary files in /tmp and /private/tmp." ;;
+        clean_tmp_safe_if) echo "macOS cleans /tmp on every restart." ;;
+        app_leftovers_box_title) echo "Application Leftovers" ;;
+        app_leftovers_box_1) echo "The following items look like data from UNINSTALLED applications" ;;
+        app_leftovers_box_2) echo "ALWAYS manually check the list before confirming!" ;;
+        app_leftovers_box_3) echo "A false alarm could delete data from a working application." ;;
+        app_leftovers_rec) echo "report-only; delete manually after verification" ;;
+        app_leftovers_skip) echo "App leftovers are now report-only. No automatic deletion." ;;
+        xcode_derived_what) echo "Compiled Xcode build artifacts. Created automatically on every build." ;;
+        xcode_support_box_title) echo "iOS DeviceSupport symbols" ;;
+        xcode_support_box_1) echo "These files contain debugging symbols for connected" ;;
+        xcode_support_box_2) echo "iOS/watchOS devices. Xcode will redownload them when" ;;
+        xcode_support_box_3) echo "you connect a device with that OS version." ;;
+        xcode_support_box_4) echo "Safe to remove if: you are not debugging devices" ;;
+        xcode_support_box_5) echo "with these iOS/watchOS versions, or you have internet access." ;;
+        xcode_support_what) echo "Debugging symbols for iOS/watchOS/tvOS. Downloaded when connecting a device." ;;
+        xcode_support_safe_if) echo "Safe if you have internet access and do not need to debug immediately on an old device." ;;
+        simulators_box_1) echo "Xcode keeps multiple versions of simulators." ;;
+        simulators_box_2) echo "(removes only unavailable simulators, not all)." ;;
+        simulators_what) echo "Unavailable iOS, watchOS, tvOS simulator devices." ;;
+        simulators_safe_if) echo "Safe if: you have internet access and can wait for redownloading." ;;
+        simulators_success) echo "Removed unavailable simulators." ;;
+        simulators_simctl_err) echo "Failed to execute xcrun simctl." ;;
+        simulators_xcrun_err) echo "xcrun unavailable — Xcode not installed?" ;;
+        archives_rec) echo "review-only; remove manually only if you do not need distribution archives" ;;
+        maven_rec) echo "review-only; may contain locally built artifacts unavailable online" ;;
+        android_avd_rec) echo "review-only; remove from Android Studio Device Manager after checking state" ;;
+        cleaning_cmd) echo "Cleaning" ;;
+        package_managers_title) echo "Package manager caches (npm, brew, pip, etc.)" ;;
+        package_managers_safe_if) echo "Safe if you have internet access. Packages will be redownloaded when needed." ;;
+        pnpm_store_trimmed) echo "pnpm store trimmed." ;;
+        time_machine_title) echo "Local Time Machine Snapshots" ;;
+        time_machine_box_1) echo "This data consists of local backup snapshots of your system." ;;
+        time_machine_box_2) echo "They may be needed to recover files you deleted" ;;
+        time_machine_box_3) echo "or modified BEFORE the last external backup." ;;
+        time_machine_box_4) echo "NOTE: Snapshots are permanently deleted (not subject to quarantine)." ;;
+        time_machine_box_5) echo "Size" ;;
+        time_machine_box_6) echo "IMPORTANT: macOS deletes snapshots automatically when" ;;
+        time_machine_box_7) echo "disk space is low (APFS purge mechanism)." ;;
+        time_machine_found) echo "Snapshots found" ;;
+        time_machine_interactive_req) echo "Time Machine snapshots require interactive confirmation." ;;
+        time_machine_prompt) echo "Do you confirm you have an up-to-date external backup and want to delete local snapshots?" ;;
+        ios_backups_title) echo "Local iOS/iPadOS/watchOS Backups" ;;
+        ios_backups_box_1) echo "These are backups of your iPhone / iPad / Apple Watch." ;;
+        ios_backups_box_2) echo "Once deleted, you cannot restore device contents" ;;
+        ios_backups_box_3) echo "without a new backup (iTunes/Finder or iCloud)." ;;
+        ios_backups_box_4) echo "Safe ONLY if you have an iCloud backup OR" ;;
+        ios_backups_box_5) echo "you just backed up in Finder and do not need to restore devices from this computer." ;;
+        ios_backups_found) echo "Backups found" ;;
+        ios_backups_interactive_req) echo "iOS backups require interactive confirmation." ;;
+        ios_backups_prompt) echo "I understand the risk and want to delete selected iOS backups?" ;;
+        dryrun_summary_title) echo "Analysis" ;;
+        dryrun_summary_total) echo "Total to free" ;;
+        proceed_interactive_title) echo "Analysis complete. Ready for cleanup?" ;;
+        proceed_interactive_found) echo "Script found to free" ;;
+        proceed_interactive_note_1) echo "If you answer 'yes', we will go through each category" ;;
+        proceed_interactive_note_2) echo "separately — you will see warnings and can decide." ;;
+        proceed_interactive_note_3) echo "Default response is always NO — safely press Enter." ;;
+        proceed_interactive_prompt) echo "Do you want to proceed to interactive cleanup now?" ;;
+
+        # App cache descriptions & recommendations
+        app_cache_desc_slack) echo "Slack/Electron cache: thumbnails, compiled JavaScript, and GPU cache. Does not include chat history or workspace settings." ;;
+        app_cache_desc_vscode) echo "VS Code cache: recreateable UI data, extension host, and compiled JS. Does not delete projects, settings, or extensions." ;;
+        app_cache_desc_vscode_vsix) echo "VS Code CachedExtensionVSIXs: local copies of extension packages. Removal may force redownloading extensions on update/reinstall." ;;
+        app_cache_desc_cursor) echo "Cursor cache: recreateable cache of VS Code/Electron app. Does not delete projects or editor settings." ;;
+        app_cache_desc_figma) echo "Figma cache: local file and UI asset cache. Usually recreateable, but may slow down reopening large offline projects." ;;
+        app_cache_desc_jetbrains) echo "JetBrains cache: IDE indexes, symbols, and caches. Projects remain safe, but IDE may take time to rebuild indexes." ;;
+        app_cache_desc_jetbrains_logs) echo "JetBrains logs: old IDE diagnostic logs. Delete only if not troubleshooting IDE/plugin issues." ;;
+        app_cache_desc_adobe) echo "Adobe cache: Adobe application caches. Usually recreateable, but initial launch or opening projects may be slower." ;;
+        app_cache_desc_adobe_media) echo "Adobe Media Cache: previews, conform audio/video, and media cache. Does not delete source projects, but Premiere/After Effects may take time to rebuild cache." ;;
+        app_cache_desc_teams) echo "Teams cache: Electron cache, web assets, and compiled JS. Does not delete cloud chats or account." ;;
+        app_cache_desc_spotify) echo "Spotify cache: streaming music/podcast cache. App will redownload data; settings and account remain." ;;
+        app_cache_desc_spotify_persistent) echo "Spotify PersistentCache: larger offline/streaming cache. Review recommended as it may affect downloaded data." ;;
+        app_cache_desc_discord) echo "Discord cache: recreateable web assets, images, and compiled JS. Does not delete account or server history." ;;
+        app_cache_desc_zoom) echo "Zoom cache: temporary client cache. Does not delete recordings saved in Documents/Zoom or account config." ;;
+        app_cache_desc_xcode) echo "Xcode cache: recreateable developer tool caches. Does not delete source code or DerivedData." ;;
+        app_cache_desc_cleanmymac) echo "CleanMyMac cache: recreateable app caches. Does not delete settings or licenses." ;;
+        app_cache_desc_default) echo "Application cache: potentially recreateable auxiliary data. Review path and app name before deleting." ;;
+
+        app_cache_rec_vscode_vsix) echo "REVIEW: delete only if you accept redownloading extension packages." ;;
+        app_cache_rec_figma) echo "REVIEW: technically safe, but check if you rely on offline work in Figma." ;;
+        app_cache_rec_jetbrains) echo "REVIEW: delete when you have time to rebuild indexes; first IDE start/build may be slower." ;;
+        app_cache_rec_jetbrains_logs) echo "REVIEW: keep if troubleshooting IDE or plugin crashes." ;;
+        app_cache_rec_adobe) echo "REVIEW: delete if you have source media/projects and accept regenerating previews." ;;
+        app_cache_rec_spotify_persistent) echo "REVIEW: delete if you accept redownloading larger Spotify data." ;;
+        app_cache_rec_default_safe) echo "SAFE: can be removed via auto-safe; app will recreate cache without user data loss." ;;
+        app_cache_rec_default_review) echo "REVIEW: script will show this item in plan, but will not delete automatically." ;;
+
+        # Analyzer strings
+        mas_warn) echo "Skipped Mac App Store inventory (mas list timed out or returned error)." ;;
+        mail_warn_1) echo "Do not delete via rm: contains messages, attachments, indexes, and accounts." ;;
+        mail_warn_2) echo "Recommendation: manage attachments from Mail.app/Finder after manual review." ;;
+        mail_ok) echo "No local Apple Mail data found in standard paths." ;;
+        browsers_section) echo "Browsers — Caches and Profiles" ;;
+        browsers_ok) echo "No standard browser caches/profiles to report." ;;
+        browsers_data_warn) echo "Profiles/cookies/passwords/history: DANGEROUS, report only." ;;
+        browsers_data_rec) echo "Prefer clearing via privacy settings in each browser." ;;
+        disk_volumes_header) echo "Volumes (/ root):" ;;
+        disk_util_err) echo "(Cannot read from diskutil)" ;;
+        disk_home_top10) echo "Largest directories in home folder (top 10):" ;;
+        trash_top_items) echo "Largest items in trash:" ;;
+        user_caches_section) echo "User Caches (~/Library/Caches)" ;;
+        user_caches_ok) echo "No significant items in user caches." ;;
+        user_caches_found) echo "User Caches" ;;
+        user_caches_top10) echo "Top 10 largest:" ;;
+        system_caches_sip_warn) echo "Note: /Library/Caches is partially protected by SIP" ;;
+        system_caches_ok) echo "No data or no access to system caches." ;;
+        logs_ok) echo "No old logs" ;;
+        logs_found) echo "Old logs" ;;
+        logs_user) echo "User" ;;
+        logs_system) echo "System" ;;
+        crash_reports_ok) echo "No old diagnostic reports." ;;
+        crash_reports_found) echo "Diagnostic Reports" ;;
+        crash_reports_info) echo "Crash logs, spin dumps, hang reports older than 30 days" ;;
+        tmp_ok) echo "No old temporary files." ;;
+        tmp_found) echo "Old tmp files" ;;
+        leftovers_section) echo "Uninstalled Application Leftovers" ;;
+        leftovers_ok) echo "No clear uninstalled application leftovers found." ;;
+        leftovers_heuristic_note) echo "(Heuristic analysis — may not detect everything)" ;;
+        leftovers_found) echo "Potential leftovers" ;;
+        leftovers_warn) echo "Note: heuristic — verify before deleting" ;;
+        dev_section) echo "Developer Environment" ;;
+        archives_check_needed) echo "Build archives — check if still needed" ;;
+        simulators_found) echo "Unavailable iOS/watchOS/tvOS simulators" ;;
+        avd_review_note) echo "Review-only: emulators may contain local app state" ;;
+        device_support_ok) echo "No Device Support files found or minimal space used." ;;
+        device_support_info_1) echo "Debugging symbols older than 180 days" ;;
+        device_support_info_2) echo "Safe if you are not debugging devices with these OS versions" ;;
+        tmutil_missing) echo "tmutil unavailable — skipping." ;;
+        tmutil_ok) echo "No local Time Machine snapshots found." ;;
+        ios_backups_ok) echo "No local iOS backups found." ;;
+        ios_backups_found_total) echo "Total" ;;
+        ios_backups_warn) echo "IMPORTANT: These are backups of your Apple devices. Delete only after verification!" ;;
+        unknown_device) echo "Unknown device" ;;
+        downloads_ok) echo "No large old installers in ~/Downloads" ;;
+
+        # CLI messages
+        cli_categories) echo "Categories" ;;
+        cli_avail_cats) echo "Available categories" ;;
+        cli_line_error) echo "Error on line" ;;
+        cli_interrupted) echo "Interrupted by user (Ctrl-C)." ;;
+        cli_cat_req_val) echo "--category requires value" ;;
+        cli_exclude_req_val) echo "--exclude requires path" ;;
+        cli_restore_req_val) echo "--restore requires run id or manifest path" ;;
+        cli_purge_req_val) echo "--purge-quarantine requires value: latest, all, or run id" ;;
+        cli_from_plan_req_val) echo "--from-plan requires path to plan.json" ;;
+        cli_plan_file_req_val) echo "--plan-file requires path" ;;
+        cli_log_level_req_val) echo "--log-level requires value (DEBUG|INFO|WARN|ERROR)" ;;
+        cli_unknown_log_level) echo "Unknown log level" ;;
+        cli_lang_req_val) echo "--lang requires language code (pl|en|de|es|fr|it|pt)" ;;
+        cli_see_help) echo "Use --help to see available options." ;;
+        cli_sudo_auto_req) echo "Script will request sudo automatically when needed." ;;
+        cli_user_label) echo "User" ;;
+        cli_mode_apply) echo "Mode: APPLY PLAN — executing allowed operations from plan only" ;;
+        cli_mode_interactive) echo "Mode: INTERACTIVE — you will be prompted before each category" ;;
+        cli_mode_auto_safe) echo "Mode: AUTO-SAFE — automatic cleaning of safe items only" ;;
+        cli_mode_list) echo "Mode: LIST — list quarantine runs" ;;
+        cli_mode_purge) echo "Mode: PURGE — permanent quarantine purge" ;;
+        cli_deletion_dest) echo "Deletion: user quarantine" ;;
+        cli_scanning) echo "Scanning system... (without deleting anything)" ;;
+        cli_total_freeable) echo "Total space that can be freed" ;;
+        cli_interactive_flow_1) echo "We will go through each category and ask for confirmation." ;;
+        cli_interactive_flow_2) echo "Default response is always NO — safely press Enter." ;;
+        cli_auto_safe_flow_1) echo "Moving explicitly safe app caches to quarantine; tmp requires --permanent." ;;
+        cli_auto_safe_flow_2) echo "Reporting remaining categories as 'requires decision'." ;;
+        cli_trash_decision) echo "Trash: run --interactive to empty" ;;
+        cli_user_caches_decision) echo "Generic user caches: run --interactive to review top-level ~/Library/Caches" ;;
+        cli_review_caches_decision) echo "App caches requiring review" ;;
+        cli_tmp_decision) echo "Temporary files: run with --permanent to delete permanently" ;;
+        cli_logs_decision) echo "Old logs: run --interactive to clean" ;;
+        cli_cat_decision) echo "Category: run --interactive to clean" ;;
+        cli_system_decision) echo "System: run --interactive to clean" ;;
+        cli_purge_preview_warn) echo "Purge preview mode. Add --apply to permanently delete indicated quarantine." ;;
+        cli_report_saved_dryrun) echo "Report saved. Dry-run mode completed without cleanup." ;;
+        cli_report_saved_next) echo "Report saved. When ready:" ;;
+        cli_analysis_complete) echo "Analysis complete. Moving to cleanup now." ;;
+        cli_auto_safe_warn) echo "Auto-safe mode: automatically cleaning cache and tmp shortly." ;;
+        cli_auto_safe_prompt) echo "Confirm auto-safe cleanup (user cache + tmp files)?" ;;
+        cli_auto_safe_cancelled) echo "Auto-safe cleanup cancelled by user." ;;
+
         *) return 1 ;;
     esac
 }

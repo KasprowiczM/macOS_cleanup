@@ -1,0 +1,240 @@
+# i18n/es.sh — Spanish localization dictionary for macOS_cleanup (Bash 3.2 compatible)
+
+i18n_get_es() {
+    case "${1:-}" in
+        # General & Banner
+        banner_title) echo "macOS Cleanup — Limpiador de Sistema Profesional" ;;
+        mode_dry_run) echo "Modo: ANÁLISIS (dry-run) — no se eliminará nada" ;;
+        mode_plan) echo "Modo: PLAN (plan) — plan de ejecución generado" ;;
+        mode_quarantine) echo "Modo: CUARENTENA (quarantine) — archivos movidos a cuarentena" ;;
+        mode_permanent) echo "Modo: ELIMINACIÓN PERMANENTE (permanent) — los archivos se eliminarán permanentemente" ;;
+        disk_overview) echo "Resumen del Disco" ;;
+        user_caches) echo "Cachés de Usuario" ;;
+        app_caches) echo "Cachés de Aplicaciones" ;;
+        developer_env) echo "Entorno de Desarrollo" ;;
+        system_caches) echo "Cachés del Sistema (/Library/Caches)" ;;
+        trash) echo "Papelera" ;;
+        total_potential) echo "Espacio total potencialmente liberable" ;;
+
+        # Explain categories
+        explain_title) echo "Explicación de Categorías de Limpieza (System Explanations)" ;;
+        user_caches_desc) echo "Archivos de caché de aplicaciones en ~/Library/Caches." ;;
+        dev_caches_desc) echo "Caché de npm, pip, cargo, Homebrew y simuladores de iOS no disponibles." ;;
+        xcode_support_desc) echo "Símbolos de depuración de más de 180 días para dispositivos iOS conectados." ;;
+        logs_desc) echo "Archivos de registro del sistema y aplicaciones de más de 30 días." ;;
+        system_caches_desc) echo "Caché del sistema en /Library/Caches (protegido por SIP)." ;;
+        docker_desc) echo "Limpieza de contenedores, imágenes y volúmenes sin usar (system prune)." ;;
+
+        # Prompts & Interactive
+        prompt_yes_no_err) echo "Por favor escriba 'y' (sí) o 'n' (no)." ;;
+        ask_clean_category) echo "¿Desea limpiar esta categoría?" ;;
+        skipped_category) echo "Omitido" ;;
+
+        # Consequences
+        consequence_safe_quarantine) echo "Los archivos se moverán de forma segura a cuarentena. Puede restaurarlos con --restore." ;;
+        consequence_safe_permanent) echo "Los archivos se eliminarán. Las aplicaciones los recrearán si es necesario." ;;
+        consequence_review_quarantine) echo "Advertencia (RIESGO REVIEW): Archivos a cuarentena. Algunas apps pueden requerir descargar de nuevo." ;;
+        consequence_review_permanent) echo "Advertencia (RIESGO REVIEW): Archivos eliminados permanentemente sin cuarentena." ;;
+        consequence_dangerous_quarantine) echo "ATENCIÓN (RIESGO DANGEROUS): Alto riesgo de pérdida de datos. Requiere copia de seguridad." ;;
+        consequence_dangerous_permanent) echo "ATENCIÓN (RIESGO DANGEROUS): Eliminación irreversible de datos críticos del sistema o usuario." ;;
+        dangerous_blocked) echo "No sujeto a limpieza automática o interactiva." ;;
+        auto_yes_blocked) echo "--yes automático no aprueba riesgo" ;;
+        category_review_title) echo "Cachés de aplicaciones que requieren revisión (REVIEW)" ;;
+        category_review_what) echo "Recursos de caché de aplicaciones que requieren consentimiento informado." ;;
+        category_review_safe_if) echo "Revise las recomendaciones para aplicaciones individuales arriba." ;;
+
+        # Cleaner specific prompts
+        clean_trash_what) echo "Archivos en la Papelera de macOS." ;;
+        clean_trash_safe_if) echo "Seguro si eliminó estos archivos intencionalmente." ;;
+        clean_user_cache_what) echo "Archivos de caché creados por aplicaciones en ~/Library/Caches." ;;
+        clean_user_cache_safe_if) echo "La mayoría del caché es recreable tras aprobación en modo cuarentena." ;;
+        clean_auto_safe_what) echo "Caché de aplicaciones conocidas en la lista de permitidos auto-safe." ;;
+        clean_auto_safe_safe_if) echo "Las aplicaciones recrearán estos archivos automáticamente al reiniciar." ;;
+        system_cache_notice_1) echo "Los cachés del sistema se reportan pero no se eliminan." ;;
+        system_cache_notice_2) echo "macOS gestiona estos archivos automáticamente." ;;
+        clean_logs_what) echo "Archivos de registro del sistema y aplicaciones de más de 30 días." ;;
+        clean_logs_safe_if) echo "Seguro si no está diagnosticando problemas del sistema antiguos." ;;
+        clean_crash_logs_what) echo "Archivos .crash, .spin, .hang generados por bloqueos de aplicaciones." ;;
+        clean_crash_logs_safe_if) echo "Seguro si no está diagnosticando fallos de aplicaciones." ;;
+        clean_tmp_what) echo "Archivos temporales en /tmp y /private/tmp." ;;
+        clean_tmp_safe_if) echo "macOS limpia /tmp en cada reinicio." ;;
+        app_leftovers_box_title) echo "Restos de Aplicaciones" ;;
+        app_leftovers_box_1) echo "Los siguientes elementos parecen datos de apps DESINSTALADAS" ;;
+        app_leftovers_box_2) echo "¡SIEMPRE verifique manualmente la lista antes de confirmar!" ;;
+        app_leftovers_box_3) echo "Una falsa alarma podría eliminar datos de una app en uso." ;;
+        app_leftovers_rec) echo "Solo reporte; eliminar manualmente tras verificación" ;;
+        app_leftovers_skip) echo "Los restos de apps solo se reportan. Sin eliminación automática." ;;
+        xcode_derived_what) echo "Artefactos de compilación de Xcode." ;;
+        xcode_support_box_title) echo "Símbolos iOS DeviceSupport" ;;
+        xcode_support_box_1) echo "Estos archivos contienen símbolos de depuración para dispositivos" ;;
+        xcode_support_box_2) echo "iOS/watchOS conectados. Xcode los descargará de nuevo." ;;
+        xcode_support_box_3) echo "Seguro de eliminar si no depura en dispositivos antiguos." ;;
+        xcode_support_box_4) echo "Seguro de eliminar si tiene acceso a internet." ;;
+        xcode_support_box_5) echo "Xcode volverá a descargar símbolos al conectar." ;;
+        xcode_support_what) echo "Símbolos de depuración para iOS/watchOS/tvOS." ;;
+        xcode_support_safe_if) echo "Seguro si tiene acceso a internet." ;;
+        simulators_box_1) echo "Xcode conserva múltiples versiones de simuladores." ;;
+        simulators_box_2) echo "(solo elimina simuladores no disponibles)." ;;
+        simulators_what) echo "Dispositivos simuladores de iOS, watchOS, tvOS no disponibles." ;;
+        simulators_safe_if) echo "Seguro si tiene acceso a internet." ;;
+        simulators_success) echo "Simuladores no disponibles eliminados." ;;
+        simulators_simctl_err) echo "Error al ejecutar xcrun simctl." ;;
+        simulators_xcrun_err) echo "xcrun no disponible — ¿Xcode instalado?" ;;
+        archives_rec) echo "Solo revisión; eliminar manualmente si no necesita archivos de distribución" ;;
+        maven_rec) echo "Solo revisión; puede contener artefactos construidos localmente" ;;
+        android_avd_rec) echo "Solo revisión; eliminar en Android Studio Device Manager" ;;
+        cleaning_cmd) echo "Limpiando" ;;
+        package_managers_title) echo "Caché de gestores de paquetes (npm, brew, pip, etc.)" ;;
+        package_managers_safe_if) echo "Seguro si tiene acceso a internet." ;;
+        pnpm_store_trimmed) echo "Almacén pnpm recortado." ;;
+        time_machine_title) echo "Instantáneas Locales de Time Machine" ;;
+        time_machine_box_1) echo "Copias de seguridad locales del sistema." ;;
+        time_machine_box_2) echo "Pueden ser necesarias para recuperar archivos." ;;
+        time_machine_box_3) echo "NOTA: Las instantáneas se eliminan permanentemente." ;;
+        time_machine_box_4) echo "NOTA: Las instantáneas se eliminan permanentemente." ;;
+        time_machine_box_5) echo "Tamaño" ;;
+        time_machine_box_6) echo "IMPORTANTE: macOS elimina instantáneas automáticamente por espacio." ;;
+        time_machine_box_7) echo "Mecanismo de purga APFS activo." ;;
+        time_machine_found) echo "Instantáneas encontradas" ;;
+        time_machine_interactive_req) echo "Las instantáneas de Time Machine requieren confirmación interactiva." ;;
+        time_machine_prompt) echo "¿Confirma que tiene copia externa y desea eliminar instantáneas locales?" ;;
+        ios_backups_title) echo "Copias de Seguridad Locales iOS/iPadOS/watchOS" ;;
+        ios_backups_box_1) echo "Copias de seguridad de sus iPhone / iPad / Apple Watch." ;;
+        ios_backups_box_2) echo "Una vez eliminadas no podrá restaurar sin nueva copia." ;;
+        ios_backups_box_3) echo "Seguro SOLO si tiene copia en iCloud o recién hecha en Finder." ;;
+        ios_backups_box_4) echo "Seguro SOLO si tiene copia en iCloud." ;;
+        ios_backups_box_5) echo "O copia reciente en Finder realizada." ;;
+        ios_backups_found) echo "Copias encontradas" ;;
+        ios_backups_interactive_req) echo "Las copias de iOS requieren confirmación interactiva." ;;
+        ios_backups_prompt) echo "Entiendo el riesgo — ¿eliminar copias de iOS seleccionadas?" ;;
+        dryrun_summary_title) echo "Análisis" ;;
+        dryrun_summary_total) echo "Total a liberar" ;;
+        proceed_interactive_title) echo "Análisis completado. ¿Iniciar limpieza?" ;;
+        proceed_interactive_found) echo "El script encontró para liberar" ;;
+        proceed_interactive_note_1) echo "Si responde 'sí', revisaremos cada categoría por separado." ;;
+        proceed_interactive_note_2) echo "Verá advertencias y podrá decidir." ;;
+        proceed_interactive_note_3) echo "La respuesta predeterminada siempre es NO." ;;
+        proceed_interactive_prompt) echo "¿Desea pasar ahora a la limpieza interactiva?" ;;
+
+        # App cache descriptions & recommendations
+        app_cache_desc_slack) echo "Caché de Slack/Electron: miniaturas y caché GPU." ;;
+        app_cache_desc_vscode) echo "Caché de VS Code: datos UI y JS compilado." ;;
+        app_cache_desc_vscode_vsix) echo "VS Code CachedExtensionVSIXs: paquetes de extensiones locales." ;;
+        app_cache_desc_cursor) echo "Caché de Cursor: caché de aplicación recreable." ;;
+        app_cache_desc_figma) echo "Caché de Figma: caché local de archivos y recursos UI." ;;
+        app_cache_desc_jetbrains) echo "Caché de JetBrains: índices y símbolos del IDE." ;;
+        app_cache_desc_jetbrains_logs) echo "Registros de JetBrains: registros de diagnóstico antiguos." ;;
+        app_cache_desc_adobe) echo "Caché de Adobe: cachés de aplicaciones Adobe." ;;
+        app_cache_desc_adobe_media) echo "Adobe Media Cache: previsualizaciones y caché de medios." ;;
+        app_cache_desc_teams) echo "Caché de Teams: caché de Electron y recursos web." ;;
+        app_cache_desc_spotify) echo "Caché de Spotify: caché de música y podcasts." ;;
+        app_cache_desc_spotify_persistent) echo "Spotify PersistentCache: caché sin conexión más grande." ;;
+        app_cache_desc_discord) echo "Caché de Discord: recursos web recreables." ;;
+        app_cache_desc_zoom) echo "Caché de Zoom: caché temporal del cliente." ;;
+        app_cache_desc_xcode) echo "Caché de Xcode: cachés de herramientas de desarrollo." ;;
+        app_cache_desc_cleanmymac) echo "Caché de CleanMyMac: cachés recreables." ;;
+        app_cache_desc_default) echo "Caché de aplicación: datos auxiliares." ;;
+
+        app_cache_rec_vscode_vsix) echo "REVIEW: Eliminar solo si acepta descargar de nuevo." ;;
+        app_cache_rec_figma) echo "REVIEW: Técnico seguro, verifique trabajo sin conexión." ;;
+        app_cache_rec_jetbrains) echo "REVIEW: Eliminar cuando tenga tiempo para reindexar." ;;
+        app_cache_rec_jetbrains_logs) echo "REVIEW: Conservar si está diagnosticando fallos." ;;
+        app_cache_rec_adobe) echo "REVIEW: Eliminar si conserva medios originales." ;;
+        app_cache_rec_spotify_persistent) echo "REVIEW: Eliminar si acepta descargar datos de nuevo." ;;
+        app_cache_rec_default_safe) echo "SAFE: Se puede eliminar vía auto-safe sin pérdida de datos." ;;
+        app_cache_rec_default_review) echo "REVIEW: Se mostrará en el plan, no se eliminará automáticamente." ;;
+
+        # Analyzer strings
+        mas_warn) echo "Inventario de Mac App Store omitido." ;;
+        mail_warn_1) echo "No eliminar con rm: contiene mensajes y cuentas." ;;
+        mail_warn_2) echo "Recomendación: gestionar adjuntos en Mail.app/Finder." ;;
+        mail_ok) echo "No se encontraron datos de Apple Mail." ;;
+        browsers_section) echo "Navegadores — Cachés y Perfiles" ;;
+        browsers_ok) echo "Sin cachés de navegadores para reportar." ;;
+        browsers_data_warn) echo "Perfiles/contraseñas: DANGEROUS, solo reporte." ;;
+        browsers_data_rec) echo "Preferir limpieza desde la configuración del navegador." ;;
+        disk_volumes_header) echo "Volúmenes (/ raíz):" ;;
+        disk_util_err) echo "(No se puede leer de diskutil)" ;;
+        disk_home_top10) echo "Directorios más grandes en inicio (top 10):" ;;
+        trash_top_items) echo "Elementos más grandes en papelera:" ;;
+        user_caches_section) echo "Cachés de Usuario (~/Library/Caches)" ;;
+        user_caches_ok) echo "Sin elementos significativos en cachés de usuario." ;;
+        user_caches_found) echo "Cachés de Usuario" ;;
+        user_caches_top10) echo "Top 10 más grandes:" ;;
+        system_caches_sip_warn) echo "Nota: /Library/Caches protegido parcialmente por SIP" ;;
+        system_caches_ok) echo "Sin acceso a cachés del sistema." ;;
+        logs_ok) echo "Sin registros antiguos" ;;
+        logs_found) echo "Registros antiguos" ;;
+        logs_user) echo "Usuario" ;;
+        logs_system) echo "Sistema" ;;
+        crash_reports_ok) echo "Sin informes de diagnóstico antiguos." ;;
+        crash_reports_found) echo "Informes de Diagnóstico" ;;
+        crash_reports_info) echo "Informes de fallos de más de 30 días" ;;
+        tmp_ok) echo "Sin archivos temporales antiguos." ;;
+        tmp_found) echo "Archivos temporales antiguos" ;;
+        leftovers_section) echo "Restos de Aplicaciones Desinstaladas" ;;
+        leftovers_ok) echo "Sin restos claros de aplicaciones desinstaladas." ;;
+        leftovers_heuristic_note) echo "(Análisis heurístico)" ;;
+        leftovers_found) echo "Restos potenciales" ;;
+        leftovers_warn) echo "Nota: heurística — verificar antes de eliminar" ;;
+        dev_section) echo "Entorno de Desarrollo" ;;
+        archives_check_needed) echo "Archivos de compilación — verificar si se necesitan" ;;
+        simulators_found) echo "Simuladores no disponibles" ;;
+        avd_review_note) echo "Solo revisión: los emuladores contienen estado local" ;;
+        device_support_ok) echo "Sin archivos Device Support o espacio mínimo." ;;
+        device_support_info_1) echo "Símbolos de depuración de más de 180 días" ;;
+        device_support_info_2) echo "Seguro si no depura en estas versiones de SO" ;;
+        tmutil_missing) echo "tmutil no disponible — omitiendo." ;;
+        tmutil_ok) echo "Sin instantáneas locales de Time Machine." ;;
+        ios_backups_ok) echo "Sin copias locales de iOS." ;;
+        ios_backups_found_total) echo "Total" ;;
+        ios_backups_warn) echo "IMPORTANTE: ¡Son copias de seguridad de sus dispositivos Apple!" ;;
+        unknown_device) echo "Dispositivo desconocido" ;;
+        downloads_ok) echo "Sin instaladores antiguos grandes en ~/Downloads" ;;
+
+        # CLI messages
+        cli_avail_cats) echo "Categorías disponibles" ;;
+        cli_line_error) echo "Error en la línea" ;;
+        cli_interrupted) echo "Interrumpido por el usuario (Ctrl-C)." ;;
+        cli_cat_req_val) echo "--category requiere un valor" ;;
+        cli_exclude_req_val) echo "--exclude requiere una ruta" ;;
+        cli_restore_req_val) echo "--restore requiere id de ejecución o manifiesto" ;;
+        cli_purge_req_val) echo "--purge-quarantine requiere un valor" ;;
+        cli_from_plan_req_val) echo "--from-plan requiere ruta a plan.json" ;;
+        cli_plan_file_req_val) echo "--plan-file requiere una ruta" ;;
+        cli_log_level_req_val) echo "--log-level requiere un valor" ;;
+        cli_unknown_log_level) echo "Nivel de registro desconocido" ;;
+        cli_lang_req_val) echo "--lang requiere código de idioma (pl|en|de|es|fr|it|pt)" ;;
+        cli_see_help) echo "Use --help para ver opciones disponibles." ;;
+        cli_sudo_auto_req) echo "El script solicitará sudo automáticamente cuando sea necesario." ;;
+        cli_user_label) echo "Usuario" ;;
+        cli_mode_apply) echo "Modo: APLICAR PLAN" ;;
+        cli_mode_interactive) echo "Modo: INTERACTIVO" ;;
+        cli_mode_auto_safe) echo "Modo: AUTO-SAFE" ;;
+        cli_mode_list) echo "Modo: LISTA" ;;
+        cli_mode_purge) echo "Modo: PURGA" ;;
+        cli_deletion_dest) echo "Eliminación: cuarentena de usuario" ;;
+        cli_scanning) echo "Escaneando sistema..." ;;
+        cli_total_freeable) echo "Total potencialmente liberable" ;;
+        cli_interactive_flow_1) echo "Revisaremos cada categoría pidiendo confirmación." ;;
+        cli_interactive_flow_2) echo "La respuesta predeterminada siempre es NO." ;;
+        cli_auto_safe_flow_1) echo "Moviendo cachés seguros de aplicaciones a cuarentena." ;;
+        cli_auto_safe_flow_2) echo "Reportando categorías restantes como 'requiere decisión'." ;;
+        cli_trash_decision) echo "Papelera: ejecute --interactive para vaciar" ;;
+        cli_user_caches_decision) echo "Cachés de usuario: ejecute --interactive para revisar" ;;
+        cli_review_caches_decision) echo "Cachés de apps que requieren revisión" ;;
+        cli_tmp_decision) echo "Archivos temporales: ejecute con --permanent para eliminar" ;;
+        cli_logs_decision) echo "Registros antiguos: ejecute --interactive para limpiar" ;;
+        cli_cat_decision) echo "Categoría: ejecute --interactive para limpiar" ;;
+        cli_system_decision) echo "Sistema: ejecute --interactive para limpiar" ;;
+        cli_purge_preview_warn) echo "Modo vista previa de purga. Añada --apply para eliminar." ;;
+        cli_report_saved_dryrun) echo "Reporte guardado. Modo prueba completado sin limpieza." ;;
+        cli_report_saved_next) echo "Reporte guardado. Cuando esté listo:" ;;
+        cli_analysis_complete) echo "Análisis completado. Pasando a la limpieza." ;;
+        cli_auto_safe_warn) echo "Modo Auto-safe: limpieza automática en breve." ;;
+        cli_auto_safe_prompt) echo "¿Confirmar limpieza auto-safe?" ;;
+        cli_auto_safe_cancelled) echo "Limpieza auto-safe cancelada por el usuario." ;;
+
+        *) return 1 ;;
+    esac
+}

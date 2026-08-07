@@ -60,15 +60,15 @@ clean_trash() {
         local cat_risk
         cat_risk="$(category_max_risk "${FOUND_TRASH_ITEMS[@]}")"
         confirm_category \
-            --title      "Kosz (~/.Trash)" \
+            --title      "$(t "trash") (~/.Trash)" \
             --size       "$total_h" \
-            --what       "Pliki w Koszu systemu macOS. To są rzeczy, które wcześniej usunąłeś, ale nie opróżniłeś Kosza." \
+            --what       "$(t "clean_trash_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli celowo usunąłeś te pliki i nie potrzebujesz ich odtwarzać." \
+            --safe-if    "$(t "clean_trash_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: Kosz"
+    print_section "Cleaning: $(t "trash")"
     # Remove contents, not the .Trash directory itself
     for item in "${FOUND_TRASH_ITEMS[@]}"; do
         safe_remove "$item"
@@ -92,16 +92,16 @@ clean_user_caches() {
         cat_risk="$(category_max_risk "${FOUND_USER_CACHES[@]}")"
 
         confirm_category \
-            --title      "Cache użytkownika (~/Library/Caches)" \
+            --title      "$(t "user_caches") (~/Library/Caches)" \
             --size       "$total_h" \
             --paths      "$paths_str" \
-            --what       "Pliki cache tworzone przez aplikacje w ~/Library/Caches. Służą do przyspieszenia działania programów." \
+            --what       "$(t "clean_user_cache_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Większość cache jest odtwarzalna po podaniu akceptacji w trybie kwarantanny." \
+            --safe-if    "$(t "clean_user_cache_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: cache użytkownika"
+    print_section "Cleaning: $(t "user_caches")"
     for path in "${FOUND_USER_CACHES[@]}"; do
         safe_remove "$path"
     done
@@ -143,31 +143,26 @@ clean_app_specific_caches() {
 
         if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
             confirm_category \
-                --title      "Cache aplikacji allowlisted (SAFE)" \
+                --title      "$(t "app_caches") allowlisted (SAFE)" \
                 --size       "$safe_h" \
                 --paths      "$paths_str" \
-                --what       "Pamięć podręczna znanych aplikacji z listy auto-safe (Slack, VS Code, Discord, Zoom, Spotify...)." \
+                --what       "$(t "clean_auto_safe_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-                --safe-if    "Aplikacje odtworzą te pliki automatycznie po ponownym uruchomieniu." \
-                --risk       "$cat_risk" && {
-                print_section "Czyszczenie: cache aplikacji (SAFE)"
-                for entry in "${safe_entries[@]}"; do
-                    safe_remove "${entry#*:}"
-                done
-            }
-        else
-            print_section "Czyszczenie: cache aplikacji (SAFE)"
-            for entry in "${safe_entries[@]}"; do
-                safe_remove "${entry#*:}"
-            done
+                --safe-if    "$(t "clean_auto_safe_safe_if")" \
+                --risk       "$cat_risk" || return 0
         fi
+
+        for path in "${safe_paths[@]}"; do
+            safe_remove "$path"
+        done
     fi
 
-    # 2. Process REVIEW (non-allowlisted) app cache items
+    # 2. Process REVIEW (non-allowlisted) app cache items itemized with policy recommendations
     if [[ ${#review_entries[@]} -gt 0 ]]; then
         local review_bytes=0 review_h paths_str cat_risk
         local -a review_paths=()
         for entry in "${review_entries[@]}"; do
+            label="${entry%%:*}"
             path="${entry#*:}"
             review_paths+=("$path")
             review_bytes=$(( review_bytes + $(path_size_bytes "$path") ))
@@ -177,45 +172,40 @@ clean_app_specific_caches() {
         cat_risk="$(category_max_risk "${review_paths[@]}")"
 
         if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-            echo -e "  ${C_BOLD}Cache aplikacji wymagające przeglądu (${#review_entries[@]}):${C_RESET}"
+            echo
+            echo -e "  ${C_BOLD}$(t "category_review_title") (${#review_entries[@]}):${C_RESET}"
             for entry in "${review_entries[@]}"; do
                 label="${entry%%:*}"
                 path="${entry#*:}"
-                printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
-                echo -e "              ${C_DIM}Opis: $(app_cache_description "$label")${C_RESET}"
-                echo -e "              ${C_YELLOW}Rekomendacja: $(app_cache_recommendation "$label")${C_RESET}"
+                local desc rec item_sz
+                desc="$(app_cache_description "$label")"
+                rec="$(app_cache_recommendation "$label")"
+                item_sz="$(path_size_human "$path")"
+                echo -e "    ${C_YELLOW}• ${label}${C_RESET} (${item_sz})"
+                echo -e "      ${C_DIM}Path: ${path}${C_RESET}"
+                echo -e "      ${C_DIM}${desc}${C_RESET}"
+                echo -e "      ${C_CYAN}${rec}${C_RESET}"
             done
-            echo
 
             confirm_category \
-                --title      "Cache aplikacji wymagające przeglądu (REVIEW)" \
+                --title      "$(t "category_review_title")" \
                 --size       "$review_h" \
                 --paths      "$paths_str" \
-                --what       "Zasoby cache aplikacji wymagające świadomej zgody (np. Adobe Media Cache, JetBrains, Figma)." \
+                --what       "$(t "category_review_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-                --safe-if    "Przejrzyj rekomendacje dla poszczególnych aplikacji powyżej." \
-                --risk       "$cat_risk" && {
-                print_section "Czyszczenie: cache aplikacji (REVIEW)"
-                for entry in "${review_entries[@]}"; do
-                    safe_remove "${entry#*:}"
-                done
-            }
-        else
-            print_section "Czyszczenie: cache aplikacji (REVIEW)"
-            for entry in "${review_entries[@]}"; do
-                safe_remove "${entry#*:}"
-            done
+                --safe-if    "$(t "category_review_safe_if")" \
+                --risk       "$cat_risk" || return 0
         fi
+
+        for path in "${review_paths[@]}"; do
+            safe_remove "$path"
+        done
     fi
 }
 
 # ---------------------------------------------------------------------------
-# clean_system_caches — report-only (P0-1: privileged deletion removed)
-#
-# System caches under /Library/Caches are now report-only. The planner
-# already treats them as report_only; this aligns the interactive path.
-# Users who need to clean these should use Disk Utility or manual sudo
-# outside this tool.
+# clean_system_caches — REPORT ONLY
+# P0-1 fix: /Library/Caches children are NEVER deleted automatically.
 # ---------------------------------------------------------------------------
 clean_system_caches() {
     [[ ${#FOUND_SYSTEM_CACHES[@]} -eq 0 ]] && return
@@ -225,467 +215,369 @@ clean_system_caches() {
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
-    print_section "Cache systemowe (/Library/Caches) — tylko raport"
-    print_info "Rozmiar: ${total_h}"
-    print_info "Cache systemowe są raportowane, ale nie usuwane przez ten skrypt."
-    print_info "macOS zarządza tymi plikami automatycznie."
+    print_section "Report: $(t "system_caches")"
+    print_info "Size: ${total_h}"
+    print_info "$(t "system_cache_notice_1")"
+    print_info "$(t "system_cache_notice_2")"
 
-    for path in "${FOUND_SYSTEM_CACHES[@]}"; do
-        record_skipped_item "System cache (report-only): ${path}"
-        cleanup_journal_event "report_only" "$path" "" "$(path_size_bytes "$path")" "skipped" "system cache report-only (P0-1)"
-    done
+    record_user_decision "System Caches: ${total_h} — report-only; SIP/system managed"
+    print_skip "System Caches (/Library/Caches) report-only."
 }
+
+# ---------------------------------------------------------------------------
 # clean_logs
 # ---------------------------------------------------------------------------
 clean_logs() {
-    local total_user
-    total_user=$(catbytes_get "user-logs")
-    local total_sys
-    total_sys=$(catbytes_get "system-logs")
-    local total_all=$(( total_user + total_sys ))
-    [[ $total_all -eq 0 ]] && return
+    local total_count=$(( ${#FOUND_USER_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
+    [[ $total_count -eq 0 ]] && return
 
+    local total_bytes
+    total_bytes=$(catbytes_get "logs")
     local total_h
-    total_h=$(bytes_to_human "$total_all")
+    total_h=$(bytes_to_human "$total_bytes")
+
+    local -a all_logs=("${FOUND_USER_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local cat_risk
-        cat_risk="$(category_max_risk "${FOUND_APP_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")"
+        local paths_str cat_risk
+        paths_str=$(printf '%s|' "${all_logs[@]}")
+        cat_risk="$(category_max_risk "${all_logs[@]}")"
+
         confirm_category \
-            --title      "Stare logi aplikacji (>$LOG_MAX_AGE_DAYS dni)" \
+            --title      "Log files (> $LOG_MAX_AGE_DAYS days)" \
             --size       "$total_h" \
-            --what       "Pliki dziennika systemowego i aplikacji starsze niż $LOG_MAX_AGE_DAYS dni." \
+            --paths      "$paths_str" \
+            --what       "$(t "clean_logs_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli nie diagnozujesz aktywnie starszych problemów systemowych." \
+            --safe-if    "$(t "clean_logs_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: stare logi"
-    if (( ${#FOUND_APP_LOGS[@]} > 0 ));    then for f in "${FOUND_APP_LOGS[@]}";    do safe_remove "$f"; done; fi
-    if (( ${#FOUND_SYSTEM_LOGS[@]} > 0 )); then for f in "${FOUND_SYSTEM_LOGS[@]}"; do safe_remove "$f"; done; fi
+    print_section "Cleaning: logs"
+    for log_file in "${all_logs[@]}"; do
+        safe_remove "$log_file"
+    done
 }
 
 # ---------------------------------------------------------------------------
 # clean_diagnostic_reports
 # ---------------------------------------------------------------------------
 clean_diagnostic_reports() {
-    [[ ${#FOUND_DIAGNOSTIC_REPORTS[@]} -eq 0 ]] && return
+    [[ ${#FOUND_CRASH_REPORTS[@]} -eq 0 ]] && return
 
     local total_bytes
     total_bytes=$(catbytes_get "diagnostic-reports")
-    [[ "$total_bytes" -eq 0 ]] && return
-
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local cat_risk
-        cat_risk="$(category_max_risk "${FOUND_DIAGNOSTIC_REPORTS[@]}")"
+        local paths_str cat_risk
+        paths_str=$(printf '%s|' "${FOUND_CRASH_REPORTS[@]}")
+        cat_risk="$(category_max_risk "${FOUND_CRASH_REPORTS[@]}")"
+
         confirm_category \
-            --title      "Raporty diagnostyczne (crash logs, spin dumps)" \
+            --title      "Diagnostic Reports / Crash Logs" \
             --size       "$total_h" \
-            --what       "Pliki .crash, .spin, .hang generowane gdy aplikacje się zawieszają lub crashują." \
+            --paths      "$paths_str" \
+            --what       "$(t "clean_crash_logs_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli nie jesteś w trakcie diagnozowania problemów z aplikacjami." \
+            --safe-if    "$(t "clean_crash_logs_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: raporty diagnostyczne"
-    for f in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
+    print_section "Cleaning: diagnostic reports"
+    for f in "${FOUND_CRASH_REPORTS[@]}"; do
         safe_remove "$f"
     done
 }
 
 # ---------------------------------------------------------------------------
-# clean_tmp
+# clean_tmp — /tmp and /private/tmp files (> TMP_MAX_AGE_HOURS h)
 # ---------------------------------------------------------------------------
 clean_tmp() {
     [[ ${#FOUND_TMP_FILES[@]} -eq 0 ]] && return
 
+    local total_bytes
+    total_bytes=$(catbytes_get "tmp")
     local total_h
-    total_h=$(bytes_to_human "$(catbytes_get "tmp")")
+    total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local cat_risk
+        local paths_str cat_risk
+        paths_str=$(printf '%s|' "${FOUND_TMP_FILES[@]}")
         cat_risk="$(category_max_risk "${FOUND_TMP_FILES[@]}")"
+
         confirm_category \
-            --title      "Pliki tymczasowe (/tmp)" \
+            --title      "Temporary files (/tmp)" \
             --size       "$total_h" \
-            --what       "Pliki tymczasowe starsze niż $TMP_MAX_AGE_HOURS h w /tmp i /private/tmp." \
+            --paths      "$paths_str" \
+            --what       "$(t "clean_tmp_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "macOS czyści /tmp przy każdym restarcie." \
+            --safe-if    "$(t "clean_tmp_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: pliki tymczasowe"
-    for f in "${FOUND_TMP_FILES[@]}"; do safe_remove "$f"; done
+    print_section "Cleaning: temporary files (/tmp)"
+    for f in "${FOUND_TMP_FILES[@]}"; do
+        safe_remove "$f"
+    done
 }
 
 # ---------------------------------------------------------------------------
-# clean_app_leftovers
+# clean_app_leftovers — REPORT ONLY
 # ---------------------------------------------------------------------------
 clean_app_leftovers() {
     [[ ${#FOUND_APP_LEFTOVERS[@]} -eq 0 ]] && return
 
-    local total_h
-    total_h=$(bytes_to_human "$(catbytes_get "app-leftovers")")
-
-    print_warning_box "Pozostałości po aplikacjach" \
-        "Poniższe elementy wyglądają jak dane po ODINSTALOWANYCH" \
-        "aplikacjach, ale weryfikacja jest heurystyczna." \
-        "" \
-        "ZAWSZE sprawdź ręcznie listę przed potwierdzeniem!" \
-        "Fałszywy alarm może usunąć dane działającej aplikacji."
-
-    echo -e "  ${C_BOLD}Kandydaci (${#FOUND_APP_LEFTOVERS[@]}):${C_RESET}"
-    for p in "${FOUND_APP_LEFTOVERS[@]}"; do
-        printf "    %8s  %s\n" "$(path_size_human "$p")" "$p"
-    done
-    echo
-
-    record_user_decision "Pozostałości po aplikacjach: ${total_h} — report-only; usuń ręcznie po weryfikacji"
-    print_skip "App leftovers są teraz tylko raportowane. Brak automatycznego usuwania."
-    return 0
-}
-
-# ---------------------------------------------------------------------------
-# clean_xcode_derived_data
-# ---------------------------------------------------------------------------
-clean_xcode_derived_data() {
-    local dd_entry=""
-    for item in "${FOUND_DEV_ITEMS[@]}"; do
-        [[ "$item" == "xcode_derived_data:"* ]] && dd_entry="${item#xcode_derived_data:}" && break
-    done
-    [[ -z "$dd_entry" ]] && return
-
-    local size_h
-    size_h=$(bytes_to_human "$(catbytes_get "xcode-derived")")
-
-    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local cat_risk
-        cat_risk="$(category_max_risk "$dd_entry")"
-        confirm_category \
-            --title      "Xcode DerivedData" \
-            --size       "$size_h" \
-            --paths      "$dd_entry" \
-            --what       "Skompilowane artefakty buildów Xcode. Tworzone automatycznie przy każdym buildzie." \
-            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Xcode odtworzy te dane przy kolejnym buildzie." \
-            --risk       "$cat_risk" || return 0
-    fi
-
-    print_section "Czyszczenie: Xcode DerivedData"
-    safe_remove "$dd_entry"
-}
-
-# ---------------------------------------------------------------------------
-# clean_ios_device_support — Xcode device symbol files
-# These can be 2-5 GB per iOS version
-# ---------------------------------------------------------------------------
-clean_ios_device_support() {
-    [[ ${#FOUND_DEVICE_SUPPORT_ITEMS[@]} -eq 0 ]] && return
-
     local total_bytes
-    total_bytes=$(catbytes_get "device-support")
-    [[ "$total_bytes" -eq 0 ]] && return
-
+    total_bytes=$(catbytes_get "app-leftovers")
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
-    print_warning_box "Xcode Device Support (symbole debugowania)" \
-        "Te pliki zawierają symbole debugowania dla podłączonych" \
-        "urządzeń iOS/watchOS. Xcode pobierze je ponownie gdy" \
-        "podłączysz urządzenie z tą wersją systemu." \
-        "" \
-        "Rozmiar: ${total_h}" \
-        "" \
-        "Bezpieczne do usunięcia jeśli: nie debugujesz urządzeń" \
-        "z tymi wersjami iOS/watchOS, lub masz dostęp do internetu."
+    print_warning_box "$(t "app_leftovers_box_title")" \
+        "$(t "app_leftovers_box_1")" \
+        "applications. Verify before deletion!" \
+        "$(t "app_leftovers_box_2")" \
+        "$(t "app_leftovers_box_3")"
 
-    echo -e "  ${C_BOLD}Znalezione wersje:${C_RESET}"
-    for entry in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
-        local ds_type="${entry%%:*}"
-        local path="${entry#*:}"
-        local ver_name
-        ver_name=$(basename "$path")
-        printf "    %8s  %s / %s\n" "$(path_size_human "$path")" "$ds_type" "$ver_name"
+    print_section "Report: App leftovers (${total_h})"
+    for item in "${FOUND_APP_LEFTOVERS[@]}"; do
+        echo "  - $item"
     done
-    echo
 
-    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local -a ds_paths=()
-        for entry in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
-            ds_paths+=("${entry#*:}")
-        done
-        local cat_risk
-        cat_risk="$(category_max_risk "${ds_paths[@]}")"
-        confirm_category \
-            --title      "Xcode Device Support (symbole debugowania)" \
-            --size       "$total_h" \
-            --what       "Symbole debugowania dla iOS/watchOS/tvOS. Pobierane gdy podłączysz urządzenie." \
-            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli masz internet i nie musisz natychmiast debugować na starym urządzeniu." \
-            --risk       "$cat_risk" || return 0
-    fi
-
-    print_section "Czyszczenie: Xcode Device Support"
-    for entry in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
-        local path="${entry#*:}"
-        safe_remove "$path"
-    done
+    record_user_decision "App leftovers: ${total_h} — $(t "app_leftovers_rec")"
+    print_skip "$(t "app_leftovers_skip")"
 }
 
 # ---------------------------------------------------------------------------
-# clean_xcode_simulators — only OLD/unused runtimes
+# Developer tools cleaners
 # ---------------------------------------------------------------------------
-clean_xcode_simulators() {
-    local sim_entry=""
-    for item in "${FOUND_DEV_ITEMS[@]}"; do
-        [[ "$item" == "ios_simulators:"* ]] && sim_entry="${item#ios_simulators:}" && break
+
+clean_xcode_derived_data() {
+    [[ -z "${FOUND_DERIVED_DATA:-}" ]] && return
+
+    local size_h
+    size_h=$(path_size_human "$FOUND_DERIVED_DATA")
+
+    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "$FOUND_DERIVED_DATA")"
+        confirm_category \
+            --title      "Xcode DerivedData" \
+            --size       "$size_h" \
+            --paths      "$FOUND_DERIVED_DATA" \
+            --what       "$(t "xcode_derived_what")" \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --safe-if    "Safe if you accept longer build time for the next build." \
+            --risk       "$cat_risk" || return 0
+    fi
+
+    print_section "Cleaning: Xcode DerivedData"
+    safe_remove "$FOUND_DERIVED_DATA"
+}
+
+clean_ios_device_support() {
+    [[ ${#FOUND_DEVICE_SUPPORT[@]} -eq 0 ]] && return
+
+    local total_bytes
+    total_bytes=$(catbytes_get "xcode-device-support")
+    local total_h
+    total_h=$(bytes_to_human "$total_bytes")
+    local paths_str
+    paths_str=$(printf '%s|' "${FOUND_DEVICE_SUPPORT[@]}")
+
+    print_warning_box "$(t "xcode_support_box_title")" \
+        "$(t "xcode_support_box_1")" \
+        "$(t "xcode_support_box_2")" \
+        "$(t "xcode_support_box_3")" \
+        "" \
+        "$(t "xcode_support_box_4")" \
+        "$(t "xcode_support_box_5")"
+
+    if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
+        local cat_risk
+        cat_risk="$(category_max_risk "${FOUND_DEVICE_SUPPORT[@]}")"
+        confirm_category \
+            --title      "$(t "xcode_support_box_title")" \
+            --size       "$total_h" \
+            --paths      "$paths_str" \
+            --what       "$(t "xcode_support_what")" \
+            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --safe-if    "$(t "xcode_support_safe_if")" \
+            --risk       "$cat_risk" || return 0
+    fi
+
+    print_section "Cleaning: iOS DeviceSupport"
+    for item in "${FOUND_DEVICE_SUPPORT[@]}"; do
+        safe_remove "$item"
     done
-    [[ -z "$sim_entry" ]] && return
+}
+
+clean_xcode_simulators() {
+    local has_sims=0
+    for item in "${FOUND_DEV_ITEMS[@]}"; do
+        [[ "$item" == "simulators:__unavailable__" ]] && has_sims=1 && break
+    done
+    [[ $has_sims -eq 0 ]] && return
 
     local size_h
     size_h=$(bytes_to_human "$(catbytes_get "simulators")")
 
-    print_warning_box "Symulatory iOS/watchOS/tvOS" \
-        "Xcode przechowuje wiele wersji symulatorów." \
-        "Bezpieczniejsza opcja: xcrun simctl delete unavailable" \
-        "(usuwa tylko niedostępne symulatory, nie wszystkie)." \
-        "" \
-        "Zalecane: Xcode → Window → Devices and Simulators"
+    print_warning_box "iOS Simulators" \
+        "$(t "simulators_box_1")" \
+        "$(t "simulators_box_2")"
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local cat_risk
-        cat_risk="$(category_max_risk "$sim_entry")"
+        cat_risk="$(category_max_risk "simulators")"
         confirm_category \
-            --title      "Stare symulatory iOS (xcrun simctl delete unavailable)" \
+            --title      "Unavailable iOS Simulators" \
             --size       "$size_h" \
-            --what       "Niedostępne urządzenia symulatorów iOS, watchOS, tvOS." \
+            --what       "$(t "simulators_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
-            --safe-if    "Bezpieczne jeśli: masz dostęp do internetu i możesz czekać na pobieranie." \
+            --safe-if    "$(t "simulators_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: stare symulatory (xcrun simctl delete unavailable)"
+    print_section "Cleaning: iOS Simulators"
     if [[ "$DRY_RUN" == "1" ]]; then
         print_dry "Would run: xcrun simctl delete unavailable"
         record_native_command_event "xcrun simctl delete unavailable" "planned" "$(catbytes_get "simulators")" "dry-run"
     else
         if command -v xcrun &>/dev/null; then
             if xcrun simctl delete unavailable 2>/dev/null; then
-                print_cleaned "Usunięto niedostępne symulatory."
+                print_cleaned "$(t "simulators_success")"
                 record_native_command_event "xcrun simctl delete unavailable" "ok" "$(catbytes_get "simulators")" ""
             else
                 record_native_command_event "xcrun simctl delete unavailable" "failed" "$(catbytes_get "simulators")" "xcrun failed"
-                print_warn "Nie udało się uruchomić xcrun simctl."
+                print_warn "$(t "simulators_simctl_err")"
             fi
         else
             record_native_command_event "xcrun simctl delete unavailable" "skipped" "$(catbytes_get "simulators")" "xcrun unavailable"
-            print_warn "xcrun niedostępne — Xcode nie jest zainstalowany?"
+            print_warn "$(t "simulators_xcrun_err")"
         fi
     fi
 }
 
 clean_dev_review_only_items() {
-    local item key path total_h
+    [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
 
+    local item key path total_h
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         key="${item%%:*}"
         path="${item#*:}"
+        total_h=$(path_size_human "$path")
+
         case "$key" in
             xcode_archives)
-                total_h=$(bytes_to_human "$(catbytes_get "xcode-archives")")
-                record_user_decision "Xcode Archives: ${total_h} — review-only; usuń ręcznie tylko jeśli nie potrzebujesz archiwów dystrybucyjnych"
+                record_user_decision "Xcode Archives: ${total_h} — $(t "archives_rec")"
                 ;;
             maven_cache)
-                total_h=$(bytes_to_human "$(catbytes_get "maven")")
-                record_user_decision "Maven ~/.m2/repository: ${total_h} — review-only; może zawierać lokalnie zbudowane artefakty niedostępne z internetu"
+                record_user_decision "Maven ~/.m2/repository: ${total_h} — $(t "maven_rec")"
                 ;;
             android_avd)
-                total_h=$(bytes_to_human "$(catbytes_get "android-avd")")
-                record_user_decision "Android AVD: ${total_h} — review-only; usuń z Android Studio Device Manager po sprawdzeniu stanu emulatorów"
+                record_user_decision "Android AVD: ${total_h} — $(t "android_avd_rec")"
                 ;;
         esac
     done
 }
 
-# ---------------------------------------------------------------------------
-# _clean_dev_native_or_fallback — shared helper for the 4 structurally-identical
-# "try native tool, fallback to safe_remove" blocks in clean_dev_caches.
-#
-# Usage:
-#   _clean_dev_native_or_fallback cmd tool catkey label ok_msg path
-#
-# Arguments:
-#   cmd    — full native command string (e.g. "npm cache clean --force")
-#   tool   — binary name for availability check (e.g. "npm")
-#   catkey — catbytes key (e.g. "npm")
-#   label  — Polish label used in print_cleaned/print_dry (e.g. "npm cache")
-#   ok_msg — Polish success message printed after native command succeeds
-#   path   — fallback path for safe_remove when tool is missing or fails
-#
-# Journal messages are verbatim to preserve them as a public API:
-#   planned  : "dry-run"
-#   ok       : "" (empty)
-#   failed   : "$tool failed; fallback safe_remove"
-#   skipped  : "$tool unavailable; fallback safe_remove"
-# ---------------------------------------------------------------------------
+# Helper for dev native commands with fallback to safe_remove
 _clean_dev_native_or_fallback() {
-    local cmd="$1" tool="$2" catkey="$3" label="$4" ok_msg="$5" path="$6"
+    local cmd="$1" check_cmd="$2" tool_label="$3" _item_label="$4" ok_msg="$5" path="$6"
+    local size_h
+    size_h=$(path_size_human "$path")
 
     if [[ "$DRY_RUN" == "1" ]]; then
-        print_dry "Would run: ${cmd}  ($(path_size_human "$path"))"
-        record_native_command_event "$cmd" "planned" "$(catbytes_get "$catkey")" "dry-run"
-        return 0
-    fi
-
-    print_cleaned "Czyszczę: ${label} (${cmd})"
-    if command -v "$tool" &>/dev/null; then
-        if $cmd 2>/dev/null; then
-            print_ok "${ok_msg}"
-            record_native_command_event "$cmd" "ok" "$(catbytes_get "$catkey")" ""
+        print_dry "Would run: ${cmd}  (${size_h})"
+        record_native_command_event "$cmd" "planned" "$(path_size_bytes "$path")" "dry-run"
+    else
+        if command -v "$check_cmd" &>/dev/null; then
+            print_cleaned "$(t "cleaning_cmd"): ${tool_label} (${cmd})"
+            if $cmd 2>/dev/null; then
+                print_ok "$ok_msg"
+                record_native_command_event "$cmd" "ok" "$(path_size_bytes "$path")" ""
+            else
+                record_native_command_event "$cmd" "failed" "$(path_size_bytes "$path")" "${tool_label} failed; fallback safe_remove"
+                safe_remove "$path"
+            fi
         else
-            record_native_command_event "$cmd" "failed" "$(catbytes_get "$catkey")" "${tool} failed; fallback safe_remove"
+            record_native_command_event "$cmd" "skipped" "$(path_size_bytes "$path")" "${tool_label} unavailable; fallback safe_remove"
             safe_remove "$path"
         fi
-    else
-        record_native_command_event "$cmd" "skipped" "$(catbytes_get "$catkey")" "${tool} unavailable; fallback safe_remove"
-        safe_remove "$path"
     fi
 }
 
-# ---------------------------------------------------------------------------
-# clean_dev_caches — npm, yarn, pnpm, pip, brew, gradle, maven, cocoapods,
-#                    swift-pm, gem, bundler, composer, cargo
-# Uses native tool commands where available (safer than rm -rf)
-# ---------------------------------------------------------------------------
 clean_dev_caches() {
-    # Helper: label for a cache key
-    _dev_label() {
-        case "$1" in
-            npm_cache)       echo "npm cache" ;;
-            yarn_cache)      echo "yarn cache" ;;
-            pnpm_cache)      echo "pnpm store" ;;
-            pip_cache)       echo "pip cache" ;;
-            brew_cache)      echo "Homebrew cache" ;;
-            brew_cleanup)     echo "Homebrew stale versions" ;;
-            gradle_cache)    echo "Gradle cache" ;;
-            maven_cache)     echo "" ;;
-            cocoapods_cache) echo "CocoaPods cache" ;;
-            cargo_cache)     echo "Cargo registry cache" ;;
-            swift_pm_cache)  echo "Swift Package Manager cache" ;;
-            gem_cache)       echo "Ruby gems cache" ;;
-            bundler_cache)   echo "Bundler cache" ;;
-            composer_cache)  echo "Composer cache (PHP)" ;;
-            android_avd)     echo "" ;;
-            *)               echo "" ;;
-        esac
-    }
+    [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
 
-    local dev_cache_items=()
+    local -a cleanable_items=()
+    local item key path
     for item in "${FOUND_DEV_ITEMS[@]}"; do
-        local key="${item%%:*}"
-        [[ -n "$(_dev_label "$key")" ]] && dev_cache_items+=("$item")
-    done
+        key="${item%%:*}"
+        path="${item#*:}"
 
-    [[ ${#dev_cache_items[@]} -eq 0 ]] && return
-
-    # Calculate total
-    local total=0
-    for item in "${dev_cache_items[@]}"; do
-        local key="${item%%:*}"
-        local mapped_key=""
         case "$key" in
-            npm_cache)       mapped_key="npm" ;;
-            yarn_cache)      mapped_key="yarn" ;;
-            pnpm_cache)      mapped_key="pnpm" ;;
-            pip_cache)       mapped_key="pip" ;;
-            brew_cache)      mapped_key="brew" ;;
-            brew_cleanup)     mapped_key="brew-stale" ;;
-            gradle_cache)    mapped_key="gradle" ;;
-            maven_cache)     mapped_key="maven" ;;
-            cocoapods_cache) mapped_key="cocoapods" ;;
-            cargo_cache)     mapped_key="cargo" ;;
-            swift_pm_cache)  mapped_key="swift-pm" ;;
-            gem_cache)       mapped_key="gem" ;;
-            bundler_cache)   mapped_key="bundler" ;;
-            composer_cache)  mapped_key="composer" ;;
-            android_avd)     mapped_key="android-avd" ;;
+            npm_cache|yarn_cache|pnpm_cache|pip_cache|brew_cache|brew_cleanup|gradle_cache|cargo_cache|cocoapods_cache|gem_cache)
+                cleanable_items+=("$item")
+                ;;
         esac
-        [[ -n "$mapped_key" ]] && total=$(( total + $(catbytes_get "$mapped_key") ))
     done
 
-    local total_h
-    total_h=$(bytes_to_human "$total")
+    [[ ${#cleanable_items[@]} -eq 0 ]] && return
 
-    # Show breakdown
-    echo -e "  ${C_BOLD}Cache menedżerów pakietów:${C_RESET}"
-    for item in "${dev_cache_items[@]}"; do
-        local key="${item%%:*}"
-        local path="${item#*:}"
-        local label
-        label=$(_dev_label "$key")
-        [[ -z "$label" ]] && continue
-        [[ "$path" == "__docker__" ]] && continue
-        [[ "$path" == "__brew__" ]] && { printf "    %8s  %s\n" "$(bytes_to_human "$(catbytes_get "brew-stale")")" "$label"; continue; }
-        [[ -d "$path" ]] && printf "    %8s  %s\n" "$(path_size_human "$path")" "$label"
+    local total_bytes=0 total_h paths_str cat_risk
+    local -a item_paths=()
+    for item in "${cleanable_items[@]}"; do
+        path="${item#*:}"
+        [[ "$path" != "__brew__" ]] && item_paths+=("$path")
+        total_bytes=$(( total_bytes + $(path_size_bytes "$path") ))
     done
-    echo
+    total_h=$(bytes_to_human "$total_bytes")
+    paths_str=$(printf '%s|' "${item_paths[@]}")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
-        local -a dev_paths=()
-        for item in "${dev_cache_items[@]}"; do
-            local p="${item#*:}"
-            [[ "$p" != "__brew__" && "$p" != "__docker__" ]] && dev_paths+=("$p")
+        echo
+        echo -e "  ${C_BOLD}$(t "package_managers_title"):${C_RESET}"
+        for item in "${cleanable_items[@]}"; do
+            key="${item%%:*}"
+            path="${item#*:}"
+            [[ "$path" != "__brew__" ]] && echo -e "    ${C_DIM}• ${key}: ${path}${C_RESET}"
         done
-        local cat_risk
-        cat_risk="$(category_max_risk "${dev_paths[@]}")"
+
+        cat_risk="$(category_max_risk "${item_paths[@]}")"
         confirm_category \
-            --title      "Cache menedżerów pakietów (npm, brew, pip, etc.)" \
+            --title      "$(t "package_managers_title")" \
             --size       "$total_h" \
-            --what       "Lokalne cache: npm, yarn, pnpm, pip, Homebrew, Gradle, CocoaPods, Cargo, Swift PM..." \
+            --paths      "$paths_str" \
+            --what       "Package manager caches for development tools." \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli masz dostęp do internetu. Pakiety zostaną pobrane ponownie gdy potrzeba." \
+            --safe-if    "$(t "package_managers_safe_if")" \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: cache menedżerów pakietów"
+    print_section "Cleaning: $(t "package_managers_title")"
 
-    for item in "${dev_cache_items[@]}"; do
-        local key="${item%%:*}"
-        local path="${item#*:}"
-        [[ "$path" == "__docker__" ]] && continue
+    for item in "${cleanable_items[@]}"; do
+        key="${item%%:*}"
+        path="${item#*:}"
 
         case "$key" in
-            # ----------------------------------------------------------------
-            # npm — use native command for safety (npm cache clean --force)
-            # ----------------------------------------------------------------
             npm_cache)
                 _clean_dev_native_or_fallback \
                     "npm cache clean --force" "npm" "npm" \
-                    "npm cache" "npm cache wyczyszczony." "$path"
+                    "npm cache" "npm cache clean complete." "$path"
                 ;;
-            # ----------------------------------------------------------------
-            # yarn — use yarn cache clean
-            # ----------------------------------------------------------------
             yarn_cache)
                 _clean_dev_native_or_fallback \
                     "yarn cache clean" "yarn" "yarn" \
-                    "yarn cache" "yarn cache wyczyszczony." "$path"
+                    "yarn cache" "yarn cache clean complete." "$path"
                 ;;
-            # ----------------------------------------------------------------
-            # pnpm — use pnpm store prune
-            # ----------------------------------------------------------------
             pnpm_cache)
                 _clean_dev_native_or_fallback \
                     "pnpm store prune" "pnpm" "pnpm" \
-                    "pnpm store" "pnpm store przycięty." "$path"
+                    "pnpm store" "$(t "pnpm_store_trimmed")" "$path"
                 ;;
-            # ----------------------------------------------------------------
-            # brew — use brew cleanup --prune=all
-            # __brew__ sentinel: catbytes-only entry, no path fallback
-            # ----------------------------------------------------------------
             brew_cache|brew_cleanup)
                 if [[ "$DRY_RUN" == "1" ]]; then
                     if [[ "$path" == "__brew__" ]]; then
@@ -695,10 +587,10 @@ clean_dev_caches() {
                     fi
                     record_native_command_event "brew cleanup --prune=all" "planned" "$(catbytes_get "brew-stale")" "dry-run"
                 else
-                    print_cleaned "Czyszczę: Homebrew (brew cleanup --prune=all)"
+                    print_cleaned "$(t "cleaning_cmd"): Homebrew (brew cleanup --prune=all)"
                     if command -v brew &>/dev/null; then
                         if brew cleanup --prune=all 2>/dev/null; then
-                            print_ok "Homebrew wyczyszczony."
+                            print_ok "Homebrew cleanup complete."
                             record_native_command_event "brew cleanup --prune=all" "ok" "$(catbytes_get "brew-stale")" ""
                         else
                             record_native_command_event "brew cleanup --prune=all" "failed" "$(catbytes_get "brew-stale")" "brew cleanup failed"
@@ -710,22 +602,18 @@ clean_dev_caches() {
                     fi
                 fi
                 ;;
-            # ----------------------------------------------------------------
-            # pip — use pip cache purge
-            # pip3 is tried first, then pip; actual binary name is journalled
-            # ----------------------------------------------------------------
             pip_cache)
                 if [[ "$DRY_RUN" == "1" ]]; then
                     print_dry "Would run: pip cache purge  ($(path_size_human "$path"))"
                     record_native_command_event "pip cache purge" "planned" "$(catbytes_get "pip")" "dry-run"
                 else
-                    print_cleaned "Czyszczę: pip cache (pip cache purge)"
+                    print_cleaned "$(t "cleaning_cmd"): pip cache (pip cache purge)"
                     local pip_cmd=""
                     command -v pip3 &>/dev/null && pip_cmd="pip3"
                     command -v pip  &>/dev/null && pip_cmd="pip"
                     if [[ -n "$pip_cmd" ]]; then
                         if $pip_cmd cache purge 2>/dev/null; then
-                            print_ok "pip cache wyczyszczony."
+                            print_ok "pip cache purge complete."
                             record_native_command_event "${pip_cmd} cache purge" "ok" "$(catbytes_get "pip")" ""
                         else
                             record_native_command_event "${pip_cmd} cache purge" "failed" "$(catbytes_get "pip")" "pip failed; fallback safe_remove"
@@ -737,17 +625,11 @@ clean_dev_caches() {
                     fi
                 fi
                 ;;
-            # ----------------------------------------------------------------
-            # gem — use gem cleanup
-            # ----------------------------------------------------------------
             gem_cache)
                 _clean_dev_native_or_fallback \
                     "gem cleanup" "gem" "gem" \
-                    "Ruby gems" "Ruby gems wyczyszczone." "$path"
+                    "Ruby gems" "Ruby gems cleanup complete." "$path"
                 ;;
-            # ----------------------------------------------------------------
-            # All others: safe_remove directly
-            # ----------------------------------------------------------------
             *)
                 [[ -d "$path" || -f "$path" ]] && safe_remove "$path"
                 ;;
@@ -774,28 +656,28 @@ clean_docker() {
         confirm_category \
             --title      "Docker: dangling images / stopped containers" \
             --size       "$size_h" \
-            --what       "Nieużywane obrazy, zatrzymane kontenery, sieci i build cache usuwane przez docker system prune." \
+            --what       "Unused images, stopped containers, networks, and build cache removed by docker system prune." \
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
-            --safe-if    "Bezpieczne jeśli nie masz ważnych danych w zatrzymanych kontenerach." \
+            --safe-if    "Safe if you do not have important data in stopped containers." \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: Docker (system prune)"
+    print_section "Cleaning: Docker (system prune)"
     if [[ "$DRY_RUN" == "1" ]]; then
         print_dry "Would run: docker system prune -f"
         record_native_command_event "docker system prune -f" "planned" "$(catbytes_get "docker")" "dry-run"
     else
         if command -v docker &>/dev/null; then
             if docker system prune -f 2>/dev/null; then
-                print_cleaned "Docker system prune wykonany."
+                print_cleaned "Docker system prune complete."
                 record_native_command_event "docker system prune -f" "ok" "$(catbytes_get "docker")" ""
             else
                 record_native_command_event "docker system prune -f" "failed" "$(catbytes_get "docker")" "docker prune failed"
-                print_warn "docker system prune nie powiódł się lub Docker nie jest uruchomiony."
+                print_warn "docker system prune failed or Docker is not running."
             fi
         else
             record_native_command_event "docker system prune -f" "skipped" "$(catbytes_get "docker")" "docker unavailable"
-            print_warn "docker nie jest dostępny."
+            print_warn "docker is not available."
         fi
     fi
 }
@@ -810,13 +692,13 @@ clean_time_machine_snapshots() {
     local snapshots_str
     snapshots_str=$(printf '%s\n' "${FOUND_TM_SNAPSHOTS[@]}")
 
-    if ! confirm_time_machine_snapshots "$snapshots_str" "${count} snapshotów"; then
-        print_skip "Pominięto: lokalne snapshoty Time Machine"
-        record_skipped_item "Lokalne snapshoty Time Machine"
+    if ! confirm_time_machine_snapshots "$snapshots_str" "${count} snapshots"; then
+        print_skip "$(t "skipped_category"): local Time Machine snapshots"
+        record_skipped_item "Local Time Machine snapshots"
         return
     fi
 
-    print_section "Czyszczenie: lokalne snapshoty Time Machine"
+    print_section "Cleaning: local Time Machine snapshots"
 
     for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
         [[ -z "$snap" ]] && continue
@@ -825,7 +707,7 @@ clean_time_machine_snapshots() {
         snap_date=$(echo "$snap" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | head -1) || snap_date=""
 
         if [[ -z "$snap_date" ]]; then
-            print_warn "Nie można sparsować daty ze snapshotu: $snap"
+            print_warn "Could not parse date from snapshot: $snap"
             continue
         fi
 
@@ -833,15 +715,15 @@ clean_time_machine_snapshots() {
             print_dry "Would run: tmutil deletelocalsnapshots $snap_date"
             record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "planned" 0 "dry-run"
         else
-            print_info "Usuwam snapshot: $snap_date"
+            print_info "Removing snapshot: $snap_date"
             local tm_out
             if tm_out=$(tmutil deletelocalsnapshots "$snap_date" 2>&1); then
-                print_cleaned "Usunięto snapshot: $snap_date"
+                print_cleaned "Removed snapshot: $snap_date"
                 record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "ok" 0 ""
             else
                 record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "failed" 0 "tmutil failed"
-                print_warn "Nie udało się usunąć: $snap_date"
-                print_warn "  Powód: $tm_out"
+                print_warn "Failed to remove: $snap_date"
+                print_warn "  Reason: $tm_out"
             fi
         fi
     done
@@ -859,27 +741,28 @@ clean_ios_backups() {
     total_h=$(bytes_to_human "$(catbytes_get "ios-backups")")
 
     if ! confirm_ios_backups "$backups_str" "$total_h"; then
-        print_skip "Pominięto: backupy iOS"
-        record_skipped_item "Lokalne backupy iOS (kategoria anulowana przez użytkownika)"
+        print_skip "$(t "skipped_category"): iOS backups"
+        record_skipped_item "Local iOS backups (category cancelled by user)"
         return
     fi
 
-    print_section "Czyszczenie: backupy iOS (po jednym)"
+    print_section "Cleaning: iOS backups (one by one)"
     for backup_dir in "${FOUND_IOS_BACKUPS[@]}"; do
         [[ -d "$backup_dir" ]] || continue
-        local device_name="Nieznane urządzenie"
+        local device_name
+        device_name="$(t "unknown_device")"
         local info_plist="${backup_dir}/Info.plist"
         [[ -f "$info_plist" ]] && \
-            device_name=$(defaults read "$info_plist" "Device Name" 2>/dev/null || echo "Nieznane")
+            device_name=$(defaults read "$info_plist" "Device Name" 2>/dev/null || echo "$(t "unknown_device")")
 
         local bk_size
         bk_size=$(path_size_human "$backup_dir")
         echo
-        if ask_yes_no "Usunąć backup: '${device_name}' (${bk_size})?" "no"; then
+        if ask_yes_no "Remove backup: '${device_name}' (${bk_size})?" "no"; then
             safe_remove "$backup_dir"
         else
-            print_skip "Zachowano backup: $device_name"
-            record_skipped_item "Backup iOS zachowany: ${device_name}"
+            print_skip "Kept backup: $device_name"
+            record_skipped_item "iOS backup retained: ${device_name}"
         fi
     done
 }
@@ -899,16 +782,16 @@ clean_dmg_pkg() {
         local cat_risk
         cat_risk="$(category_max_risk "${FOUND_DMG_PKG[@]}")"
         confirm_category \
-            --title      "Stare instalatory (DMG/PKG/ISO)" \
+            --title      "Old installers (DMG/PKG/ISO)" \
             --size       "$total_h" \
             --paths      "$paths_str" \
-            --what       "Pliki instalatorów starsze niż $DMG_MAX_AGE_DAYS dni w ~/Downloads (>10 MB)." \
+            --what       "$(t "downloads_ok")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
-            --safe-if    "Bezpieczne jeśli masz dostęp do internetu lub nie potrzebujesz starych wersji." \
+            --safe-if    "Safe if you have internet access or do not need old versions." \
             --risk       "$cat_risk" || return 0
     fi
 
-    print_section "Czyszczenie: stare instalatory"
+    print_section "Cleaning: old installers"
     for f in "${FOUND_DMG_PKG[@]}"; do
         safe_remove "$f"
     done
@@ -920,7 +803,7 @@ clean_dmg_pkg() {
 _run_cleaner() {
     local fn="$1"
     "$fn" || {
-        print_warn "Czyszczenie '${fn}' zakończyło się błędem (pomijam, kontynuuję)."
+        print_warn "Cleaner '${fn}' failed (skipping, continuing)."
         log_warn "Cleaner function '${fn}' failed — continuing."
     }
 }
@@ -949,7 +832,7 @@ run_cleanup() {
                            _run_cleaner clean_docker ;;
             time-machine)  _run_cleaner clean_time_machine_snapshots ; _run_cleaner clean_ios_backups ;;
             large-files)   _run_cleaner clean_dmg_pkg ;;
-            *)             print_warn "Nieznana kategoria: $cat" ;;
+            *)             print_warn "Unknown category: $cat" ;;
         esac
     done
 }

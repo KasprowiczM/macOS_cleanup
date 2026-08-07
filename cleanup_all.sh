@@ -170,7 +170,7 @@ build_active_categories() {
         done
         if (( !valid )); then
             print_error "Nieznana kategoria: '${cat}'"
-            echo "Dostępne kategorie: ${ALL_CATEGORIES[*]}"
+            echo "$(t "cli_avail_cats"): ${ALL_CATEGORIES[*]}"
             exit 2
         fi
 
@@ -198,13 +198,13 @@ _on_exit() {
 _on_error() {
     local status=$?
     local lineno="$1"
-    log_error "Błąd w linii ${lineno}. Kod wyjścia: ${status}"
+    log_error "$(t "cli_line_error") ${lineno}. $(t "cli_exit_code"): ${status}"
     # Don't exit loudly — the set -e will handle propagation
 }
 
 _on_interrupt() {
     echo
-    print_warn "Przerwano przez użytkownika (Ctrl-C)."
+    print_warn "$(t "cli_interrupted")"
     log_info "Script interrupted by user signal."
     cleanup_sudo_keepalive
     exit 130
@@ -220,7 +220,7 @@ show_help() {
         sed '/^# =\{5,\}$/d' | \
         grep '^#' | sed 's/^# \?//'
     echo
-    echo "Kategorie:"
+    echo "$(t "cli_categories"):"
     for cat in "${ALL_CATEGORIES[@]}"; do
         echo "  $cat"
     done
@@ -274,7 +274,7 @@ parse_args() {
                 ;;
             --category|--include)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--category wymaga wartości"
+                    print_error "$(t "cli_cat_req_val")"
                     exit 2
                 fi
                 add_category_arg "$2"
@@ -282,7 +282,7 @@ parse_args() {
                 ;;
             --exclude)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--exclude wymaga ścieżki"
+                    print_error "$(t "cli_exclude_req_val")"
                     exit 2
                 fi
                 local normalized_exclude
@@ -293,7 +293,7 @@ parse_args() {
                 ;;
             --restore)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--restore wymaga identyfikatora run albo ścieżki manifestu"
+                    print_error "$(t "cli_restore_req_val")"
                     exit 2
                 fi
                 MODE="restore"
@@ -307,7 +307,7 @@ parse_args() {
                 ;;
             --purge-quarantine)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--purge-quarantine wymaga wartości: latest, all albo run id"
+                    print_error "$(t "cli_purge_req_val")"
                     exit 2
                 fi
                 MODE="purge-quarantine"
@@ -316,7 +316,7 @@ parse_args() {
                 ;;
             --from-plan)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--from-plan wymaga ścieżki do plan.json"
+                    print_error "$(t "cli_from_plan_req_val")"
                     exit 2
                 fi
                 PLAN_FROM_FILE="$2"
@@ -324,7 +324,7 @@ parse_args() {
                 ;;
             --plan-file)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--plan-file wymaga ścieżki"
+                    print_error "$(t "cli_plan_file_req_val")"
                     exit 2
                 fi
                 PLAN_FILE="$2"
@@ -340,7 +340,7 @@ parse_args() {
                 ;;
             --retention-days)
                 if [[ -z "${2:-}" || "${2:-}" == *[!0-9]* ]]; then
-                    print_error "--retention-days wymaga liczby dni"
+                    print_error "$(t "cli_retention_req_val")"
                     exit 2
                 fi
                 RETENTION_DAYS="$2"
@@ -373,12 +373,12 @@ parse_args() {
                 ;;
             --log-level)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--log-level wymaga wartości (DEBUG|INFO|WARN|ERROR)"
+                    print_error "$(t "cli_log_level_req_val")"
                     exit 2
                 fi
                 LOG_LEVEL="$(printf '%s' "$2" | tr '[:lower:]' '[:upper:]')"
                 validate_log_level "$LOG_LEVEL" || {
-                    print_error "Nieznany poziom logów: ${LOG_LEVEL}. Dozwolone: DEBUG|INFO|WARN|ERROR."
+                    print_error "$(t "cli_unknown_log_level"): ${LOG_LEVEL}. $(t "cli_allowed"): DEBUG|INFO|WARN|ERROR."
                     exit 2
                 }
                 shift 2
@@ -401,7 +401,7 @@ parse_args() {
                 ;;
             --lang)
                 if [[ -z "${2:-}" ]]; then
-                    print_error "--lang wymaga kodu języka (pl|en)"
+                    print_error "$(t "cli_lang_req_val")"
                     exit 2
                 fi
                 LANG_CODE="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
@@ -420,8 +420,8 @@ parse_args() {
                 shift
                 ;;
             *)
-                print_error "Nieznany argument: $1"
-                echo "Użyj --help aby zobaczyć dostępne opcje."
+                print_error "$(t "cli_unknown_arg"): $1"
+                echo "$(t "cli_see_help")"
                 exit 2
                 ;;
         esac
@@ -441,15 +441,15 @@ preflight_checks() {
     macos_minor=$(echo "$macos_version" | cut -d. -f2)
 
     if (( macos_major < 10 )) || { (( macos_major == 10 )) && (( macos_minor < 15 )); }; then
-        print_error "Ten skrypt wymaga macOS 10.15 (Catalina) lub nowszego."
-        print_error "Twoja wersja: ${macos_version}"
+        print_error "$(t "cli_macos_incompatible")."
+        print_error "$(t "cli_your_version"): ${macos_version}"
         exit 3
     fi
 
     # Ensure we're not running as root (would change $HOME and be dangerous)
     if [[ "$(id -u)" -eq 0 ]]; then
-        print_error "Nie uruchamiaj skryptu jako root (sudo)!"
-        print_error "Skrypt sam poprosi o sudo gdy będzie potrzeba."
+        print_error "$(t "cli_no_root")"
+        print_error "$(t "cli_sudo_later")"
         exit 1
     fi
 
@@ -478,62 +478,62 @@ print_banner() {
   ╚═══════════════════════════════════════════════════════════╝
 BANNER
     echo -e "${C_RESET}"
-    echo -e "  Wersja:   ${C_BOLD}${SCRIPT_VERSION}${C_RESET}"
-    echo -e "  macOS:    ${C_BOLD}$(sw_vers -productVersion 2>/dev/null || echo 'nieznana')${C_RESET}"
-    echo -e "  Użytkownik: ${C_BOLD}$(whoami)${C_RESET}"
+    echo -e "  $(t "cli_version"):   ${C_BOLD}${SCRIPT_VERSION}${C_RESET}"
+    echo -e "  macOS:    ${C_BOLD}$(sw_vers -productVersion 2>/dev/null || echo "$(t "cli_unknown")")${C_RESET}"
+    echo -e "  $(t "cli_user_label"): ${C_BOLD}$(whoami)${C_RESET}"
     echo -e "  Log:      ${C_DIM}${LOG_FILE}${C_RESET}"
-    echo -e "  Raport:   ${C_DIM}${REPORT_FILE}${C_RESET}"
-    echo -e "  Plan:     ${C_DIM}${PLAN_FILE}${C_RESET}"
+    echo -e "  $(t "cli_report_label"):   ${C_DIM}${REPORT_FILE}${C_RESET}"
+    echo -e "  $(t "cli_plan_label"):     ${C_DIM}${PLAN_FILE}${C_RESET}"
     echo -e "  Journal:  ${C_DIM}${CLEANUP_JOURNAL_FILE}${C_RESET}"
     echo
 
     case "$MODE" in
         dry-run)
-            echo -e "  ${C_YELLOW}Tryb: ANALIZA (dry-run) — nic nie zostanie usunięte${C_RESET}"
+            echo -e "  ${C_YELLOW}$(t "mode_dry_run")${C_RESET}"
             ;;
         plan)
-            echo -e "  ${C_YELLOW}Tryb: PLAN — analiza + strukturalny plan JSON, bez usuwania${C_RESET}"
-            echo -e "  Plan:     ${C_DIM}${PLAN_FILE}${C_RESET}"
+            echo -e "  ${C_YELLOW}$(t "mode_plan")${C_RESET}"
+            echo -e "  $(t "cli_plan_label"):     ${C_DIM}${PLAN_FILE}${C_RESET}"
             ;;
         apply-plan)
             if [[ "$DRY_RUN" == "1" ]]; then
-                echo -e "  ${C_YELLOW}Tryb: APPLY PLAN DRY-RUN — symulacja planu${C_RESET}"
+                echo -e "  ${C_YELLOW}$(t "mode_apply_dry_run")${C_RESET}"
             else
-                echo -e "  ${C_GREEN}Tryb: APPLY PLAN — wykonanie wyłącznie dozwolonych operacji z planu${C_RESET}"
+                echo -e "  ${C_GREEN}$(t "mode_apply")${C_RESET}"
             fi
-            echo -e "  Plan:     ${C_DIM}${PLAN_FROM_FILE:-"(nie podano)"}${C_RESET}"
+            echo -e "  $(t "cli_plan_label"):     ${C_DIM}${PLAN_FROM_FILE:-"($(t "cli_not_provided"))"}${C_RESET}"
             ;;
         interactive)
-            echo -e "  ${C_CYAN}Tryb: INTERAKTYWNY — będziesz pytany przed każdą kategorią${C_RESET}"
+            echo -e "  ${C_CYAN}$(t "mode_interactive")${C_RESET}"
             ;;
         auto-safe)
-            echo -e "  ${C_GREEN}Tryb: AUTO-SAFE — automatyczne czyszczenie tylko bezpiecznych elementów${C_RESET}"
+            echo -e "  ${C_GREEN}$(t "mode_auto_safe")${C_RESET}"
             ;;
         restore)
-            echo -e "  ${C_CYAN}Tryb: RESTORE — odtwarzanie z kwarantanny${C_RESET}"
+            echo -e "  ${C_CYAN}$(t "mode_restore")${C_RESET}"
             ;;
         list-quarantine)
-            echo -e "  ${C_CYAN}Tryb: LIST — lista runów kwarantanny${C_RESET}"
+            echo -e "  ${C_CYAN}$(t "mode_list")${C_RESET}"
             ;;
         purge-quarantine)
-            echo -e "  ${C_YELLOW}Tryb: PURGE — trwałe czyszczenie kwarantanny${C_RESET}"
+            echo -e "  ${C_YELLOW}$(t "mode_purge")${C_RESET}"
             ;;
     esac
 
     if [[ "$MODE" != "dry-run" && "$MODE" != "restore" && "$MODE" != "list-quarantine" && "$MODE" != "purge-quarantine" ]]; then
         if [[ "$REMOVE_MODE" == "quarantine" ]]; then
-            echo -e "  ${C_BOLD}Usuwanie:${C_RESET} kwarantanna użytkownika (${QUARANTINE_RUN_DIR})"
+            echo -e "  ${C_BOLD}$(t "cli_deletion_mode"):${C_RESET} $(t "cli_quarantine") (${QUARANTINE_RUN_DIR})"
         else
-            echo -e "  ${C_BOLD}Usuwanie:${C_RESET} permanentne po guardrailach"
+            echo -e "  ${C_BOLD}$(t "cli_deletion_mode"):${C_RESET} $(t "cli_permanent")"
         fi
     fi
 
     if (( ${#ACTIVE_CATEGORIES[@]} > 0 && ${#ACTIVE_CATEGORIES[@]} < ${#ALL_CATEGORIES[@]} )); then
-        echo -e "  ${C_BOLD}Wybrane kategorie:${C_RESET} ${ACTIVE_CATEGORIES[*]}"
+        echo -e "  ${C_BOLD}$(t "cli_selected_cats"):${C_RESET} ${ACTIVE_CATEGORIES[*]}"
     fi
 
     if (( ${#EXCLUDED_PATHS[@]} > 0 )); then
-        echo -e "  ${C_BOLD}Wykluczono:${C_RESET}"
+        echo -e "  ${C_BOLD}$(t "cli_excluded"):${C_RESET}"
         for p in "${EXCLUDED_PATHS[@]}"; do echo "    $p"; done
     fi
 
@@ -551,8 +551,8 @@ BANNER
 # run_dry_run_phase — full analysis, generate report, offer to continue
 # ---------------------------------------------------------------------------
 run_dry_run_phase() {
-    print_header "FAZA 1: Analiza systemu"
-    echo -e "  ${C_DIM}Skanuję system... (bez usuwania czegokolwiek)${C_RESET}"
+    print_header "$(t "header_phase1")"
+    echo -e "  ${C_DIM}$(t "cli_scanning")${C_RESET}"
     echo
 
     # Set DRY_RUN for all sub-calls
@@ -569,7 +569,7 @@ run_dry_run_phase() {
 
     # Print category summary
     echo
-    print_section "Podsumowanie analizy"
+    print_section "$(t "cli_summary_analysis")"
     # Accumulate grand_total first (avoid subshell from piping to sort)
     local grand_total=0
     for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
@@ -584,13 +584,13 @@ run_dry_run_phase() {
         local bytes; bytes=$(catbytes_get "$key")
         (( bytes == 0 )) && continue
         if [[ "$key" == "time-machine" ]]; then
-            printf "  %10s  %s\n" "${bytes} szt." "${key}:"
+            printf "  %10s  %s\n" "${bytes} $(t "cli_units_pcs")" "${key}:"
         else
             printf "  %10s  %s\n" "$(bytes_to_human "$bytes")" "${key}:"
         fi
     done | sort -rh
     echo -e "  ${C_DIM}──────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}Łącznie potencjalnie do zwolnienia: ${C_YELLOW}$(bytes_to_human "$grand_total")${C_RESET}"
+    echo -e "  ${C_BOLD}$(t "cli_total_freeable"): ${C_YELLOW}$(bytes_to_human "$grand_total")${C_RESET}"
     TOTAL_WOULD_FREE_BYTES=$grand_total
 
     build_cleanup_plan_from_analysis
@@ -611,9 +611,9 @@ run_plan_phase() {
 # run_interactive_phase — clean category by category with confirmations
 # ---------------------------------------------------------------------------
 run_interactive_phase() {
-    print_header "FAZA 2: Interaktywne czyszczenie"
-    echo -e "  ${C_DIM}Przejdę przez każdą kategorię i poproszę o potwierdzenie.${C_RESET}"
-    echo -e "  ${C_DIM}Domyślna odpowiedź to zawsze NIE — możesz bezpiecznie nacisnąć Enter.${C_RESET}"
+    print_header "$(t "header_phase2")"
+    echo -e "  ${C_DIM}$(t "cli_interact_desc1")${C_RESET}"
+    echo -e "  ${C_DIM}$(t "cli_interact_desc2")${C_RESET}"
     echo
 
     DRY_RUN=0
@@ -627,13 +627,13 @@ run_interactive_phase() {
 # run_auto_safe_phase — clean only "safe"-rated items without asking
 # ---------------------------------------------------------------------------
 run_auto_safe_phase() {
-    print_header "Tryb: Auto-Safe"
+    print_header "$(t "mode_auto_safe")"
     if [[ "$REMOVE_MODE" == "quarantine" ]]; then
-        echo -e "  ${C_DIM}Przenoszę jawnie bezpieczne cache aplikacji do kwarantanny; tmp wymaga --permanent.${C_RESET}"
+        echo -e "  ${C_DIM}$(t "cli_auto_safe_desc1_q")${C_RESET}"
     else
-        echo -e "  ${C_DIM}Usuwam tylko jawnie bezpieczne cache aplikacji i stare pliki tmp.${C_RESET}"
+        echo -e "  ${C_DIM}$(t "cli_auto_safe_desc1")${C_RESET}"
     fi
-    echo -e "  ${C_DIM}Resztę kategorii raportuję jako 'wymaga decyzji'.${C_RESET}"
+    echo -e "  ${C_DIM}$(t "cli_auto_safe_desc2")${C_RESET}"
     echo
 
     DRY_RUN=0
@@ -643,7 +643,7 @@ run_auto_safe_phase() {
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
         local trash_h
         trash_h=$(bytes_to_human "$(catbytes_get "trash")")
-        record_user_decision "Kosz: ${trash_h} — uruchom --interactive aby opróżnić"
+        record_user_decision "$(t "cli_trash"): ${trash_h} — $(t "cli_run_interactive_to_empty")"
     fi
 
     # Generic user caches are mixed-risk. Only explicitly known app caches below
@@ -651,7 +651,7 @@ run_auto_safe_phase() {
     if (( ${#FOUND_USER_CACHES[@]} > 0 )); then
         local generic_cache_bytes
         generic_cache_bytes=$(catbytes_get "user-caches")
-        record_user_decision "Ogólne cache użytkownika: $(bytes_to_human "$generic_cache_bytes") — uruchom --interactive aby przejrzeć top-level ~/Library/Caches"
+        record_user_decision "$(t "cli_gen_cache"): $(bytes_to_human "$generic_cache_bytes") — $(t "cli_run_interactive_to_review")"
     fi
 
     if (( ${#FOUND_APP_CACHE_ITEMS[@]} > 0 )); then
@@ -659,7 +659,7 @@ run_auto_safe_phase() {
         local review_app_cache_count=0
         local review_app_cache_bytes=0
 
-        print_section "Czyszczenie: jawnie bezpieczne cache aplikacji (auto-safe)"
+        print_section "$(t "cli_cleaning_auto_safe")"
         for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
             local label="${entry%%:*}"
             local path="${entry#*:}"
@@ -674,20 +674,20 @@ run_auto_safe_phase() {
         done
 
         if (( auto_app_cache_count == 0 )); then
-            print_skip "Brak jawnie bezpiecznych cache aplikacji do automatycznego czyszczenia."
+            print_skip "$(t "cli_no_safe_caches")"
         fi
 
         if (( review_app_cache_count > 0 )); then
-            record_user_decision "Cache aplikacji wymagające decyzji: $(bytes_to_human "$review_app_cache_bytes") w ${review_app_cache_count} lokalizacjach"
+            record_user_decision "$(t "cli_app_caches_review"): $(bytes_to_human "$review_app_cache_bytes") $(t "cli_in") ${review_app_cache_count} $(t "cli_locations")"
         fi
     fi
 
     # Tmp files — safe
     if (( ${#FOUND_TMP_FILES[@]} > 0 )); then
         if [[ "$REMOVE_MODE" == "quarantine" ]]; then
-            record_user_decision "Pliki tymczasowe: $(bytes_to_human "$(catbytes_get "tmp")") — uruchom z --permanent, aby je trwale usunąć"
+            record_user_decision "$(t "cli_tmp_files"): $(bytes_to_human "$(catbytes_get "tmp")") — $(t "cli_use_permanent_to_delete")"
         else
-            print_section "Czyszczenie: pliki tymczasowe (auto-safe)"
+            print_section "$(t "cli_cleaning_tmp")"
             for f in "${FOUND_TMP_FILES[@]}"; do
                 safe_remove "$f"
             done
@@ -698,7 +698,7 @@ run_auto_safe_phase() {
     if (( ${#FOUND_APP_LOGS[@]} > 0 || ${#FOUND_SYSTEM_LOGS[@]} > 0 )); then
         local total_log_bytes
         total_log_bytes=$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))
-        record_user_decision "Stare logi: $(bytes_to_human "$total_log_bytes") — uruchom --interactive aby wyczyścić"
+        record_user_decision "$(t "cli_old_logs"): $(bytes_to_human "$total_log_bytes") — $(t "cli_run_interactive_to_clean")"
     fi
 
     # Everything else → report as needs-decision
@@ -706,13 +706,13 @@ run_auto_safe_phase() {
     for cat in "${needs_decision_cats[@]}"; do
         local bytes; bytes=$(catbytes_get "$cat")
         (( bytes > 0 )) && {
-            record_user_decision "Kategoria '${cat}': $(bytes_to_human "$bytes") — uruchom --interactive aby wyczyścić"
+            record_user_decision "$(t "cli_category") '${cat}': $(bytes_to_human "$bytes") — $(t "cli_run_interactive_to_clean")"
         }
     done
     local system_auto_safe_bytes
     system_auto_safe_bytes=$(catbytes_get "system-caches")
     if (( system_auto_safe_bytes > 0 )); then
-        record_user_decision "System: $(bytes_to_human "$system_auto_safe_bytes") — uruchom --interactive aby wyczyścić"
+        record_user_decision "$(t "cli_system"): $(bytes_to_human "$system_auto_safe_bytes") — $(t "cli_run_interactive_to_clean")"
     fi
 
     generate_report "auto-safe"
@@ -722,10 +722,10 @@ run_auto_safe_phase() {
 # run_restore_phase — restore files moved to quarantine
 # ---------------------------------------------------------------------------
 run_restore_phase() {
-    print_header "Tryb: Restore z kwarantanny"
+    print_header "$(t "mode_restore")"
 
     if [[ -z "$RESTORE_TARGET" ]]; then
-        print_error "Brak manifestu restore."
+        print_error "$(t "cli_no_manifest")"
         exit 2
     fi
 
@@ -734,21 +734,21 @@ run_restore_phase() {
 }
 
 run_list_quarantine_phase() {
-    print_header "Lista kwarantanny"
+    print_header "$(t "cli_list_quarantine")"
     list_quarantine_runs
     generate_report "list-quarantine"
 }
 
 run_purge_quarantine_phase() {
-    print_header "Purge kwarantanny"
+    print_header "$(t "mode_purge")"
 
     if [[ -z "$PURGE_TARGET" ]]; then
-        print_error "Brak selektora purge kwarantanny."
+        print_error "$(t "cli_no_purge_target")"
         exit 2
     fi
 
     if (( APPLY_PURGE != 1 )); then
-        print_warn "Tryb podglądu purge. Dodaj --apply, aby trwale usunąć wskazaną kwarantannę."
+        print_warn "$(t "cli_purge_preview_warn")"
     else
         warn_if_no_fresh_backup "purge quarantine" || true
     fi
@@ -760,10 +760,10 @@ run_purge_quarantine_phase() {
 }
 
 run_apply_plan_phase() {
-    print_header "Apply plan"
+    print_header "$(t "mode_apply")"
 
     if [[ -z "$PLAN_FROM_FILE" ]]; then
-        print_error "Tryb apply wymaga --from-plan <plan.json>"
+        print_error "$(t "cli_apply_requires_plan")"
         exit 2
     fi
 
@@ -806,10 +806,10 @@ main() {
             # dry-run and automation are hard no-delete modes.
             echo
             if (( EXPLICIT_DRY_RUN == 1 || NON_INTERACTIVE == 1 )); then
-                print_info "Raport zapisany. Tryb dry-run zakończony bez czyszczenia."
+                print_info "$(t "cli_report_saved_dryrun")"
                 echo
-                echo -e "  ${C_BOLD}bash cleanup_all.sh --interactive${C_RESET}   # Pełne interaktywne czyszczenie"
-                echo -e "  ${C_BOLD}bash cleanup_all.sh --auto-safe${C_RESET}      # Automatycznie: jawnie bezpieczne cache/tmp"
+                echo -e "  ${C_BOLD}bash cleanup_all.sh --interactive${C_RESET}   # $(t "cli_full_interactive")"
+                echo -e "  ${C_BOLD}bash cleanup_all.sh --auto-safe${C_RESET}      # $(t "cli_auto_safe_only")"
                 echo
             elif ask_proceed_to_interactive; then
                 MODE="dry-run-then-interactive"
@@ -817,10 +817,10 @@ main() {
                 run_interactive_phase
             else
                 echo
-                print_info "Raport zapisany. Gdy będziesz gotowy:"
+                print_info "$(t "cli_report_saved_next")"
                 echo
-                echo -e "  ${C_BOLD}bash cleanup_all.sh --interactive${C_RESET}   # Pełne interaktywne czyszczenie"
-                echo -e "  ${C_BOLD}bash cleanup_all.sh --auto-safe${C_RESET}      # Automatycznie: jawnie bezpieczne cache/tmp"
+                echo -e "  ${C_BOLD}bash cleanup_all.sh --interactive${C_RESET}   # $(t "cli_full_interactive")"
+                echo -e "  ${C_BOLD}bash cleanup_all.sh --auto-safe${C_RESET}      # $(t "cli_auto_safe_only")"
                 echo
             fi
             ;;
@@ -837,7 +837,7 @@ main() {
             run_dry_run_phase
 
             echo
-            print_info "Analiza zakończona. Teraz przejdziemy przez czyszczenie."
+            print_info "$(t "cli_analysis_complete")"
             echo
 
             MODE="dry-run-then-interactive"
@@ -853,13 +853,13 @@ main() {
             run_dry_run_phase
 
             echo
-            print_warn "Auto-safe mode: za chwilę automatycznie wyczyszczę cache i tmp."
+            print_warn "$(t "cli_auto_safe_warn")"
             echo
-            if ask_yes_no "Potwierdzasz auto-safe cleanup (cache użytkownika + pliki tmp)?" "no"; then
+            if ask_yes_no "$(t "cli_auto_safe_prompt")" "no"; then
                 warn_if_no_fresh_backup "auto-safe cleanup" || true
                 run_auto_safe_phase
             else
-                print_skip "Auto-safe czyszczenie anulowane przez użytkownika."
+                print_skip "$(t "cli_auto_safe_cancelled")"
                 generate_report "dry-run"
             fi
             ;;
@@ -881,7 +881,7 @@ main() {
             ;;
     esac
 
-    print_final_summary "$MODE"
+    print_summary_report "$MODE"
 
     # --json: emit machine-readable summary to original stdout (fd JSON_OUTPUT_FD).
     if (( JSON_OUTPUT )); then
