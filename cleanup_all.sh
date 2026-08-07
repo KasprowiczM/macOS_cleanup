@@ -407,6 +407,10 @@ parse_args() {
                 LANG_CODE="$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')"
                 shift 2
                 ;;
+            --explain)
+                SHOW_EXPLAIN=1
+                shift
+                ;;
             --help|-h)
                 SHOW_HELP=1
                 shift
@@ -777,6 +781,7 @@ main() {
     # Handle informational flags first (no logging needed)
     if (( SHOW_HELP )); then    show_help;    exit 0; fi
     if (( SHOW_VERSION )); then show_version; exit 0; fi
+    if (( SHOW_EXPLAIN )); then explain_categories; exit 0; fi
 
     preflight_checks
 

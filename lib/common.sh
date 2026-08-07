@@ -74,6 +74,35 @@ t() {
     echo "$key"
 }
 
+# Cached path size calculation to optimize filesystem du traversal
+SIZE_CACHE_KEYS=()
+SIZE_CACHE_VALS=()
+
+get_path_size_cached() {
+    local path="${1:-}"
+    [[ -z "$path" || ! -e "$path" ]] && { echo "0"; return 0; }
+
+    local norm
+    norm="$(normalize_path "$path" || echo "$path")"
+
+    local i
+    for (( i=0; i<${#SIZE_CACHE_KEYS[@]}; i++ )); do
+        if [[ "${SIZE_CACHE_KEYS[i]}" == "$norm" ]]; then
+            echo "${SIZE_CACHE_VALS[i]}"
+            return 0
+        fi
+    done
+
+    local bytes
+    bytes="$(du -sk "$norm" 2>/dev/null | awk '{print $1 * 1024}')"
+    bytes="${bytes:-0}"
+
+    SIZE_CACHE_KEYS+=("$norm")
+    SIZE_CACHE_VALS+=("$bytes")
+
+    echo "$bytes"
+}
+
 # ---------------------------------------------------------------------------
 # Privacy & Security Helpers
 # ---------------------------------------------------------------------------

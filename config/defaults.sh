@@ -55,6 +55,7 @@ REDACT_PATHS="${REDACT_PATHS:-0}"
 PLAIN_OUTPUT="${PLAIN_OUTPUT:-0}"
 QUIET_OUTPUT="${QUIET_OUTPUT:-0}"
 LANG_CODE="${LANG_CODE:-pl}"
+SHOW_EXPLAIN="${SHOW_EXPLAIN:-0}"
 
 # Interactive control (safe defaults: no destructive prompts in automation context)
 NON_INTERACTIVE="${NON_INTERACTIVE:-0}"

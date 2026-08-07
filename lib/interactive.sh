@@ -12,6 +12,42 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
+# Prints detailed explanation of all cleanup categories (--explain)
+# ---------------------------------------------------------------------------
+explain_categories() {
+    print_header "Objaśnienie kategorii czyszczenia (System Explanations)"
+
+    cat << 'EOF'
+▶ User Caches (user-caches)
+  • Opis: Pamięć podręczna aplikacji w ~/Library/Caches.
+  • Ryzyko: LOW (pliki są odtwarzane przez aplikacje po uruchomieniu).
+  • Kwarantanna: Pełne wsparcie odzyskiwania przez --restore.
+
+▶ Developer Caches (dev)
+  • Opis: Pamięć podręczna npm, pip, cargo, Homebrew oraz niedostępne symulatory iOS.
+  • Ryzyko: LOW / MEDIUM (wymaga ponownego pobrania pakietów przy budowaniu).
+  • Kwarantanna: Kwarantanna przenosi zasoby do odzyskania.
+
+▶ Xcode Device Support (dev / xcode)
+  • Opis: Symbole debugowania starsze niż 180 dni dla podłączanych urządzeń iOS.
+  • Ryzyko: HIGH (duży rozmiar, ponowne pobieranie po podłączeniu starzejącego się urządzenia).
+  • Kwarantanna: Zalecana ręczna weryfikacja.
+
+▶ Logs (user-logs / system-logs)
+  • Opis: Pliki dzienników systemowych oraz aplikacji starsze niż 30 dni.
+  • Ryzyko: LOW.
+
+▶ System Caches (system-caches)
+  • Opis: Pamięć podręczna w /Library/Caches (SIP protected).
+  • Ryzyko: REPORT ONLY (tylko raportowanie, brak usuwania).
+
+▶ Docker (docker)
+  • Opis: Czyszczenie nieużywanych kontenerów, obrazów i wolumenów (system prune).
+  • Ryzyko: HIGH (trwałe usunięcie skontenerowanych środowisk).
+EOF
+}
+
+# ---------------------------------------------------------------------------
 # Low-level yes/no prompt
 # Returns 0 for yes, 1 for no.
 # ---------------------------------------------------------------------------
