@@ -151,6 +151,10 @@ run_gate "G15" "No network calls in cleanup code" \
 run_gate "G16" "Functional deletion smoke gate (quarantine mode cleans candidate)" \
     '_g16_tmp=$(mktemp -d) && mkdir -p "${_g16_tmp}/home/Library/Caches/smoke_app" && echo "smoke" > "${_g16_tmp}/home/Library/Caches/smoke_app/data.bin" && _g16_out=$(env HOME="${_g16_tmp}/home" LOGS_DIR="${_g16_tmp}/logs" REPORTS_DIR="${_g16_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g16_tmp}/reports/journal.jsonl" QUARANTINE_ROOT="${_g16_tmp}/quarantine" /bin/bash "${PROJ_DIR}/cleanup_all.sh" --category user-caches --interactive --no-color <<< "y" 2>&1) && [[ ! -d "${_g16_tmp}/home/Library/Caches/smoke_app" ]] && echo "$_g16_out" | grep -q "Quarantining" && rm -rf "${_g16_tmp}"'
 
+# G17: Plan risk vs policy parity
+run_gate "G17" "Plan risk vs policy parity (tests/test_plan_policy_parity.sh)" \
+    '[[ -f "${PROJ_DIR}/tests/test_plan_policy_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_plan_policy_parity.sh"'
+
 echo
 echo "═══════════════════════════════════════════════════"
 echo "  Results: ${PASS} pass, ${FAIL} fail"

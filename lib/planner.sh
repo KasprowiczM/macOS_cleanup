@@ -67,7 +67,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
         for path in "${FOUND_TRASH_ITEMS[@]}"; do
-            plan_add_path "trash" "REVIEW" "$path" \
+            plan_add_path "trash" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                 "Item in macOS Trash." \
                 "Remove only if deliberately deleted and rollback is not needed."
         done
@@ -75,7 +75,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_USER_CACHES[@]} > 0 )); then
         for path in "${FOUND_USER_CACHES[@]}"; do
-            plan_add_path "user-caches" "REVIEW" "$path" \
+            plan_add_path "user-caches" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                 "Top-level cache in ~/Library/Caches; mixed risk category." \
                 "Review app name before removing."
         done
@@ -86,11 +86,11 @@ build_cleanup_plan_from_analysis() {
             label="${item%%:*}"
             path="${item#*:}"
             if app_cache_auto_safe "$label"; then
-                plan_add_path "app-caches" "SAFE" "$path" \
+                plan_add_path "app-caches" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                     "${label}: recreateable app cache." \
                     "App will recreate cache on launch."
             else
-                plan_add_path "app-caches" "REVIEW" "$path" \
+                plan_add_path "app-caches" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                     "${label}: app cache outside auto-safe allowlist." \
                     "Review manually before removal."
             fi
@@ -99,21 +99,21 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_APP_LOGS[@]} > 0 )); then
         for path in "${FOUND_APP_LOGS[@]}"; do
-            plan_add_path "logs" "SAFE" "$path" \
+            plan_add_path "logs" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                 "Old log file or diagnostic report." \
                 "Safe unless actively troubleshooting."
         done
     fi
     if (( ${#FOUND_SYSTEM_LOGS[@]} > 0 )); then
         for path in "${FOUND_SYSTEM_LOGS[@]}"; do
-            plan_add_path "logs" "SAFE" "$path" \
+            plan_add_path "logs" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                 "Old log file or diagnostic report." \
                 "Safe unless actively troubleshooting."
         done
     fi
     if (( ${#FOUND_DIAGNOSTIC_REPORTS[@]} > 0 )); then
         for path in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
-            plan_add_path "logs" "SAFE" "$path" \
+            plan_add_path "logs" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                 "Old log file or diagnostic report." \
                 "Safe unless actively troubleshooting."
         done
@@ -121,7 +121,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_TMP_FILES[@]} > 0 )); then
         for path in "${FOUND_TMP_FILES[@]}"; do
-            plan_add_path "system" "SAFE" "$path" \
+            plan_add_path "system" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                 "Old temporary file." \
                 "Safe to remove; macOS and apps treat /tmp as transient."
         done
@@ -129,7 +129,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_SYSTEM_CACHES[@]} > 0 )); then
         for path in "${FOUND_SYSTEM_CACHES[@]}"; do
-            plan_add_report_only "system" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "system" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
                 "System cache /Library/Caches." \
                 "Not executed from plan; use interactive mode after review."
         done
@@ -137,7 +137,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_APP_LEFTOVERS[@]} > 0 )); then
         for path in "${FOUND_APP_LEFTOVERS[@]}"; do
-            plan_add_report_only "app-leftovers" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "app-leftovers" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
                 "Heuristic app leftover." \
                 "Remove manually after confirming app is uninstalled."
         done
@@ -149,12 +149,12 @@ build_cleanup_plan_from_analysis() {
             path="${item#*:}"
             case "$key" in
                 xcode_derived_data)
-                    plan_add_path "dev" "SAFE" "$path" \
+                    plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Xcode DerivedData: recreateable build artifacts." \
                         "Xcode will rebuild projects on next compilation."
                     ;;
                 xcode_archives)
-                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
                         "Xcode Archives may be required for app distribution or symbolication." \
                         "Review in Xcode Organizer before deletion."
                     ;;
@@ -182,17 +182,17 @@ build_cleanup_plan_from_analysis() {
                     plan_add_native "dev" "SAFE" "gem cleanup" "$(catbytes_get "gem")" \
                         "Ruby gems cache / old versions." "Gems can be reinstalled." ;;
                 gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
-                    plan_add_path "dev" "SAFE" "$path" \
+                    plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Recreateable dev tool cache." \
                         "Builds will re-download dependencies."
                     ;;
                 maven_cache)
-                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
                         "Maven repository may contain locally built artifacts." \
                         "Do not delete automatically; review manually."
                     ;;
                 android_avd)
-                    plan_add_report_only "dev" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
                         "Android AVD may contain emulator local state." \
                         "Remove via Android Studio Device Manager after review."
                     ;;
@@ -208,7 +208,7 @@ build_cleanup_plan_from_analysis() {
     if (( ${#FOUND_DEVICE_SUPPORT_ITEMS[@]} > 0 )); then
         for item in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
             path="${item#*:}"
-            plan_add_path "dev" "REVIEW" "$path" \
+            plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                 "Xcode Device Support older than ${DEVICE_SUPPORT_MIN_AGE_DAYS} days." \
                 "Xcode re-downloads debug symbols upon connecting matching devices."
         done
@@ -224,7 +224,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_IOS_BACKUPS[@]} > 0 )); then
         for path in "${FOUND_IOS_BACKUPS[@]}"; do
-            plan_add_path "time-machine" "REVIEW" "$path" \
+            plan_add_path "time-machine" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                 "Local iOS/iPadOS backup." \
                 "Remove only after confirming external or iCloud backup."
         done
@@ -232,7 +232,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_DMG_PKG[@]} > 0 )); then
         for path in "${FOUND_DMG_PKG[@]}"; do
-            plan_add_path "large-files" "REVIEW" "$path" \
+            plan_add_path "large-files" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" \
                 "Old DMG/PKG/ISO installer in Downloads." \
                 "Remove only if re-downloadable or no longer needed."
         done
