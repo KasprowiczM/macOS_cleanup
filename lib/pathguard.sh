@@ -16,9 +16,12 @@ _MAC_CLEANUP_PATHGUARD_LOADED=1
 # Helper: Get numeric owner UID of a path (macOS BSD stat & GNU stat compatible)
 _get_path_owner_uid() {
     local target="$1"
-    if stat -f %u "$target" 2>/dev/null; then
+    local uid=""
+    if uid="$(stat -c %u "$target" 2>/dev/null)" && [[ -n "$uid" ]]; then
+        echo "$uid"
         return 0
-    elif stat -c %u "$target" 2>/dev/null; then
+    elif uid="$(stat -f %u "$target" 2>/dev/null)" && [[ -n "$uid" ]]; then
+        echo "$uid"
         return 0
     fi
     echo "-1"
@@ -146,10 +149,14 @@ _is_within_allowed_cache_root() {
 validate_cache_path() {
     local raw_path="${1:-}"
 
-    # 1. Non-empty check
+    # 1. Non-empty check and relative path rejection
     if [[ -z "$raw_path" ]]; then
         return 1
     fi
+    case "$raw_path" in
+        /*|~/*|~) ;;
+        *) return 1 ;;
+    esac
 
     # 2. Normalize path
     local norm_path
