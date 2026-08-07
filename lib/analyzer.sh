@@ -87,8 +87,9 @@ PY
 
 is_known_app_specific_cache_path() {
     local path="$1"
-    local normalized known known_norm
+    is_path_claimed "$path" && return 0
 
+    local normalized known known_norm
     normalized="$(normalize_path "$path" || echo "$path")"
 
     for known in \
@@ -404,6 +405,7 @@ analyze_user_caches() {
         local b="${bytes:-0}"
         [[ "$b" -lt 1024 ]] 2>/dev/null && continue  # ignore < 1 KB
         FOUND_USER_CACHES+=("$item")
+        claim_path "$item" "$b"
         total=$(( total + b ))
         size_list+="${b} ${item}"$'\n'
     done < <(find "$cache_base" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
@@ -528,6 +530,7 @@ analyze_app_specific_caches() {
         [[ "$b" -lt 10240 ]] 2>/dev/null && continue  # ignore < 10 KB
 
         FOUND_APP_CACHE_ITEMS+=("${label}:${path}")
+        claim_path "$path" "$b"
         total=$(( total + b ))
         found_count=$(( found_count + 1 ))
         printf "  ${C_YELLOW}→${C_RESET}  %-40s  %s\n" "$label" "$(bytes_to_human "$b")"
@@ -1369,8 +1372,8 @@ run_full_analysis() {
             trash)         _run_analyzer analyze_trash ;;
             system)        _run_analyzer analyze_system_caches
                            _run_analyzer analyze_tmp ;;
-            user-caches)   _run_analyzer analyze_user_caches
-                           _run_analyzer analyze_app_specific_caches ;;
+            user-caches)   _run_analyzer analyze_app_specific_caches
+                           _run_analyzer analyze_user_caches ;;
             logs)          _run_analyzer analyze_logs
                            _run_analyzer analyze_diagnostic_reports ;;
             app-leftovers) _run_analyzer analyze_app_leftovers ;;

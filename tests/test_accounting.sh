@@ -29,6 +29,14 @@ source "${PROJ_DIR}/config/defaults.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/common.sh"
 # shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/policy.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/pathguard.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/interactive.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/analyzer.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/json_summary.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
@@ -112,6 +120,35 @@ if [[ "$json_out" == *"\"informational_bytes\":"* ]]; then
     _pass
 else
     _fail "emit_json_summary JSON output MUST contain informational_bytes key"
+fi
+
+begin_test "Analyzer category order & claiming prevents app-cache double counting"
+reset_claimed_paths
+FOUND_USER_CACHES=()
+FOUND_APP_CACHE_ITEMS=()
+
+mkdir -p "$HOME/Library/Caches/com.spotify.client"
+dd if=/dev/zero of="$HOME/Library/Caches/com.spotify.client/cache.dat" bs=1024 count=50 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/com.generic.app"
+dd if=/dev/zero of="$HOME/Library/Caches/com.generic.app/data.dat" bs=1024 count=20 2>/dev/null
+
+run_full_analysis "user-caches" >/dev/null 2>&1
+
+spotify_in_user=0
+for item in "${FOUND_USER_CACHES[@]}"; do
+    [[ "$item" == *"/com.spotify.client"* ]] && spotify_in_user=1
+done
+
+spotify_in_app=0
+for item in "${FOUND_APP_CACHE_ITEMS[@]}"; do
+    [[ "$item" == *"/com.spotify.client"* ]] && spotify_in_app=1
+done
+
+if [[ "$spotify_in_app" -eq 1 && "$spotify_in_user" -eq 0 ]]; then
+    _pass
+else
+    _fail "com.spotify.client claimed twice or misplaced: in_app=${spotify_in_app}, in_user=${spotify_in_user}"
 fi
 
 print_test_summary
