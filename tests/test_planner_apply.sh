@@ -498,4 +498,90 @@ assert_file_exists  "$MIX_DANGER" "Mixed: DANGEROUS must stay"
 assert_true "find \"${QUARANTINE_ROOT}\" -name 'mix-safe' -print -quit | grep -q ." \
     "Mixed: SAFE file must be in quarantine"
 
+# ---------------------------------------------------------------------------
+# R-1: TSV Delimiter & Field Preservation Tests (empty path, quotes, spaces, non-ASCII)
+# ---------------------------------------------------------------------------
+begin_test "R-1: apply_plan_file emitter & reader preserve empty fields (npm native_command)"
+reset_apply_state
+
+NATIVE_PLAN="${SANDBOX}/native_npm.json"
+write_plan "$NATIVE_PLAN" "[
+  {
+    \"id\": \"op-npm-1\", \"category\": \"dev\",
+    \"risk\": \"SAFE\", \"action\": \"native_command\",
+    \"path\": \"\", \"command\": \"npm cache clean --force\",
+    \"estimated_bytes\": 24530000000, \"size\": 24530000000,
+    \"description\": \"Clean npm cache\", \"recommendation\": \"safe\"
+  },
+  {
+    \"id\": \"op-empty-cmd\", \"category\": \"dev\",
+    \"risk\": \"SAFE\", \"action\": \"report_only\",
+    \"path\": \"/path/with spaces 'single' \\\"double\\\" ąę/cache\", \"command\": \"\",
+    \"estimated_bytes\": 1024, \"size\": 1024,
+    \"description\": \"empty command with complex path\", \"recommendation\": \"safe\"
+  },
+  {
+    \"id\": \"op-empty-cat\", \"category\": \"\",
+    \"risk\": \"SAFE\", \"action\": \"report_only\",
+    \"path\": \"/simple/path\", \"command\": \"\",
+    \"estimated_bytes\": 512, \"size\": 512,
+    \"description\": \"empty category\", \"recommendation\": \"safe\"
+  }
+]"
+
+# Test emitter / reader directly
+while IFS=$'\x1f' read -r _id_b64 _risk _action _path_b64 _cmd_b64 _bytes _cat_b64; do
+    _cmd="$(base64_decode_string "$_cmd_b64")"
+    _path="$(base64_decode_string "$_path_b64")"
+    _cat="$(base64_decode_string "$_cat_b64")"
+    if [[ "$_action" == "native_command" ]]; then
+        assert_eq "$_cmd" "npm cache clean --force" "R-1: Decoded native command must equal npm cache clean --force"
+        assert_eq "$_path" "" "R-1: Empty path must remain empty"
+    fi
+    if [[ "$_id_b64" == "$(printf '%s' "op-empty-cmd" | base64 | tr -d '\n')" ]]; then
+        assert_eq "$_path" "/path/with spaces 'single' \"double\" ąę/cache" "R-1: Complex path with spaces/quotes/non-ASCII preserved"
+        assert_eq "$_cmd" "" "R-1: Empty command preserved"
+    fi
+    if [[ "$_id_b64" == "$(printf '%s' "op-empty-cat" | base64 | tr -d '\n')" ]]; then
+        assert_eq "$_cat" "" "R-1: Empty category preserved"
+    fi
+done < <(python3 - "$NATIVE_PLAN" <<'PY'
+import base64, json, sys
+with open(sys.argv[1], "r", encoding="utf-8") as f:
+    data = json.load(f)
+def b64(v):
+    return base64.b64encode(str(v or "").encode("utf-8")).decode("ascii")
+for op in data.get("operations", []):
+    print("\x1f".join([
+        b64(op.get("id", "")), str(op.get("risk", "")), str(op.get("action", "")),
+        b64(op.get("path", "")), b64(op.get("command", "")),
+        str(int(op.get("estimated_bytes") or 0)), b64(op.get("category", ""))
+    ]))
+PY
+)
+
+# End-to-end test with npm stubbed to a recorder
+begin_test "R-1: End-to-end npm native_command execution via recorder stub"
+reset_apply_state
+
+RECORDER_LOG="${SANDBOX}/npm_recorder.log"
+STUB_BIN_DIR="${SANDBOX}/stub_bin"
+mkdir -p "$STUB_BIN_DIR"
+cat << STUB > "${STUB_BIN_DIR}/npm"
+#!/usr/bin/env bash
+echo "NPM_CALLED: \$*" >> "${RECORDER_LOG}"
+exit 0
+STUB
+chmod +x "${STUB_BIN_DIR}/npm"
+
+_old_path="$PATH"
+export PATH="${STUB_BIN_DIR}:${PATH}"
+
+DRY_RUN=0 apply_plan_file "$NATIVE_PLAN"
+export PATH="$_old_path"
+
+assert_file_exists "$RECORDER_LOG" "R-1: npm recorder log must be created"
+assert_true "grep -q 'NPM_CALLED: cache clean --force' '$RECORDER_LOG'" \
+    "R-1: npm recorder log must record exact command invocation 'npm cache clean --force'"
+
 print_test_summary

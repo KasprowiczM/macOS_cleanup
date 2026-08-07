@@ -85,25 +85,33 @@ PY
     return 124
 }
 
-is_known_app_specific_cache_path() {
-    local path="$1"
-    local normalized known known_norm
-
-    normalized="$(normalize_path "$path" || echo "$path")"
-
-    for known in \
+_claim_known_specific_caches() {
+    local path
+    for path in \
+        "$HOME/Library/Caches/Homebrew" \
+        "$HOME/Library/Caches/pip" \
+        "$HOME/Library/Caches/CocoaPods" \
+        "$HOME/Library/Caches/org.swift.swiftpm" \
+        "$HOME/Library/Caches/composer" \
         "$HOME/Library/Caches/com.figma.Desktop" \
         "$HOME/Library/Caches/JetBrains" \
         "$HOME/Library/Caches/Adobe" \
         "$HOME/Library/Caches/com.spotify.client" \
         "$HOME/Library/Caches/us.zoom.xos" \
         "$HOME/Library/Caches/com.apple.dt.Xcode" \
-        "$HOME/Library/Caches/com.macpaw.CleanMyMac4"; do
-        known_norm="$(normalize_path "$known" || echo "$known")"
-        [[ "$normalized" == "$known_norm" ]] && return 0
+        "$HOME/Library/Caches/com.macpaw.CleanMyMac4" \
+        "$HOME/Library/Caches/com.apple.Safari" \
+        "$HOME/Library/Caches/Google/Chrome" \
+        "$HOME/Library/Caches/Firefox" \
+        "$HOME/Library/Caches/Microsoft Edge" \
+        "$HOME/Library/Caches/BraveSoftware/Brave-Browser"; do
+        [[ -d "$path" ]] && claim_path "$path" 0
     done
+}
 
-    return 1
+is_known_app_specific_cache_path() {
+    local path="$1"
+    is_path_claimed "$path"
 }
 
 simctl_unavailable_udids() {
@@ -288,9 +296,12 @@ _is_full_scan() {
 analyze_disk_overview() {
     print_section "$(t "disk_overview")"
 
+    local target_vol="/"
+    [[ -d "/System/Volumes/Data" ]] && target_vol="/System/Volumes/Data"
+
     # --- Basic disk usage ---
     echo -e "  ${C_BOLD}$(t "disk_volumes_header")${C_RESET}"
-    df -h / 2>/dev/null | awk 'NR==1{next} {
+    df -h "$target_vol" 2>/dev/null | awk 'NR==1{next} {
         printf "    Size: %s  |  Used: %s  |  Free: %s  (%s)\n", $2, $3, $4, $5
     }' || true
     echo
@@ -298,7 +309,7 @@ analyze_disk_overview() {
     # --- APFS Free & Purgeable space ---
     if command -v diskutil &>/dev/null; then
         local diskinfo=""
-        diskinfo=$(diskutil info / 2>/dev/null) || diskinfo=""
+        diskinfo=$(diskutil info "$target_vol" 2>/dev/null) || diskinfo=""
 
         local free_space=""
         free_space=$(printf '%s\n' "$diskinfo" | \
@@ -371,7 +382,7 @@ analyze_trash() {
         return
     fi
 
-    print_found "$(t "trash"): $(bytes_to_human "$total") in ${count} items"
+    print_found "$(t "trash"): $(t "in_items" "$(bytes_to_human "$total")" "$count")"
 
     # Show top 5 largest items in trash
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
@@ -394,6 +405,8 @@ analyze_user_caches() {
     local cache_base="$HOME/Library/Caches"
     [[ -d "$cache_base" ]] || { print_skip "Directory does not exist: $cache_base"; return; }
 
+    _claim_known_specific_caches
+
     local total=0
     local size_list=""   # PF1: accumulate sizes to avoid double-du
     while IFS= read -r -d '' item; do
@@ -404,6 +417,7 @@ analyze_user_caches() {
         local b="${bytes:-0}"
         [[ "$b" -lt 1024 ]] 2>/dev/null && continue  # ignore < 1 KB
         FOUND_USER_CACHES+=("$item")
+        claim_path "$item" "$b"
         total=$(( total + b ))
         size_list+="${b} ${item}"$'\n'
     done < <(find "$cache_base" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
@@ -415,7 +429,7 @@ analyze_user_caches() {
         return
     fi
 
-    print_found "$(t "user_caches_found"): $(bytes_to_human "$total") in ${#FOUND_USER_CACHES[@]} items"
+    print_found "$(t "user_caches_found"): $(t "in_items" "$(bytes_to_human "$total")" "${#FOUND_USER_CACHES[@]}")"
 
     echo -e "  ${C_DIM}$(t "user_caches_top10"):${C_RESET}"
     local top10=""
@@ -528,6 +542,7 @@ analyze_app_specific_caches() {
         [[ "$b" -lt 10240 ]] 2>/dev/null && continue  # ignore < 10 KB
 
         FOUND_APP_CACHE_ITEMS+=("${label}:${path}")
+        claim_path "$path" "$b"
         total=$(( total + b ))
         found_count=$(( found_count + 1 ))
         printf "  ${C_YELLOW}→${C_RESET}  %-40s  %s\n" "$label" "$(bytes_to_human "$b")"
@@ -796,7 +811,7 @@ analyze_app_leftovers() {
         print_ok "$(t "leftovers_ok")"
         print_info "  $(t "leftovers_heuristic_note")"
     else
-        print_found "$(t "leftovers_found"): $(bytes_to_human "$total") in ${count} items"
+        print_found "$(t "leftovers_found"): $(t "in_items" "$(bytes_to_human "$total")" "$count")"
         print_warn  "  $(t "leftovers_warn")"
         # Show top 5
         echo -e "  ${C_DIM}Top 5:${C_RESET}"
@@ -1231,7 +1246,7 @@ analyze_time_machine() {
     local count=0
     count=$(echo "$snapshots" | grep -c "com.apple.TimeMachine" 2>/dev/null) || count=0
 
-    print_found "Local Time Machine snapshots: ${count} count"
+    print_info "$(t "tm_snapshots_count" "$count")"
 
     while IFS= read -r snap; do
         [[ -z "$snap" ]] && continue
@@ -1243,8 +1258,10 @@ analyze_time_machine() {
 
     # Show purgeable space
     if command -v diskutil &>/dev/null; then
+        local target_vol="/"
+        [[ -d "/System/Volumes/Data" ]] && target_vol="/System/Volumes/Data"
         local purgeable=""
-        purgeable=$(diskutil info / 2>/dev/null | grep -i "Purgeable" | \
+        purgeable=$(diskutil info "$target_vol" 2>/dev/null | grep -i "Purgeable" | \
             head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') \
             || purgeable=""
         if [[ -n "$purgeable" ]]; then
@@ -1369,8 +1386,8 @@ run_full_analysis() {
             trash)         _run_analyzer analyze_trash ;;
             system)        _run_analyzer analyze_system_caches
                            _run_analyzer analyze_tmp ;;
-            user-caches)   _run_analyzer analyze_user_caches
-                           _run_analyzer analyze_app_specific_caches ;;
+            user-caches)   _run_analyzer analyze_app_specific_caches
+                           _run_analyzer analyze_user_caches ;;
             logs)          _run_analyzer analyze_logs
                            _run_analyzer analyze_diagnostic_reports ;;
             app-leftovers) _run_analyzer analyze_app_leftovers ;;

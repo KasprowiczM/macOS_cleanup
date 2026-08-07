@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] — 2026-08-07
+
+### Added
+- **[R-1 / BUG-1 / Gate G18] Unit Separator (0x1F) TSV Delimiter & Plan Round-Trip Preservation.** Resolved field shift corruption in `apply --from-plan` for `native_command` operations (e.g. `npm cache clean --force`). Added Gate G18 verifying end-to-end plan execution and round-trip preservation.
+- **[R-2 / BUG-6 / Gate G13] Pre-Pass App Cache Claiming & Accounting Deduplication.** Implemented `_claim_known_specific_caches()` to claim specific application caches (Homebrew, pip, CocoaPods, SwiftPM, composer, Figma, JetBrains, Adobe, Spotify, Zoom, Xcode, Safari, Chrome, etc.) before `analyze_user_caches()` runs, eliminating double-counting.
+- **[R-3 / BUG-9] Portable `app_bundle_exists` Helper.** Added `get_plist_bundle_id()` supporting `defaults read` on macOS with Python 3 `plistlib` / XML `grep` fallback.
+- **[C-1] Verification Suite Performance Options & Gate G19.** Optimized `verify_release.sh` with `--quick` (~10s), `--summary` (1 suite run with quiet stdout), and `--full` (all 19 gates including G12 determinism). Added Gate G19 for protected path docs sync.
+- **[C-2] APFS Purgeable Space Reporting.** Updated `diskutil info` query to target `/System/Volumes/Data` volume on modern macOS. Added `Purgeable (APFS)` and `Free now` to final summary output with explanation of Time Machine snapshot expiration.
+- **[C-3] i18n Dictionary Auditing.** Added localized `in_items`, `items_count`, and `tm_snapshots_count` keys across all 7 language dictionaries (`en`, `pl`, `de`, `es`, `fr`, `it`, `pt`). Re-verified zero schema diffs or missing keys.
+- **[C-4] Linux `stat` Portability.** Added `file_mtime_seconds()` helper supporting BSD `stat -f %m` and GNU `stat -c %Y` with Python 3 fallback, eliminating test failures on Linux.
+- **[C-5] Restore Run ID Disambiguation.** Added run ID logging and hint listing remaining quarantine runs when using `--restore latest`.
+- **[C-6] Installer Tag Pinning & Checksum Check.** Pinned `install.sh` default target to `v3.0.2` release tag with `SHA256SUMS` verification and `--edge` flag for tracking `main`. `tools/gen_protected_docs.sh` now auto-injects `NEVER_TOUCH_PATHS` into all 7 READMEs.
+- **[C-7] Comprehensive User Guide.** Created `docs/USER_GUIDE.md` for Mac owners covering prerequisites, 4 core commands with example outputs, risk levels, APFS purgeable space, restore instructions, category details, automation, and troubleshooting.
+
+### Fixed
+- Fixed plan field shift corrupting binary parameters during TSV deserialization.
+- Fixed double-counting accounting bug between app-specific caches and user disposable roots.
+- Fixed untranslated English fragments (`in`, `items`, `count`) in non-English summary outputs.
+
 ## [3.0.0] — 2026-08-07
 
 ### Changed

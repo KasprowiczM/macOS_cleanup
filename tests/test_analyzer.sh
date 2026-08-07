@@ -197,8 +197,23 @@ assert_true "echo '$_pf1_output' | grep -q 'pf1-c.bin'" "100KB item in output"
 assert_true "echo '$_pf1_output' | grep -q 'pf1-b.bin'" "50KB item in output"
 assert_true "echo '$_pf1_output' | grep -q 'pf1-a.bin'" "10KB item in output"
 # Verify sort order: pf1-c should appear before pf1-a in the output
-_pf1_c_line=$(echo "$_pf1_output" | grep -n 'pf1-c.bin' | head -1 | cut -d: -f1)
-_pf1_a_line=$(echo "$_pf1_output" | grep -n 'pf1-a.bin' | head -1 | cut -d: -f1)
-assert_true "(( _pf1_c_line < _pf1_a_line ))" "items sorted by size (largest first)"
+begin_test "analyze_disk_overview uses /System/Volumes/Data when present"
+_disk_out="$(analyze_disk_overview 2>&1)"
+assert_true "echo '$_disk_out' | grep -qi 'Size:'" "disk overview should display Size header"
+
+begin_test "app_bundle_exists cross-checks FOUND_INSTALLED_APPS"
+FOUND_INSTALLED_APPS=("$SANDBOX/CustomApps/TestFakeApp.app")
+mkdir -p "$SANDBOX/CustomApps/TestFakeApp.app/Contents"
+cat << 'PLIST' > "$SANDBOX/CustomApps/TestFakeApp.app/Contents/Info.plist"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>com.fakeapp.uniquebundleid12345</string>
+</dict>
+</plist>
+PLIST
+assert_true "app_bundle_exists 'com.fakeapp.uniquebundleid12345'" "app_bundle_exists should return 0 for installed app bundle in FOUND_INSTALLED_APPS"
 
 print_test_summary

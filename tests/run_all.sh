@@ -17,10 +17,22 @@ for test_file in "${TEST_DIR}"/test_*.sh; do
     [[ -f "$test_file" ]] || continue
     echo
     echo ">>> $(basename "$test_file")"
-    if bash "$test_file"; then
-        :
+    if [[ "${QUIET:-0}" -eq 1 ]]; then
+        tlog="$(mktemp)"
+        if bash "$test_file" > "$tlog" 2>&1; then
+            grep -E '^(Pass:|Fail:)' "$tlog" || echo "Pass: OK"
+            rm -f "$tlog"
+        else
+            cat "$tlog"
+            rm -f "$tlog"
+            FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+        fi
     else
-        FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+        if bash "$test_file"; then
+            :
+        else
+            FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+        fi
     fi
 done
 

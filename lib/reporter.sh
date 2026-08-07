@@ -223,25 +223,46 @@ print_summary_report() {
         plan)
             echo -e "  ${C_BOLD}Mode:${C_RESET}                       Plan — plan file generated"
             ;;
+        list-quarantine|list)
+            echo -e "  ${C_BOLD}Mode:${C_RESET}                       Quarantine List — listing entries"
+            ;;
+        restore)
+            echo -e "  ${C_BOLD}Restored:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} ($(t "items_count" "$TOTAL_RESTORED_ITEMS"))"
+            ;;
+        purge)
+            echo -e "  ${C_BOLD}Purged:${C_RESET}                   ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+            ;;
         *)
-            if [[ "$REMOVE_MODE" == "quarantine" ]]; then
-                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
-            elif [[ "$MODE" == "restore" ]]; then
-                echo -e "  ${C_BOLD}Restored:${C_RESET}                 ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_RESTORED_BYTES")${C_RESET} (${TOTAL_RESTORED_ITEMS} items)"
-            elif [[ "$MODE" == "purge" ]]; then
-                echo -e "  ${C_BOLD}Purged:${C_RESET}                   ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-            else
-                echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
-                echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} (${TOTAL_QUARANTINED_ITEMS} items)"
-            fi
+            echo -e "  ${C_BOLD}Freed directly:${C_RESET}      ${C_GREEN}${C_BOLD}$(bytes_to_human "$TOTAL_CLEANED_BYTES")${C_RESET}"
+            echo -e "  ${C_BOLD}Quarantined:${C_RESET}             ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_QUARANTINED_BYTES")${C_RESET} ($(t "items_count" "$TOTAL_QUARANTINED_ITEMS"))"
             ;;
     esac
 
-    echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    if [[ "$MODE" != "list-quarantine" && "$MODE" != "list" ]]; then
+        echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    fi
+
+    if command -v diskutil &>/dev/null; then
+        local target_vol="/"
+        [[ -d "/System/Volumes/Data" ]] && target_vol="/System/Volumes/Data"
+        local diskinfo=""
+        diskinfo=$(diskutil info "$target_vol" 2>/dev/null) || diskinfo=""
+        local free_now="" purgeable_now=""
+        free_now=$(printf '%s\n' "$diskinfo" | grep -iE "(Container Free Space|Volume Free Space|Free Space)" | head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') || free_now=""
+        purgeable_now=$(printf '%s\n' "$diskinfo" | grep -i "Purgeable" | head -1 | sed 's/.*:[[:space:]]*//' | sed 's/ (.*//' | sed 's/[[:space:]]*$//') || purgeable_now=""
+
+        if [[ -n "$purgeable_now" ]]; then
+            echo -e "  ${C_BOLD}Purgeable (APFS):${C_RESET}       ${C_YELLOW}${purgeable_now}${C_RESET}   ← snapshot-retained; returns automatically"
+        fi
+        if [[ -n "$free_now" ]]; then
+            echo -e "  ${C_BOLD}Free now:${C_RESET}               ${C_GREEN}${free_now}${C_RESET}"
+        fi
+    fi
+
     echo -e "  ${C_BOLD}Report File:${C_RESET}            ${C_DIM}${REPORT_FILE}${C_RESET}"
     echo -e "  ${C_BOLD}Journal File:${C_RESET}           ${C_DIM}${CLEANUP_JOURNAL_FILE}${C_RESET}"
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
+    echo -e "${C_DIM}  Space held by Time Machine local snapshots is reclaimed automatically as snapshots expire, usually within 24 hours, or immediately under disk pressure.${C_RESET}"
     echo -e "${C_DIM}  To open report: open \"${REPORT_FILE}\"${C_RESET}"
     echo
 }

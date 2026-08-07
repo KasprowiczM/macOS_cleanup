@@ -29,6 +29,14 @@ source "${PROJ_DIR}/config/defaults.sh"
 # shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/common.sh"
 # shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/policy.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/pathguard.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/interactive.sh"
+# shellcheck disable=SC1091
+source "${PROJ_DIR}/lib/analyzer.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/json_summary.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
@@ -113,5 +121,68 @@ if [[ "$json_out" == *"\"informational_bytes\":"* ]]; then
 else
     _fail "emit_json_summary JSON output MUST contain informational_bytes key"
 fi
+
+begin_test "Analyzer category order & claiming prevents app-cache double counting"
+reset_claimed_paths
+FOUND_USER_CACHES=()
+FOUND_APP_CACHE_ITEMS=()
+
+mkdir -p "$HOME/Library/Caches/com.spotify.client"
+dd if=/dev/zero of="$HOME/Library/Caches/com.spotify.client/cache.dat" bs=1024 count=50 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/com.generic.app"
+dd if=/dev/zero of="$HOME/Library/Caches/com.generic.app/data.dat" bs=1024 count=20 2>/dev/null
+
+run_full_analysis "user-caches" >/dev/null 2>&1
+
+spotify_in_user=0
+for item in "${FOUND_USER_CACHES[@]}"; do
+    [[ "$item" == *"/com.spotify.client"* ]] && spotify_in_user=1
+done
+
+spotify_in_app=0
+for item in "${FOUND_APP_CACHE_ITEMS[@]}"; do
+    [[ "$item" == *"/com.spotify.client"* ]] && spotify_in_app=1
+done
+
+if [[ "$spotify_in_app" -eq 1 && "$spotify_in_user" -eq 0 ]]; then
+    _pass
+else
+    _fail "com.spotify.client claimed twice or misplaced: in_app=${spotify_in_app}, in_user=${spotify_in_user}"
+fi
+
+begin_test "R-2: Five colliding paths (Homebrew, pip, CocoaPods, SwiftPM, composer) excluded from user-caches"
+reset_claimed_paths
+FOUND_USER_CACHES=()
+rm -rf "$HOME/Library/Caches"
+mkdir -p "$HOME/Library/Caches"
+
+mkdir -p "$HOME/Library/Caches/Homebrew"
+dd if=/dev/zero of="$HOME/Library/Caches/Homebrew/data.bin" bs=1024 count=50 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/pip"
+dd if=/dev/zero of="$HOME/Library/Caches/pip/data.bin" bs=1024 count=40 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/CocoaPods"
+dd if=/dev/zero of="$HOME/Library/Caches/CocoaPods/data.bin" bs=1024 count=30 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/org.swift.swiftpm"
+dd if=/dev/zero of="$HOME/Library/Caches/org.swift.swiftpm/data.bin" bs=1024 count=20 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/composer"
+dd if=/dev/zero of="$HOME/Library/Caches/composer/data.bin" bs=1024 count=10 2>/dev/null
+
+mkdir -p "$HOME/Library/Caches/generic_app_cache"
+dd if=/dev/zero of="$HOME/Library/Caches/generic_app_cache/data.bin" bs=1024 count=15 2>/dev/null
+
+run_full_analysis "user-caches" >/dev/null 2>&1
+
+for item in "${FOUND_USER_CACHES[@]}"; do
+    if [[ "$item" == *"/Homebrew"* || "$item" == *"/pip"* || "$item" == *"/CocoaPods"* || "$item" == *"/org.swift.swiftpm"* || "$item" == *"/composer"* ]]; then
+        _fail "R-2: Colliding path incorrectly present in FOUND_USER_CACHES: $item"
+    fi
+done
+assert_true "(( ${#FOUND_USER_CACHES[@]} == 1 ))" "R-2: Only generic_app_cache should be present in FOUND_USER_CACHES"
+assert_true "echo '${FOUND_USER_CACHES[0]}' | grep -q 'generic_app_cache'" "R-2: generic_app_cache present in FOUND_USER_CACHES"
 
 print_test_summary

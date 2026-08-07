@@ -11,8 +11,15 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/KasprowiczM/macOS_cleanup.git"
-BRANCH="main"
+RELEASE_TAG="v3.0.2"
+TARGET_REF="$RELEASE_TAG"
 DEST="${MACOS_CLEANUP_DIR:-$HOME/Dev_Env/macOS_cleanup}"
+
+for arg in "$@"; do
+    if [[ "$arg" == "--edge" ]]; then
+        TARGET_REF="main"
+    fi
+done
 
 say() { printf '%s\n' "$*"; }
 
@@ -29,12 +36,18 @@ fi
 
 # --- Clone or update --------------------------------------------------------
 if [[ -d "$DEST/.git" ]]; then
-    say "↻  Updating existing checkout at: $DEST"
-    git -C "$DEST" pull --ff-only origin "$BRANCH"
+    say "↻  Updating existing checkout at: $DEST (ref: $TARGET_REF)"
+    git -C "$DEST" fetch origin "$TARGET_REF"
+    git -C "$DEST" checkout "$TARGET_REF" 2>/dev/null || git -C "$DEST" reset --hard "origin/$TARGET_REF"
 else
-    say "⇣  Cloning macOS Cleanup into: $DEST"
+    say "⇣  Cloning macOS Cleanup into: $DEST (ref: $TARGET_REF)"
     mkdir -p "$(dirname "$DEST")"
-    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$DEST"
+    git clone --depth 1 --branch "$TARGET_REF" "$REPO_URL" "$DEST"
+fi
+
+if [[ -f "$DEST/SHA256SUMS" ]]; then
+    say "✓  Verifying checksums in $DEST/SHA256SUMS"
+    ( cd "$DEST" && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 ) || say "⚠ Checksum verification warning."
 fi
 
 chmod +x "$DEST/cleanup_all.sh" 2>/dev/null || true

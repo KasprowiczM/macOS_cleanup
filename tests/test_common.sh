@@ -350,4 +350,23 @@ _KP_FIXED_OUT="$(_run_keepalive_scenario fixed)"
 assert_false "printf '%s' \"\$_KP_FIXED_OUT\" | grep -qi terminated" \
     "disowned keepalive must NOT print a 'Terminated' job-control notice"
 
+begin_test "warn_if_no_fresh_backup detects local APFS snapshots when destination backup is missing"
+WARNINGS_LIST=()
+tmutil() {
+    if [[ "$1" == "latestbackup" ]]; then
+        return 1
+    elif [[ "$1" == "listlocalsnapshots" ]]; then
+        echo "com.apple.TimeMachine.2026-08-07-120000.local"
+        echo "com.apple.TimeMachine.2026-08-07-140000.local"
+        return 0
+    fi
+}
+warn_if_no_fresh_backup "test_ctx" >/dev/null 2>&1 || true
+unset -f tmutil
+if [[ "${#WARNINGS_LIST[@]}" -gt 0 && "${WARNINGS_LIST[0]}" == *"local APFS snapshots"* ]]; then
+    _pass
+else
+    _fail "warn_if_no_fresh_backup should report local APFS snapshots, got: ${WARNINGS_LIST[*]:-none}"
+fi
+
 print_test_summary
