@@ -2,11 +2,50 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    tags: ['v*']
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
   pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-macos:
+  portable-checks:
+    name: Portable checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Syntax check
+        run: bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
+
+      - name: Python dev-sync tests
+        run: python3 -m unittest tests/test_dev_sync_safety.py
+
+      - name: Python syntax
+        run: python3 -m py_compile dev-sync/*.py tests/test_dev_sync_safety.py
+
+      - name: Shellcheck
+        run: shellcheck -S warning cleanup_all.sh lib/*.sh config/*.sh
+
+  macos-release-gates:
+    name: macOS release gates
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -22,8 +61,8 @@ jobs:
       - name: Python syntax
         run: python3 -m py_compile dev-sync/*.py tests/test_dev_sync_safety.py
 
-      - name: Install shellcheck
-        run: brew install shellcheck
+      - name: Ensure shellcheck is available
+        run: command -v shellcheck >/dev/null 2>&1 || brew install shellcheck
 
       - name: Shellcheck
         run: shellcheck -S warning cleanup_all.sh lib/*.sh config/*.sh
@@ -46,5 +85,4 @@ jobs:
 
       - name: Release verification gates
         run: /bin/bash tools/verify_release.sh
-
 
