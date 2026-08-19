@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------
 # Script identity & versioning
 # ---------------------------------------------------------------------------
-readonly SCRIPT_VERSION="3.0.0"
+readonly SCRIPT_VERSION="3.0.3"
 readonly SCRIPT_NAME="cleanup_all.sh"
 readonly PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -173,6 +173,11 @@ ALL_CATEGORIES=(
     "time-machine"
     "large-files"
 )
+
+# ---------------------------------------------------------------------------
+# Run-artifact retention (logs/ and reports/), in days. 0 disables pruning.
+# ---------------------------------------------------------------------------
+: "${ARTIFACT_RETENTION_DAYS:=30}"
 
 # ---------------------------------------------------------------------------
 # Colours — set NO_COLOR=1 to disable

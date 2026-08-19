@@ -60,13 +60,36 @@ begin_test "rotate_old_artifacts purges log files older than threshold"
 old_log="${LOGS_DIR}/cleanup_2020-01-01_000000.log"
 touch -t 202001010000 "$old_log" 2>/dev/null || touch "$old_log"
 
-rotate_old_artifacts 1
+pruned="$(rotate_old_artifacts 1)"
 
 if [[ ! -f "$old_log" ]]; then
     _pass
 else
     _fail "rotate_old_artifacts should delete old log files"
 fi
+
+# The count is what cli_init reports to the user, so it has to be right.
+assert_eq "$pruned" "1" "rotate_old_artifacts must report how many artifacts it pruned"
+
+begin_test "rotate_old_artifacts is wired into the run, not just unit-tested"
+# It sat unused from March to 2026-08-19 while logs/ grew to 1183 files and
+# reports/ to 1574. A rotation function nobody calls is not rotation.
+if grep -q "rotate_old_artifacts" "${PROJ_DIR}/cleanup_all.sh"; then
+    _pass
+else
+    _fail "cleanup_all.sh never calls rotate_old_artifacts — artifacts will grow without bound"
+fi
+
+begin_test "rotate_old_artifacts honours a disable switch"
+keep_log="${LOGS_DIR}/cleanup_2020-01-02_000000.log"
+touch -t 202001020000 "$keep_log" 2>/dev/null || touch "$keep_log"
+rotate_old_artifacts 0 >/dev/null
+if [[ -f "$keep_log" ]]; then
+    _pass
+else
+    _fail "ARTIFACT_RETENTION_DAYS=0 must disable pruning entirely"
+fi
+rm -f "$keep_log" 2>/dev/null || true
 
 begin_test "Gate G15: Zero network calls in cleanup code"
 net_calls=$(grep -E -i '\b(curl|wget|nc|netcat|fetch)\b' "${PROJ_DIR}/lib"/*.sh "${PROJ_DIR}/cleanup_all.sh" | grep -v 'curl -s.*http://' || true)

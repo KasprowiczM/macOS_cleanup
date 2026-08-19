@@ -137,18 +137,39 @@ redact_path() {
     echo "$str"
 }
 
+# Prune run artifacts older than $1 days (default 30).
+#
+# This function existed, was unit-tested, and was never called from production
+# code. By 2026-08-19 that had left 1183 files in logs/ and 1574 in reports/,
+# growing since March. It is now wired into cli_init(); ARTIFACT_RETENTION_DAYS
+# tunes the window and 0 disables pruning entirely.
+#
+# Echoes the number of files removed so the caller can report it. Silent on a
+# no-op, because the common case is "nothing to prune".
 rotate_old_artifacts() {
     local max_days="${1:-30}"
     local logs_dir="${LOGS_DIR:-}"
     local reports_dir="${REPORTS_DIR:-}"
+    local removed=0 n
+
+    case "$max_days" in
+        ''|*[!0-9]*) return 0 ;;
+    esac
+    (( max_days == 0 )) && return 0
 
     if [[ -n "$logs_dir" && -d "$logs_dir" ]]; then
+        n=$(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
+        removed=$(( removed + ${n:-0} ))
         find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
+        n=$(find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
+        removed=$(( removed + ${n:-0} ))
         find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
     fi
+
+    echo "$removed"
 }
 
 print_header() {

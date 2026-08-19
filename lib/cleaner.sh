@@ -236,7 +236,19 @@ clean_logs() {
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
-    local -a all_logs=("${FOUND_APP_LOGS[@]}" "${FOUND_SYSTEM_LOGS[@]}")
+    # bash 3.2 + set -u: "${empty_array[@]}" is an *unbound variable* error, not
+    # an empty expansion. The guard above only checks the SUM, so a machine with
+    # user logs but no old system logs (or vice versa) aborted the whole run
+    # here — after earlier categories had already been quarantined, and with
+    # every later category silently never offered. Append per-array instead.
+    local -a all_logs=()
+    if (( ${#FOUND_APP_LOGS[@]} > 0 )); then
+        all_logs+=("${FOUND_APP_LOGS[@]}")
+    fi
+    if (( ${#FOUND_SYSTEM_LOGS[@]} > 0 )); then
+        all_logs+=("${FOUND_SYSTEM_LOGS[@]}")
+    fi
+    (( ${#all_logs[@]} > 0 )) || return
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
@@ -414,6 +426,9 @@ clean_ios_device_support() {
 }
 
 clean_xcode_simulators() {
+    # Same bash 3.2 set -u trap as clean_logs: an empty FOUND_DEV_ITEMS makes
+    # the loop below an unbound-variable abort, not a zero-iteration loop.
+    [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
     local has_sims=0
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         [[ "$item" == "simulators:__unavailable__" ]] && has_sims=1 && break
@@ -641,6 +656,7 @@ clean_dev_caches() {
 # clean_docker
 # ---------------------------------------------------------------------------
 clean_docker() {
+    [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
     local has_docker=0
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         [[ "$item" == "docker_prune:__docker__" ]] && has_docker=1 && break

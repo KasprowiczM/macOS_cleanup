@@ -456,6 +456,16 @@ preflight_checks() {
     # Create log and report directories
     mkdir -p "$LOGS_DIR" "$REPORTS_DIR"
 
+    # Prune our own run artifacts. A disk-cleanup tool that grows its own
+    # logs/ and reports/ without bound is not a good look: before this was
+    # wired up, logs/ held 1183 files and reports/ 1574, accumulated since
+    # March. ARTIFACT_RETENTION_DAYS=0 disables pruning.
+    local _pruned
+    _pruned="$(rotate_old_artifacts "${ARTIFACT_RETENTION_DAYS:-30}")"
+    if [[ "${_pruned:-0}" =~ ^[0-9]+$ ]] && (( _pruned > 0 )); then
+        print_info "Pruned ${_pruned} run artifact(s) older than ${ARTIFACT_RETENTION_DAYS:-30} days."
+    fi
+
     # Apply YAML-driven protected paths and normalize all protected entries.
     load_policy_rules_from_yaml
     apply_policy_never_paths
