@@ -977,6 +977,66 @@ record_native_command_event() {
     cleanup_journal_event "native_command" "$command" "" "$bytes" "$status" "$message"
 }
 
+# record_native_command_freed <command> <bytes_before> <bytes_after> [message]
+#
+# The journal used to record `path_size_bytes "$path"` measured AFTER the
+# command ran — i.e. what was LEFT, logged in the "bytes" field as if it were
+# what was freed. The 2026-08-19 20:15 run recorded 5,707,751,424 bytes against
+# `npm cache clean --force`; that was ~/.npm/_npx, which the command never
+# touches. The real reclaim was ~322 MB.
+#
+# Record the before/after delta instead, and credit it to TOTAL_CLEANED_BYTES —
+# native commands previously contributed nothing, so a run whose only action was
+# `npm cache clean` reported "Freed space: 0 B".
+record_native_command_freed() {
+    local command="$1"
+    local before="${2:-0}"
+    local after="${3:-0}"
+    local message="${4:-}"
+    local freed=0
+
+    case "$before" in ''|*[!0-9]*) before=0 ;; esac
+    case "$after"  in ''|*[!0-9]*) after=0  ;; esac
+    (( before > after )) && freed=$(( before - after ))
+
+    TOTAL_CLEANED_BYTES=$(( ${TOTAL_CLEANED_BYTES:-0} + freed ))
+    cleanup_journal_event "native_command" "$command" "" "$freed" "ok" "$message"
+}
+
+# ---------------------------------------------------------------------------
+# Category outcome ledger
+#
+# The report used to infer a category's status from the RUN MODE: in
+# interactive mode `user-caches` was always printed as "Cleaned/Quarantined |
+# Done". On 2026-08-19 the user declined that exact category and the report
+# still claimed it had been cleaned. A cleanup report that misstates what it
+# did is worse than no report. Record the real outcome instead.
+# ---------------------------------------------------------------------------
+CLEANUP_CATEGORY_OUTCOMES=""
+
+# mark_category_outcome <category-key> <cleaned|skipped|report-only>
+mark_category_outcome() {
+    local key="${1:-}" outcome="${2:-}"
+    [[ -n "$key" && -n "$outcome" ]] || return 0
+    CLEANUP_CATEGORY_OUTCOMES="${CLEANUP_CATEGORY_OUTCOMES}${key}=${outcome}"$'\n'
+}
+
+# category_outcome <category-key> — echoes the recorded outcome, or nothing.
+category_outcome() {
+    local key="${1:-}" line
+    [[ -n "$key" ]] || return 0
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        if [[ "${line%%=*}" == "$key" ]]; then
+            printf '%s' "${line#*=}"
+            return 0
+        fi
+    done <<EOF
+${CLEANUP_CATEGORY_OUTCOMES}
+EOF
+    return 0
+}
+
 base64_encode_string() {
     printf '%s' "${1:-}" | base64 | tr -d '\n'
 }
@@ -1581,7 +1641,7 @@ ALL_KNOWN_CATEGORY_KEYS=(
     user-logs system-logs diagnostic-reports tmp
     app-leftovers
     xcode-derived xcode-archives simulators device-support
-    npm yarn pnpm pip brew brew-stale gradle maven cocoapods cargo
+    npm npx yarn pnpm pip brew brew-stale gradle maven cocoapods cargo
     swift-pm gem bundler composer android-avd
     docker time-machine ios-backups installers
 )

@@ -310,6 +310,7 @@ i18n_get_es() {
         native_command) echo "Comando nativo del sistema" ;;
         normalization_failed) echo "Fallo en la normalización de ruta" ;;
         npm) echo "Caché de npm" ;;
+        npx) echo "caché de npx" ;;
         path_provenance_rejected) echo "Ruta rechazada por validación de seguridad" ;;
         pip) echo "Caché de pip" ;;
         plan) echo "Plan" ;;

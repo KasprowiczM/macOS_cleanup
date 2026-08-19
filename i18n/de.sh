@@ -310,6 +310,7 @@ i18n_get_de() {
         native_command) echo "Nativer Systembefehl" ;;
         normalization_failed) echo "Pfadnormalisierung fehlgeschlagen" ;;
         npm) echo "npm-Cache" ;;
+        npx) echo "npx-Cache" ;;
         path_provenance_rejected) echo "Pfad von Sicherheitsprüfung abgelehnt" ;;
         pip) echo "pip-Cache" ;;
         plan) echo "Plan" ;;

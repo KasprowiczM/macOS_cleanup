@@ -65,6 +65,8 @@ EOF
         "diagnostic-reports:Diagnostic Reports"
         "app-leftovers:App Leftovers"
         "dev:Developer Caches & Artifacts"
+        "npm:npm cache (~/.npm/_cacache)"
+        "npx:npx cache (~/.npm/_npx)"
         "derived-data:Xcode DerivedData"
         "xcode-archives:Xcode Archives"
         "xcode-device-support:Xcode Device Support"
@@ -90,11 +92,34 @@ EOF
         local status_str="Reported"
         local action_str="Review in interactive mode"
 
+        # What actually happened wins over what the mode implies. Before this,
+        # `user-caches` was printed as "Cleaned/Quarantined | Done" in every
+        # interactive run — including the 2026-08-19 20:15 run where the user
+        # declined it and the log recorded "User skipped cleanup".
+        local recorded_outcome
+        recorded_outcome="$(category_outcome "$key")"
+        case "$recorded_outcome" in
+            cleaned)
+                status_str="Cleaned/Quarantined"
+                action_str="Done"
+                ;;
+            skipped)
+                status_str="Skipped by you"
+                action_str="Still on disk — re-run to process"
+                ;;
+        esac
+        if [[ -n "$recorded_outcome" ]]; then
+            echo "| ${label} | **$(bytes_to_human "$bytes")** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
+            continue
+        fi
+
         case "$key" in
             user-caches|trash|tmp)
                 if [[ "$mode" == "auto-safe" || "$mode" == "interactive" || "$mode" == "apply-plan" ]]; then
-                    status_str="Cleaned/Quarantined"
-                    action_str="Done"
+                    # No outcome was recorded for this category, so the run never
+                    # reached it. Do not claim it was cleaned.
+                    status_str="Found"
+                    action_str="Safe to clean"
                 else
                     status_str="Found"
                     action_str="Safe to clean"
