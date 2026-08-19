@@ -919,17 +919,38 @@ analyze_dev_environment() {
     fi
 
     # --- npm cache ---
+    #
+    # `npm config get cache` returns ~/.npm, but `npm cache clean --force` only
+    # empties ~/.npm/_cacache. Sizing the whole directory made the tool promise
+    # space it cannot reclaim: on 2026-08-19 it advertised "npm cache: 6.03 GB
+    # ← 6.03 GB to free!" when _cacache held ~322 MB and the other 5.3 GB was
+    # _npx, which that command never touches. Size what the command actually
+    # clears, and surface _npx as its own reviewable item so the space is still
+    # reachable — just honestly labelled.
     if command -v npm &>/dev/null; then
-        local npm_cache_dir
+        local npm_cache_dir npm_cacache npm_npx
         npm_cache_dir=$(npm config get cache 2>/dev/null || echo "$HOME/.npm")
         if [[ -d "$npm_cache_dir" ]]; then
             if validate_cache_path "$npm_cache_dir"; then
+                npm_cacache="${npm_cache_dir}/_cacache"
+                [[ -d "$npm_cacache" ]] || npm_cacache="$npm_cache_dir"
                 local npm_size
-                npm_size=$(path_size_bytes "$npm_cache_dir")
+                npm_size=$(path_size_bytes "$npm_cacache")
                 if (( npm_size > 0 )); then
                     FOUND_DEV_ITEMS+=("npm_cache:$npm_cache_dir")
                     catbytes_set "npm" "$npm_size"
-                    print_found "npm cache: $(bytes_to_human "$npm_size")  ${C_DIM}← $(bytes_to_human "$npm_size") do zwolnienia!${C_RESET}"
+                    print_found "npm cache: $(bytes_to_human "$npm_size")  ${C_DIM}(npm cache clean --force)${C_RESET}"
+                fi
+
+                npm_npx="${npm_cache_dir}/_npx"
+                if [[ -d "$npm_npx" ]]; then
+                    local npx_size
+                    npx_size=$(path_size_bytes "$npm_npx")
+                    if (( npx_size > 0 )); then
+                        FOUND_DEV_ITEMS+=("npx_cache:$npm_npx")
+                        catbytes_set "npx" "$npx_size"
+                        print_found "npx cache: $(bytes_to_human "$npx_size")  ${C_DIM}(${npm_npx} — not touched by npm cache clean)${C_RESET}"
+                    fi
                 fi
             else
                 log_warn "Pathguard rejected candidate npm cache path provenance: $npm_cache_dir"

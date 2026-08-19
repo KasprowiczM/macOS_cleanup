@@ -65,7 +65,8 @@ clean_trash() {
             --what       "$(t "clean_trash_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_trash_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "trash" skipped; return 0; }
+            mark_category_outcome "trash" cleaned
     fi
 
     print_section "Cleaning: $(t "trash")"
@@ -98,7 +99,8 @@ clean_user_caches() {
             --what       "$(t "clean_user_cache_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_user_cache_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "user-caches" skipped; return 0; }
+            mark_category_outcome "user-caches" cleaned
     fi
 
     print_section "Cleaning: $(t "user_caches")"
@@ -149,7 +151,8 @@ clean_app_specific_caches() {
                 --what       "$(t "clean_auto_safe_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
                 --safe-if    "$(t "clean_auto_safe_safe_if")" \
-                --risk       "$cat_risk" || return 0
+                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; return 0; }
+                mark_category_outcome "app-caches" cleaned
         fi
 
         for path in "${safe_paths[@]}"; do
@@ -194,7 +197,8 @@ clean_app_specific_caches() {
                 --what       "$(t "category_review_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
                 --safe-if    "$(t "category_review_safe_if")" \
-                --risk       "$cat_risk" || return 0
+                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; return 0; }
+                mark_category_outcome "app-caches" cleaned
         fi
 
         for path in "${review_paths[@]}"; do
@@ -262,7 +266,8 @@ clean_logs() {
             --what       "$(t "clean_logs_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_logs_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "logs" skipped; return 0; }
+            mark_category_outcome "logs" cleaned
     fi
 
     print_section "Cleaning: logs"
@@ -294,7 +299,8 @@ clean_diagnostic_reports() {
             --what       "$(t "clean_crash_logs_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_crash_logs_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "diagnostic-reports" skipped; return 0; }
+            mark_category_outcome "diagnostic-reports" cleaned
     fi
 
     print_section "Cleaning: diagnostic reports"
@@ -326,7 +332,8 @@ clean_tmp() {
             --what       "$(t "clean_tmp_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_tmp_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "tmp" skipped; return 0; }
+            mark_category_outcome "tmp" cleaned
     fi
 
     print_section "Cleaning: temporary files (/tmp)"
@@ -381,7 +388,8 @@ clean_xcode_derived_data() {
             --what       "$(t "xcode_derived_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Safe if you accept longer build time for the next build." \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "xcode-derived" skipped; return 0; }
+            mark_category_outcome "xcode-derived" cleaned
     fi
 
     print_section "Cleaning: Xcode DerivedData"
@@ -416,7 +424,8 @@ clean_ios_device_support() {
             --what       "$(t "xcode_support_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "xcode_support_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "device-support" skipped; return 0; }
+            mark_category_outcome "device-support" cleaned
     fi
 
     print_section "Cleaning: iOS DeviceSupport"
@@ -451,7 +460,8 @@ clean_xcode_simulators() {
             --what       "$(t "simulators_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "$(t "simulators_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "simulators" skipped; return 0; }
+            mark_category_outcome "simulators" cleaned
     fi
 
     print_section "Cleaning: iOS Simulators"
@@ -509,9 +519,18 @@ _clean_dev_native_or_fallback() {
     else
         if command -v "$check_cmd" &>/dev/null; then
             print_cleaned "$(t "cleaning_cmd"): ${tool_label} (${cmd})"
+            # Measure before AND after. A vendor cache command only clears the
+            # part of the tree it owns (`npm cache clean --force` empties
+            # _cacache and leaves _npx alone), so the size that remains is not
+            # the size that was freed.
+            local _before _after _freed
+            _before="$(path_size_bytes "$path")"; _before="${_before:-0}"
             if $cmd 2>/dev/null; then
-                print_ok "$ok_msg"
-                record_native_command_event "$cmd" "ok" "$(path_size_bytes "$path")" ""
+                _after="$(path_size_bytes "$path")"; _after="${_after:-0}"
+                _freed=0
+                (( _before > _after )) && _freed=$(( _before - _after ))
+                print_ok "$ok_msg ($(bytes_to_human "$_freed") freed)"
+                record_native_command_freed "$cmd" "$_before" "$_after" ""
             else
                 record_native_command_event "$cmd" "failed" "$(path_size_bytes "$path")" "${tool_label} failed; fallback safe_remove"
                 safe_remove "$path"
@@ -533,7 +552,7 @@ clean_dev_caches() {
         path="${item#*:}"
 
         case "$key" in
-            npm_cache|yarn_cache|pnpm_cache|pip_cache|brew_cache|brew_cleanup|gradle_cache|cargo_cache|cocoapods_cache|gem_cache)
+            npm_cache|npx_cache|yarn_cache|pnpm_cache|pip_cache|brew_cache|brew_cleanup|gradle_cache|cargo_cache|cocoapods_cache|gem_cache)
                 cleanable_items+=("$item")
                 ;;
         esac
@@ -568,10 +587,31 @@ clean_dev_caches() {
             --what       "Package manager caches for development tools." \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "package_managers_safe_if")" \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || {
+                mark_category_outcome "dev" skipped
+                for item in "${cleanable_items[@]}"; do
+                    case "${item%%:*}" in
+                        npm_cache)  mark_category_outcome "npm" skipped ;;
+                        npx_cache)  mark_category_outcome "npx" skipped ;;
+                        pip_cache)  mark_category_outcome "pip" skipped ;;
+                    esac
+                done
+                return 0
+            }
+            mark_category_outcome "dev" cleaned
     fi
 
     print_section "Cleaning: $(t "package_managers_title")"
+
+    # The report lists npm and npx as their own rows; record their outcome so it
+    # reflects what ran rather than what the mode implies.
+    for item in "${cleanable_items[@]}"; do
+        case "${item%%:*}" in
+            npm_cache)  mark_category_outcome "npm"  cleaned ;;
+            npx_cache)  mark_category_outcome "npx"  cleaned ;;
+            pip_cache)  mark_category_outcome "pip"  cleaned ;;
+        esac
+    done
 
     for item in "${cleanable_items[@]}"; do
         key="${item%%:*}"
@@ -582,6 +622,12 @@ clean_dev_caches() {
                 _clean_dev_native_or_fallback \
                     "npm cache clean --force" "npm" "npm" \
                     "npm cache" "npm cache clean complete." "$path"
+                ;;
+            npx_cache)
+                # No vendor command owns ~/.npm/_npx — npm cache clean skips it
+                # entirely. It is a plain re-downloadable cache, so it goes
+                # through safe_remove (quarantine by default, restorable).
+                safe_remove "$path"
                 ;;
             yarn_cache)
                 _clean_dev_native_or_fallback \
@@ -604,9 +650,16 @@ clean_dev_caches() {
                 else
                     print_cleaned "$(t "cleaning_cmd"): Homebrew (brew cleanup --prune=all)"
                     if command -v brew &>/dev/null; then
+                        local _brew_path _bb _ba _bfreed
+                        _brew_path="$path"
+                        [[ "$_brew_path" == "__brew__" ]] && _brew_path="$(brew --cache 2>/dev/null || echo "")"
+                        _bb=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _bb="$(path_size_bytes "$_brew_path")"
                         if brew cleanup --prune=all 2>/dev/null; then
-                            print_ok "Homebrew cleanup complete."
-                            record_native_command_event "brew cleanup --prune=all" "ok" "$(catbytes_get "brew-stale")" ""
+                            _ba=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _ba="$(path_size_bytes "$_brew_path")"
+                            _bfreed=0
+                            (( ${_bb:-0} > ${_ba:-0} )) && _bfreed=$(( ${_bb:-0} - ${_ba:-0} ))
+                            print_ok "Homebrew cleanup complete. ($(bytes_to_human "$_bfreed") freed)"
+                            record_native_command_freed "brew cleanup --prune=all" "${_bb:-0}" "${_ba:-0}" ""
                         else
                             record_native_command_event "brew cleanup --prune=all" "failed" "$(catbytes_get "brew-stale")" "brew cleanup failed"
                             [[ "$path" != "__brew__" ]] && safe_remove "$path"
@@ -627,9 +680,14 @@ clean_dev_caches() {
                     command -v pip3 &>/dev/null && pip_cmd="pip3"
                     command -v pip  &>/dev/null && pip_cmd="pip"
                     if [[ -n "$pip_cmd" ]]; then
+                        local _pb _pa _pfreed
+                        _pb="$(path_size_bytes "$path")"; _pb="${_pb:-0}"
                         if $pip_cmd cache purge 2>/dev/null; then
-                            print_ok "pip cache purge complete."
-                            record_native_command_event "${pip_cmd} cache purge" "ok" "$(catbytes_get "pip")" ""
+                            _pa="$(path_size_bytes "$path")"; _pa="${_pa:-0}"
+                            _pfreed=0
+                            (( _pb > _pa )) && _pfreed=$(( _pb - _pa ))
+                            print_ok "pip cache purge complete. ($(bytes_to_human "$_pfreed") freed)"
+                            record_native_command_freed "${pip_cmd} cache purge" "$_pb" "$_pa" ""
                         else
                             record_native_command_event "${pip_cmd} cache purge" "failed" "$(catbytes_get "pip")" "pip failed; fallback safe_remove"
                             safe_remove "$path"
@@ -675,7 +733,8 @@ clean_docker() {
             --what       "Unused images, stopped containers, networks, and build cache removed by docker system prune." \
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "Safe if you do not have important data in stopped containers." \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "docker" skipped; return 0; }
+            mark_category_outcome "docker" cleaned
     fi
 
     print_section "Cleaning: Docker (system prune)"
@@ -711,8 +770,10 @@ clean_time_machine_snapshots() {
     if ! confirm_time_machine_snapshots "$snapshots_str" "${count} snapshots"; then
         print_skip "$(t "skipped_category"): local Time Machine snapshots"
         record_skipped_item "Local Time Machine snapshots"
+        mark_category_outcome "time-machine" skipped
         return
     fi
+    mark_category_outcome "time-machine" cleaned
 
     print_section "Cleaning: local Time Machine snapshots"
 
@@ -758,6 +819,7 @@ clean_ios_backups() {
 
     if ! confirm_ios_backups "$backups_str" "$total_h"; then
         print_skip "$(t "skipped_category"): iOS backups"
+        mark_category_outcome "ios-backups" skipped
         record_skipped_item "Local iOS backups (category cancelled by user)"
         return
     fi
@@ -804,7 +866,8 @@ clean_dmg_pkg() {
             --what       "$(t "downloads_ok")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "Safe if you have internet access or do not need old versions." \
-            --risk       "$cat_risk" || return 0
+            --risk       "$cat_risk" || { mark_category_outcome "installers" skipped; return 0; }
+            mark_category_outcome "installers" cleaned
     fi
 
     print_section "Cleaning: old installers"

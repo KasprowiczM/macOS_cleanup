@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.4] — 2026-08-19
+
+Findings from the **first live `--interactive` run** after 3.0.3
+(`logs/cleanup_2026-08-19_201549_98843.log`). The run completed — exit 0, all
+categories offered, npm and Homebrew caches actually cleaned — which is what
+3.0.3 was for. But it then reported three different, mutually inconsistent
+numbers for what it had just done:
+
+| source | figure |
+|---|---|
+| analyzer | `npm cache: 6.03 GB ← 6.03 GB do zwolnienia!` |
+| journal | `native_command npm cache clean --force` · `bytes: 5707751424` |
+| report | `Freed space: 0 B` |
+| **reality** | **~322 MB** |
+
+### Fixed
+
+- **The journal recorded what was LEFT as if it were what was freed.**
+  `_clean_dev_native_or_fallback` measured `path_size_bytes "$path"` *after* the
+  command ran and logged it in the `bytes` field. For `npm cache clean --force`
+  on `~/.npm` that is 5.3 GB of `_npx` — the part the command never touches.
+  Native cleanups now measure before **and** after and record the delta.
+- **`Freed space` ignored native commands entirely.** `TOTAL_CLEANED_BYTES` was
+  only ever incremented inside `safe_remove()`, so a session whose only action
+  was `npm cache clean` + `brew cleanup` reported `0 B` freed. The new
+  `record_native_command_freed()` credits the measured delta. Applied to the
+  npm/yarn/pnpm helper and to the inline `brew` and `pip` branches.
+- **The npm cache was sized by the wrong directory.** `npm config get cache`
+  returns `~/.npm`, but `npm cache clean --force` only empties `~/.npm/_cacache`.
+  Sizing the whole tree made the tool advertise 6.03 GB of reclaimable space
+  where 360 KB was reclaimable. The npm entry is now sized by `_cacache`, and
+  `~/.npm/_npx` is surfaced as its own category — so the 5.31 GB is still
+  reachable, just honestly labelled and routed through quarantine rather than a
+  vendor command that cannot touch it. New `npx` category key, i18n label in all
+  7 languages.
+- **The report claimed categories were cleaned when the user had declined them.**
+  `lib/reporter.sh` derived status from the *run mode*: in interactive mode
+  `user-caches` was always printed as `Cleaned/Quarantined | Done`. In the 20:15
+  run the user answered no and the log recorded `User skipped cleanup:
+  Cache użytkownika` — the report still said Done. Status now comes from a
+  recorded per-category outcome (`cleaned` / `skipped`), rendered as
+  `Skipped by you | Still on disk — re-run to process` when declined.
+- **`test_i18n_accessibility.sh` Gate G11 had a false-positive scanner.** Its
+  regex `t\s+["']key["']` matched the trailing `t` of any identifier, so
+  `catbytes_set "npx"` was read as a translation key. It only ever passed
+  because every previously-scanned key happened to exist. Tightened with a
+  non-word-character lookbehind.
+
+### Added
+
+- **`tests/test_run_accounting_truth.sh`** — asserts a native cleanup reports
+  the delta it freed (never the leftover, never zero), that the npm entry is
+  sized by `_cacache` with `_npx` surfaced separately, that report status comes
+  from the recorded outcome rather than the mode, and that every
+  `confirm_category` prompt has a matching skipped-outcome marker. Verified
+  against a negative control: reverting `lib/` to 3.0.3 fails 10 of its 12
+  assertions.
+
+### Verified
+
+- `tests/run_all.sh` — 474 assertions, 0 failures (was 462)
+- `shellcheck -S error` across `lib/`, `cleanup_all.sh`, `config/`, `tests/` — clean
+- Live `--dry-run`: `npm cache: 360.0 KB` / `npx cache: 5.31 GB` (was a single
+  `6.03 GB` line)
+- Live sandboxed `--interactive`: approving Trash and declining user caches now
+  reports `Cleaned/Quarantined | Done` and `Skipped by you` respectively
+
+
 ## [3.0.3] — 2026-08-19
 
 Post-migration review release. The test suite was already reporting three

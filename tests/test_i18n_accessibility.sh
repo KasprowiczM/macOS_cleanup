@@ -50,7 +50,9 @@ import glob, re
 t_keys = set()
 for filepath in glob.glob('${PROJ_DIR}/lib/*.sh') + ['${PROJ_DIR}/cleanup_all.sh']:
     with open(filepath, 'r', encoding='utf-8') as f:
-        matches = re.findall(r't\s+[\"\']([a-zA-Z0-9_]+)[\"\']', f.read())
+        # \\b would still match the trailing 't' of an identifier, so require a
+        # non-word char before it: catbytes_set \"npx\" was being read as t \"npx\".
+        matches = re.findall(r'(?<![A-Za-z0-9_])t\s+[\"\']([a-zA-Z0-9_]+)[\"\']', f.read())
         t_keys.update(matches)
 
 dict_keys = {}

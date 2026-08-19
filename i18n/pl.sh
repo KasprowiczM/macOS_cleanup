@@ -310,6 +310,7 @@ i18n_get_pl() {
         native_command) echo "Komenda natywna systemowa" ;;
         normalization_failed) echo "Błąd normalizacji ścieżki" ;;
         npm) echo "npm cache" ;;
+        npx) echo "pamięć podręczna npx" ;;
         path_provenance_rejected) echo "Ścieżka odrzucona przez weryfikację bezpieczeństwa" ;;
         pip) echo "pip cache" ;;
         plan) echo "Plan" ;;
