@@ -114,7 +114,20 @@ EOF
                 ;;
         esac
 
-        echo "| ${label} | **$(bytes_to_human "$bytes")** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
+        # The "time-machine" ledger entry holds a SNAPSHOT COUNT, not a byte
+        # size — analyze_time_machine has no way to price an APFS local
+        # snapshot, so it records how many exist. cleanup_all.sh already
+        # special-cases this in the terminal summary; without the same case
+        # here the markdown report rendered 12 local snapshots as "12 B",
+        # which reads as a category worth 12 bytes.
+        local size_cell
+        if [[ "$key" == "time-machine" ]]; then
+            size_cell="${bytes} $(t "cli_units_pcs")"
+        else
+            size_cell="$(bytes_to_human "$bytes")"
+        fi
+
+        echo "| ${label} | **${size_cell}** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
     done
 
     cat << EOF >> "$REPORT_FILE"

@@ -134,7 +134,7 @@ analyze_application_inventory() {
         done < <(find "$dir" -maxdepth 2 -name "*.app" -print0 2>/dev/null)
     done
 
-    if (( count > 0 )); then
+    if (( count > 0 )) && (( ${#FOUND_INSTALLED_APPS[@]} > 0 )); then
         print_found "Aplikacje .app: ${count}"
         printf '%s\n' "${FOUND_INSTALLED_APPS[@]}" | sort | head -10 | while IFS= read -r app; do
             echo "    $(basename "$app" .app)"

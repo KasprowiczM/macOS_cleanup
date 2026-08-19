@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.3] — 2026-08-19
+
+Post-migration review release. The test suite was already reporting three
+failures at HEAD; nobody had run it. All three were the same bug class, and the
+one it produced was severe: **interactive cleanup silently stopped doing
+anything after the second category.**
+
+### Fixed
+
+- **P0 — interactive/auto-safe cleanup aborted mid-run.** `cleanup_all.sh` runs
+  with `set -euo pipefail`, and bash 3.2 treats `"${empty_array[@]}"` as an
+  *unbound variable error*, not as an empty expansion. `clean_logs()` guarded
+  only the **sum** of `FOUND_APP_LOGS` and `FOUND_SYSTEM_LOGS`, then expanded
+  both. On any machine with user logs but no old system logs — the common case —
+  the run died at `lib/cleaner.sh:239` with
+  `FOUND_SYSTEM_LOGS[@]: unbound variable` *after* Trash and user caches had
+  already been quarantined, and every later category (dev artifacts, app
+  leftovers, Time Machine, large files) was silently never offered. The user
+  answered "yes" and nothing happened, with no error surfaced in the report.
+  `clean_xcode_simulators()` and `clean_docker()` had the identical defect on
+  `FOUND_DEV_ITEMS` and aborted even with *every* array empty.
+- **`rotate_old_artifacts()` was dead code.** The function existed and had a
+  passing unit test, but no production caller. `logs/` had grown to 1183 files
+  and `reports/` to 1574, accumulating since March — a disk-cleanup tool
+  leaking 13 MB of its own artifacts. Now wired into `cli_init()`; the first
+  run pruned 2312 stale files.
+- **Time Machine snapshot count rendered as a byte size.** The `time-machine`
+  ledger entry holds a snapshot *count* (an APFS local snapshot has no
+  attributable size). `cleanup_all.sh` already special-cased this in the
+  terminal summary; `lib/reporter.sh` did not, so the markdown report printed
+  12 local snapshots as **"12 B"**.
+- **`analyze_application_inventory()`** expanded `FOUND_INSTALLED_APPS` behind a
+  `count > 0` guard that only implied non-emptiness. Made explicit.
+
+### Added
+
+- **`tests/test_empty_array_guards.sh`** — behavioural sweep that calls every
+  `clean_*` entry point with all `FOUND_*` arrays empty, then again with each
+  array holding exactly one element, and fails on any unbound-variable abort.
+  Deliberately behavioural rather than a grep: the guard idiom varies across
+  the file and a static scan cannot tell an effective guard from a decorative
+  one. Verified against a negative control — reverting `lib/cleaner.sh` to HEAD
+  makes it fail on all three sites.
+- **`ARTIFACT_RETENTION_DAYS`** (default 30, `0` disables) and two tests
+  asserting rotation is both wired up and disableable.
+
+### Verified
+
+- `tests/run_all.sh` — 462 assertions, 0 failures (was 459 with 3 failures)
+- `python3 -m unittest tests/test_dev_sync_safety.py` — 8 tests, OK
+- `shellcheck -S error` across `lib/`, `cleanup_all.sh`, `config/`, `tests/` — clean
+- `bash cleanup_all.sh --dry-run` — exit 0
+
+
 ## [3.0.2] — 2026-08-07
 
 ### Added
