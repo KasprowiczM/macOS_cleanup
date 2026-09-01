@@ -36,6 +36,19 @@ for test_file in "${TEST_DIR}"/test_*.sh; do
     fi
 done
 
+# tests/test_dev_sync_safety.py is listed in AGENTS.md's minimum workflow but the
+# glob above only matches test_*.sh, so for months it ran only when someone
+# remembered to type it. Wire it in.
+if [[ -f "${TEST_DIR}/test_dev_sync_safety.py" ]]; then
+    echo
+    echo ">>> test_dev_sync_safety.py"
+    if ( cd "${TEST_DIR}/.." && python3 -m unittest tests/test_dev_sync_safety.py ) 2>&1 | tail -3; then
+        :
+    else
+        FAIL_COUNT=$(( FAIL_COUNT + 1 ))
+    fi
+fi
+
 echo
 if (( FAIL_COUNT == 0 )); then
     echo "ALL TEST FILES PASSED"

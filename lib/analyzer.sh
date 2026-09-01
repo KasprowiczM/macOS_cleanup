@@ -992,6 +992,33 @@ analyze_dev_environment() {
                     catbytes_set "pnpm" "$pnpm_size"
                     print_found "pnpm store: $(bytes_to_human "$pnpm_size")"
                 fi
+
+                # `pnpm store prune` only ever touches the CURRENT store version
+                # directory. Every major pnpm upgrade leaves the previous one
+                # behind for good: on 2026-09-01 this machine held v3 (436 MB)
+                # and v10 (3.6 GB) beside a 41 MB v11 — 4.0 GB no vendor command
+                # will ever reclaim. Identical shape to ~/.npm/_npx in 3.0.4:
+                # surface it as its own category and route it through
+                # safe_remove (quarantine) instead of a command that cannot see it.
+                local pnpm_store_root pnpm_stale_total=0 pnpm_stale_dir pnpm_stale_size
+                pnpm_store_root="$(dirname "$pnpm_cache")"
+                if [[ "$(basename "$pnpm_store_root")" == "store" ]]; then
+                    while IFS= read -r pnpm_stale_dir; do
+                        [[ -z "$pnpm_stale_dir" ]] && continue
+                        [[ "$pnpm_stale_dir" == "$pnpm_cache" ]] && continue
+                        is_protected_path "$pnpm_stale_dir" && continue
+                        validate_cache_path "$pnpm_stale_dir" || continue
+                        pnpm_stale_size=$(path_size_bytes "$pnpm_stale_dir")
+                        (( pnpm_stale_size > 0 )) || continue
+                        FOUND_DEV_ITEMS+=("pnpm_stale_store:$pnpm_stale_dir")
+                        pnpm_stale_total=$(( pnpm_stale_total + pnpm_stale_size ))
+                    done < <(find "$pnpm_store_root" -mindepth 1 -maxdepth 1 -type d -name 'v*' 2>/dev/null)
+                    if (( pnpm_stale_total > 0 )); then
+                        catbytes_set "pnpm-stale" "$pnpm_stale_total"
+                        print_found "pnpm stale store versions: $(bytes_to_human "$pnpm_stale_total")  ${C_DIM}(pnpm store prune never touches these)${C_RESET}"
+                        print_info  "  ^ files still hard-linked from a live node_modules keep their disk blocks until that project is removed too"
+                    fi
+                fi
             else
                 log_warn "Pathguard rejected candidate pnpm cache path provenance: $pnpm_cache"
                 cleanup_journal_event "path_provenance_rejected" "$pnpm_cache" "" "0" "blocked" "pathguard provenance validation failed"

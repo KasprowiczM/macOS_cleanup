@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.5] — 2026-09-01
+
+Full review on macOS 26.6.2 (Tahoe, Apple Silicon), triggered by the last run
+log `reports/report_2026-08-19_203444_73749.md`. The whole 474-assertion suite
+was green and every one of the defects below was live, because every existing
+test called functions directly and never compared what the analyzer *writes*
+against what the reporter and cleaners *read*.
+
+Measured on this machine before the fix: the terminal summary listed **13.05 GB
+across 12 categories** and the markdown report itemised **6 of them**.
+
+### Fixed
+
+- **The markdown report silently omitted most categories.** `lib/reporter.sh`
+  kept its own hand-maintained label list — 21 entries against 37 live ledger
+  keys — so `app-caches` (1.04 GB on this machine), `cargo` (183 MB), `brew`
+  (41 MB), `pip`, `swift-pm`, `xcode-derived`, every log category and every
+  remaining package-manager cache were sized, added to the headline total, and
+  then printed nowhere. Four of the labels it *did* carry (`logs`, `dev`,
+  `derived-data`, `xcode-device-support`) named keys nothing ever sets, so they
+  could never render at all. Replaced with `CATEGORY_REGISTRY` in
+  `lib/common.sh`: one `key|label|class` table that the terminal summary, the
+  grand total and the markdown report all read from. Report-only categories
+  (browser profiles, Apple Mail) now sit in their own table, explicitly marked as
+  excluded from the total, so the rows reconcile with the figure under them.
+- **`clean_ios_device_support` deleted nothing.** `analyze_ios_device_support`
+  records `"${ds_type}:${version_dir}"`, and the cleaner passed that whole string
+  to `safe_remove`. The path never existed, `safe_remove` returned 0, and the
+  category was still marked cleaned — so a user could confirm removing tens of
+  GB of Xcode debug symbols, see a success line, and lose nothing but the
+  illusion. The cleaner now resolves the path out of the entry.
+- **`clean_xcode_simulators` was unreachable.** Its guard matched the literal
+  `simulators:__unavailable__`; the analyzer emits `ios_simulators:<path>`.
+  Unavailable simulators were sized, totalled and reported, and never once
+  offered for deletion. Both spellings are now accepted.
+- **pnpm's store was rejected on every single run.** `_is_within_allowed_cache_root`
+  knew only the legacy `~/.pnpm-store`, while pnpm >= 8 on macOS stores under
+  `~/Library/pnpm/store`. Every run logged `path_provenance_rejected` and 4.1 GB
+  stayed permanently unreachable. Added `~/Library/pnpm` and the XDG
+  `~/.local/share/pnpm` roots.
+- **Two cleaners read ledger keys nothing sets.** `clean_logs` read `"logs"`
+  (the analyzer writes `user-logs` and `system-logs`) and
+  `clean_ios_device_support` read `"xcode-device-support"` (the analyzer writes
+  `device-support`). `catbytes_get` returns 0 for an unknown key, so both
+  prompts advertised **0 B** regardless of how much was queued.
+- **Three caches were measured but had no way to be cleaned.** `swift_pm_cache`,
+  `bundler_cache` and `composer_cache` were sized by the analyzer and counted in
+  the freeable total, but were absent from the cleanable set in
+  `clean_dev_caches` — they could only ever be advertised.
+- **Declining the SAFE app-cache group cancelled the REVIEW group.** A `no` to a
+  handful of allowlisted caches did `return 0` out of the whole function, so the
+  larger, more interesting half of `~/Library/Caches` was never offered.
+- **The first recorded outcome won, not the last.** `category_outcome` returned
+  the first match while `mark_category_outcome` appends, so a category recorded
+  twice in one run (app caches ask twice) reported the earlier answer. Last write
+  wins now.
+
+### Added
+
+- **`pnpm-stale` category.** `pnpm store prune` only ever touches the *current*
+  store version directory, so every major pnpm upgrade orphans the previous one
+  for good. This machine held `v3` (436 MB) and `v10` (3.6 GB) beside a 41 MB
+  `v11` — 4.0 GB no vendor command will ever reclaim. Same shape as `~/.npm/_npx`
+  in 3.0.4, and handled the same way: surfaced as its own category and routed
+  through `safe_remove` (quarantine, reversible) rather than a command that
+  cannot see it. Files still hard-linked from a live `node_modules` keep their
+  blocks until that project goes too — the analyzer says so.
+- **`tests/test_report_parity.sh`** (226 assertions) — structural, not
+  behavioural-by-proxy: it scans every `catbytes_set` / `catbytes_get` literal in
+  `lib/` and asserts each has a registry row, populates every registered category
+  and asserts `generate_report` prints a row for each, extracts every
+  `FOUND_DEV_ITEMS` prefix the analyzer emits and asserts a cleaner matches it,
+  and drives `clean_ios_device_support` end to end against a real sandbox path.
+  Negative control: reverting `lib/reporter.sh`, `lib/cleaner.sh` and
+  `lib/pathguard.sh` to HEAD produces 30 failures, one per defect above.
+- **`tests/test_dev_sync_safety.py` is wired into `tests/run_all.sh`.** It is in
+  `AGENTS.md`'s minimum workflow but the runner globs `test_*.sh` only, so it ran
+  only when someone remembered to type it.
+
 ## [3.0.4] — 2026-08-19
 
 Findings from the **first live `--interactive` run** after 3.0.3
