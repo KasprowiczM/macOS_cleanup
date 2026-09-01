@@ -117,6 +117,8 @@ clean_app_specific_caches() {
 
     local -a safe_entries=()
     local -a review_entries=()
+    local safe_declined=0
+    local review_declined=0
     local entry label path
 
     for entry in "${FOUND_APP_CACHE_ITEMS[@]}"; do
@@ -151,13 +153,19 @@ clean_app_specific_caches() {
                 --what       "$(t "clean_auto_safe_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
                 --safe-if    "$(t "clean_auto_safe_safe_if")" \
-                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; return 0; }
-                mark_category_outcome "app-caches" cleaned
+                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; safe_declined=1; }
+            (( safe_declined == 0 )) && mark_category_outcome "app-caches" cleaned
         fi
 
-        for path in "${safe_paths[@]}"; do
-            safe_remove "$path"
-        done
+        # Declining the allowlisted group used to `return 0` out of the whole
+        # function, taking the REVIEW group below with it — so saying "no" to
+        # a handful of safe caches silently cancelled the larger, more
+        # interesting half of ~/Library/Caches.
+        if (( safe_declined == 0 )); then
+            for path in "${safe_paths[@]}"; do
+                safe_remove "$path"
+            done
+        fi
     fi
 
     # 2. Process REVIEW (non-allowlisted) app cache items itemized with policy recommendations
@@ -197,13 +205,15 @@ clean_app_specific_caches() {
                 --what       "$(t "category_review_what")" \
                 --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
                 --safe-if    "$(t "category_review_safe_if")" \
-                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; return 0; }
-                mark_category_outcome "app-caches" cleaned
+                --risk       "$cat_risk" || { mark_category_outcome "app-caches" skipped; review_declined=1; }
+            (( review_declined == 0 )) && mark_category_outcome "app-caches" cleaned
         fi
 
-        for path in "${review_paths[@]}"; do
-            safe_remove "$path"
-        done
+        if (( review_declined == 0 )); then
+            for path in "${review_paths[@]}"; do
+                safe_remove "$path"
+            done
+        fi
     fi
 }
 
@@ -235,8 +245,12 @@ clean_logs() {
     local total_count=$(( ${#FOUND_APP_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
     [[ $total_count -eq 0 ]] && return
 
+    # The ledger has no "logs" key — analyze_logs() writes "user-logs" and
+    # "system-logs". catbytes_get returns 0 for an unknown key, so this
+    # prompt offered every log cleanup as "0 B" no matter how much was
+    # actually queued.
     local total_bytes
-    total_bytes=$(catbytes_get "logs")
+    total_bytes=$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
@@ -266,8 +280,13 @@ clean_logs() {
             --what       "$(t "clean_logs_what")" \
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_logs_safe_if")" \
-            --risk       "$cat_risk" || { mark_category_outcome "logs" skipped; return 0; }
-            mark_category_outcome "logs" cleaned
+            --risk       "$cat_risk" || {
+                mark_category_outcome "user-logs" skipped
+                mark_category_outcome "system-logs" skipped
+                return 0
+            }
+            mark_category_outcome "user-logs" cleaned
+            mark_category_outcome "system-logs" cleaned
     fi
 
     print_section "Cleaning: logs"
@@ -400,11 +419,21 @@ clean_ios_device_support() {
     [[ ${#FOUND_DEVICE_SUPPORT_ITEMS[@]} -eq 0 ]] && return
 
     local total_bytes
-    total_bytes=$(catbytes_get "xcode-device-support")
+    total_bytes=$(catbytes_get "device-support")
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
+    # analyze_ios_device_support() records "${ds_type}:${version_dir}"
+    # (e.g. "iOS DeviceSupport:/Users/x/..."). Feeding that whole string to
+    # safe_remove() meant the path never existed, safe_remove returned 0
+    # without touching anything, and the category was still marked cleaned:
+    # the user confirmed deleting tens of GB and nothing was removed.
+    local -a ds_paths=()
+    local ds_entry
+    for ds_entry in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
+        ds_paths+=("${ds_entry#*:}")
+    done
     local paths_str
-    paths_str=$(printf '%s|' "${FOUND_DEVICE_SUPPORT_ITEMS[@]}")
+    paths_str=$(printf '%s|' "${ds_paths[@]}")
 
     print_warning_box "$(t "xcode_support_box_title")" \
         "$(t "xcode_support_box_1")" \
@@ -416,7 +445,7 @@ clean_ios_device_support() {
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local cat_risk
-        cat_risk="$(category_max_risk "${FOUND_DEVICE_SUPPORT_ITEMS[@]}")"
+        cat_risk="$(category_max_risk "${ds_paths[@]}")"
         confirm_category \
             --title      "$(t "xcode_support_box_title")" \
             --size       "$total_h" \
@@ -429,7 +458,7 @@ clean_ios_device_support() {
     fi
 
     print_section "Cleaning: iOS DeviceSupport"
-    for item in "${FOUND_DEVICE_SUPPORT_ITEMS[@]}"; do
+    for item in "${ds_paths[@]}"; do
         safe_remove "$item"
     done
 }
@@ -438,9 +467,16 @@ clean_xcode_simulators() {
     # Same bash 3.2 set -u trap as clean_logs: an empty FOUND_DEV_ITEMS makes
     # the loop below an unbound-variable abort, not a zero-iteration loop.
     [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
+    # analyze_dev_environment() pushes "ios_simulators:<path>"; this guard
+    # matched only the literal "simulators:__unavailable__", which nothing
+    # ever writes. Unavailable simulators were sized, added to the total and
+    # printed in the report, then never offered for deletion. Accept both
+    # spellings so an older plan file still matches.
     local has_sims=0
     for item in "${FOUND_DEV_ITEMS[@]}"; do
-        [[ "$item" == "simulators:__unavailable__" ]] && has_sims=1 && break
+        case "$item" in
+            ios_simulators:*|simulators:__unavailable__) has_sims=1; break ;;
+        esac
     done
     [[ $has_sims -eq 0 ]] && return
 
@@ -552,7 +588,8 @@ clean_dev_caches() {
         path="${item#*:}"
 
         case "$key" in
-            npm_cache|npx_cache|yarn_cache|pnpm_cache|pip_cache|brew_cache|brew_cleanup|gradle_cache|cargo_cache|cocoapods_cache|gem_cache)
+            npm_cache|npx_cache|yarn_cache|pnpm_cache|pnpm_stale_store|pip_cache|brew_cache|brew_cleanup|\
+            gradle_cache|cargo_cache|cocoapods_cache|gem_cache|swift_pm_cache|bundler_cache|composer_cache)
                 cleanable_items+=("$item")
                 ;;
         esac

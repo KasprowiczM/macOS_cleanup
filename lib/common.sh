@@ -1023,17 +1023,22 @@ mark_category_outcome() {
 
 # category_outcome <category-key> — echoes the recorded outcome, or nothing.
 category_outcome() {
-    local key="${1:-}" line
+    local key="${1:-}" line found=""
     [[ -n "$key" ]] || return 0
+    # LAST write wins. mark_category_outcome appends, and a category can be
+    # recorded twice in one run — clean_app_specific_caches asks separately
+    # about its allowlisted and its review half. Returning the first match
+    # meant declining the small SAFE group printed the whole category as
+    # "Skipped by you" even when the REVIEW half was cleaned.
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
         if [[ "${line%%=*}" == "$key" ]]; then
-            printf '%s' "${line#*=}"
-            return 0
+            found="${line#*=}"
         fi
     done <<EOF
 ${CLEANUP_CATEGORY_OUTCOMES}
 EOF
+    printf '%s' "$found"
     return 0
 }
 
@@ -1633,18 +1638,103 @@ catbytes_add() {
     eval "_CATBYTES_${raw_key}=$(( current + $2 ))"
 }
 
-# All known category keys (used for iteration in reporter + dry-run summary).
-# shellcheck disable=SC2034
-ALL_KNOWN_CATEGORY_KEYS=(
-    trash
-    user-caches system-caches app-caches
-    user-logs system-logs diagnostic-reports tmp
-    app-leftovers
-    xcode-derived xcode-archives simulators device-support
-    npm npx yarn pnpm pip brew brew-stale gradle maven cocoapods cargo
-    swift-pm gem bundler composer android-avd
-    docker time-machine ios-backups installers
+# ---------------------------------------------------------------------------
+# CATEGORY_REGISTRY — the single source of truth for reportable categories.
+#
+# Row format:  key|label|class
+#   counted     real byte size, included in TOTAL_WOULD_FREE_BYTES
+#   count       ledger value is an ITEM COUNT, not bytes (APFS local snapshots);
+#               listed, never summed
+#   report-only sized and shown, never auto-removed, never summed
+#
+# Every `catbytes_set "<key>"` in lib/ must have a row here. lib/reporter.sh used
+# to keep its own hand-written label list, and the two drifted: 21 labels against
+# 37 live keys, four of them ("logs", "dev", "derived-data",
+# "xcode-device-support") naming keys nothing ever sets, so they could never
+# render at all. Measured on 2026-09-01: the terminal summary listed 13.05 GB
+# across 12 categories while the markdown report itemised 6 of them — app-caches
+# (1.04 GB), cargo, brew, pip, swift-pm and xcode-derived were sized, counted in
+# the headline total, and then printed nowhere. tests/test_report_parity.sh keeps
+# the two lists from separating again.
+# ---------------------------------------------------------------------------
+CATEGORY_REGISTRY=(
+    "trash|Trash (~/.Trash)|counted"
+    "user-caches|User Caches (~/Library/Caches)|counted"
+    "system-caches|System Caches (/Library/Caches)|counted"
+    "app-caches|App-specific Caches (Electron/JetBrains/...)|counted"
+    "user-logs|User Logs (~/Library/Logs)|counted"
+    "system-logs|System Logs (/Library/Logs)|counted"
+    "diagnostic-reports|Diagnostic Reports|counted"
+    "tmp|Temporary Files (/tmp)|counted"
+    "app-leftovers|App Leftovers|counted"
+    "xcode-derived|Xcode DerivedData|counted"
+    "xcode-archives|Xcode Archives|counted"
+    "simulators|iOS Simulators (unavailable)|counted"
+    "device-support|Xcode Device Support|counted"
+    "npm|npm cache (~/.npm/_cacache)|counted"
+    "npx|npx cache (~/.npm/_npx)|counted"
+    "yarn|yarn cache|counted"
+    "pnpm|pnpm store|counted"
+    "pnpm-stale|pnpm stale store versions|counted"
+    "pip|pip cache|counted"
+    "brew|Homebrew cache|counted"
+    "brew-stale|Homebrew stale versions (brew cleanup)|counted"
+    "gradle|Gradle cache|counted"
+    "maven|Maven repository (~/.m2)|counted"
+    "cocoapods|CocoaPods cache|counted"
+    "cargo|Cargo registry cache|counted"
+    "swift-pm|Swift Package Manager cache|counted"
+    "gem|Ruby gems cache|counted"
+    "bundler|Bundler cache|counted"
+    "composer|Composer cache (PHP)|counted"
+    "android-avd|Android AVD Emulators|counted"
+    "docker|Docker (reclaimable)|counted"
+    "time-machine|Local TM Snapshots|count"
+    "ios-backups|iOS Backups|counted"
+    "installers|Old Installers (~/Downloads)|counted"
+    "browser-caches|Browser Caches (review)|report-only"
+    "browser-data|Browser Profiles (DANGEROUS)|report-only"
+    "mail-total|Apple Mail (DANGEROUS)|report-only"
+    "mail-data|Apple Mail - store|report-only"
+    "mail-downloads|Apple Mail - downloads|report-only"
 )
+
+# category_label <key> - printable label, or the key itself when unregistered.
+category_label() {
+    local key="${1:-}" row
+    for row in "${CATEGORY_REGISTRY[@]}"; do
+        if [[ "${row%%|*}" == "$key" ]]; then
+            local rest="${row#*|}"
+            printf '%s' "${rest%%|*}"
+            return 0
+        fi
+    done
+    printf '%s' "$key"
+}
+
+# category_class <key> - counted | count | report-only ("" when unregistered).
+category_class() {
+    local key="${1:-}" row
+    for row in "${CATEGORY_REGISTRY[@]}"; do
+        if [[ "${row%%|*}" == "$key" ]]; then
+            printf '%s' "${row##*|}"
+            return 0
+        fi
+    done
+    return 0
+}
+
+# All keys that participate in the grand total's iteration (counted + count).
+# Derived from the registry so it cannot drift from the labels again.
+# shellcheck disable=SC2034
+ALL_KNOWN_CATEGORY_KEYS=()
+_reg_row=""
+for _reg_row in "${CATEGORY_REGISTRY[@]}"; do
+    case "${_reg_row##*|}" in
+        counted|count) ALL_KNOWN_CATEGORY_KEYS+=("${_reg_row%%|*}") ;;
+    esac
+done
+unset _reg_row
 
 # ---------------------------------------------------------------------------
 # Global counters (reset at script start)

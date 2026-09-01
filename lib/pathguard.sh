@@ -80,6 +80,14 @@ _is_within_allowed_cache_root() {
             "$h/.npm"|"$h/.npm/"*) return 0 ;;
             "$h/.yarn"|"$h/.yarn/"*) return 0 ;;
             "$h/.pnpm-store"|"$h/.pnpm-store/"*) return 0 ;;
+            # pnpm >= 8 puts its content-addressable store under
+            # ~/Library/pnpm/store on macOS (or ~/.local/share/pnpm/store
+            # with XDG paths). The allowlist only knew the legacy
+            # ~/.pnpm-store, so `pnpm store path` was rejected on every
+            # single run: 4.1 GB unreachable and one
+            # `path_provenance_rejected` journal entry per run.
+            "$h/Library/pnpm"|"$h/Library/pnpm/"*) return 0 ;;
+            "$h/.local/share/pnpm"|"$h/.local/share/pnpm/"*) return 0 ;;
             "$h/.gradle"|"$h/.gradle/"*) return 0 ;;
             "$h/.m2"|"$h/.m2/"*) return 0 ;;
             "$h/.cargo"|"$h/.cargo/"*) return 0 ;;

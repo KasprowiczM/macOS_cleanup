@@ -58,102 +58,86 @@ EOF
 |:---------|:-----|:-------|:-------------------|
 EOF
 
-    local -a category_labels=(
-        "user-caches:User Caches (~/Library/Caches)"
-        "system-caches:System Caches (/Library/Caches)"
-        "logs:System & App Logs"
-        "diagnostic-reports:Diagnostic Reports"
-        "app-leftovers:App Leftovers"
-        "dev:Developer Caches & Artifacts"
-        "npm:npm cache (~/.npm/_cacache)"
-        "npx:npx cache (~/.npm/_npx)"
-        "derived-data:Xcode DerivedData"
-        "xcode-archives:Xcode Archives"
-        "xcode-device-support:Xcode Device Support"
-        "simulators:iOS Simulators"
-        "android-avd:Android AVD Emulators"
-        "time-machine:Local TM Snapshots"
-        "ios-backups:iOS Backups"
-        "trash:Trash (~/.Trash)"
-        "tmp:Temporary Files (/tmp)"
-        "installers:Old Installers (~/Downloads)"
-        "browser-caches:Browser Caches (review)"
-        "browser-data:Browser Profiles (DANGEROUS)"
-        "mail-total:Apple Mail (DANGEROUS)"
-    )
+    # One pass over the registry, split into what the headline total counts and
+    # what it deliberately does not, so the itemised rows reconcile with the
+    # "Total potentially freeable" line instead of silently omitting categories.
+    local entry key label klass bytes size_cell status_str action_str recorded_outcome
+    local -a report_only_rows=()
 
-    for entry in "${category_labels[@]}"; do
-        local key="${entry%%:*}"
-        local label="${entry#*:}"
-        local bytes
+    for entry in "${CATEGORY_REGISTRY[@]}"; do
+        key="${entry%%|*}"
+        klass="${entry##*|}"
+        label="$(category_label "$key")"
         bytes=$(catbytes_get "$key")
         (( bytes == 0 )) && continue
 
-        local status_str="Reported"
-        local action_str="Review in interactive mode"
-
-        # What actually happened wins over what the mode implies. Before this,
-        # `user-caches` was printed as "Cleaned/Quarantined | Done" in every
-        # interactive run — including the 2026-08-19 20:15 run where the user
-        # declined it and the log recorded "User skipped cleanup".
-        local recorded_outcome
-        recorded_outcome="$(category_outcome "$key")"
-        case "$recorded_outcome" in
-            cleaned)
-                status_str="Cleaned/Quarantined"
-                action_str="Done"
-                ;;
-            skipped)
-                status_str="Skipped by you"
-                action_str="Still on disk — re-run to process"
-                ;;
-        esac
-        if [[ -n "$recorded_outcome" ]]; then
-            echo "| ${label} | **$(bytes_to_human "$bytes")** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
-            continue
-        fi
-
-        case "$key" in
-            user-caches|trash|tmp)
-                if [[ "$mode" == "auto-safe" || "$mode" == "interactive" || "$mode" == "apply-plan" ]]; then
-                    # No outcome was recorded for this category, so the run never
-                    # reached it. Do not claim it was cleaned.
-                    status_str="Found"
-                    action_str="Safe to clean"
-                else
-                    status_str="Found"
-                    action_str="Safe to clean"
-                fi
-                ;;
-            system-caches|mail-total|browser-data)
-                status_str="Protected / Report-only"
-                action_str="Do not delete with rm"
-                ;;
-            app-leftovers|xcode-archives|android-avd)
-                status_str="Needs Decision"
-                action_str="Manual verification required"
-                ;;
-            *)
-                status_str="Found"
-                action_str="Run --interactive to process"
-                ;;
-        esac
-
         # The "time-machine" ledger entry holds a SNAPSHOT COUNT, not a byte
-        # size — analyze_time_machine has no way to price an APFS local
-        # snapshot, so it records how many exist. cleanup_all.sh already
-        # special-cases this in the terminal summary; without the same case
-        # here the markdown report rendered 12 local snapshots as "12 B",
-        # which reads as a category worth 12 bytes.
-        local size_cell
-        if [[ "$key" == "time-machine" ]]; then
+        # size — an APFS local snapshot has no assignable size. Without this the
+        # markdown report rendered 14 local snapshots as "14 B".
+        if [[ "$klass" == "count" ]]; then
             size_cell="${bytes} $(t "cli_units_pcs")"
         else
             size_cell="$(bytes_to_human "$bytes")"
         fi
 
-        echo "| ${label} | **${size_cell}** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
+        status_str="Reported"
+        action_str="Review in interactive mode"
+
+        # What actually happened wins over what the mode implies. Before this,
+        # `user-caches` was printed as "Cleaned/Quarantined | Done" in every
+        # interactive run — including the 2026-08-19 20:15 run where the user
+        # declined it and the log recorded "User skipped cleanup".
+        recorded_outcome="$(category_outcome "$key")"
+        case "$recorded_outcome" in
+            cleaned) status_str="Cleaned/Quarantined"; action_str="Done" ;;
+            skipped) status_str="Skipped by you";      action_str="Still on disk — re-run to process" ;;
+        esac
+
+        if [[ -z "$recorded_outcome" ]]; then
+            case "$key" in
+                user-caches|trash|tmp)
+                    # No outcome was recorded for this category, so the run never
+                    # reached it. Do not claim it was cleaned.
+                    status_str="Found"; action_str="Safe to clean" ;;
+                system-caches|mail-total|mail-data|mail-downloads|browser-data)
+                    status_str="Protected / Report-only"; action_str="Do not delete with rm" ;;
+                browser-caches)
+                    # No cleaner touches browser caches — telling the reader to
+                    # "run --interactive to process" promised an action that does
+                    # not exist. Clearing them behind a running browser's back
+                    # corrupts its cache index, so the browser's own control is
+                    # the correct route.
+                    status_str="Report-only"; action_str="Clear from the browser's privacy settings" ;;
+                app-leftovers|xcode-archives|android-avd|maven)
+                    status_str="Needs Decision"; action_str="Manual verification required" ;;
+                *)
+                    status_str="Found"; action_str="Run --interactive to process" ;;
+            esac
+        fi
+
+        if [[ "$klass" == "report-only" ]]; then
+            report_only_rows+=("| ${label} | **${size_cell}** | ${status_str} | ${action_str} |")
+        else
+            echo "| ${label} | **${size_cell}** | ${status_str} | ${action_str} |" >> "$REPORT_FILE"
+        fi
     done
+
+    if (( ${#report_only_rows[@]} > 0 )); then
+        cat << EOF >> "$REPORT_FILE"
+
+### Report-only — sized but NOT included in the total
+
+These are never removed by this script, so their size is deliberately excluded
+from the figure below.
+
+| Category | Size | Status | Recommended Action |
+|:---------|:-----|:-------|:-------------------|
+EOF
+        local row
+        for row in "${report_only_rows[@]}"; do
+            echo "$row" >> "$REPORT_FILE"
+        done
+    fi
 
     cat << EOF >> "$REPORT_FILE"
 
