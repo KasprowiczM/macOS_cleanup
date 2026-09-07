@@ -994,6 +994,9 @@ cleanup_journal_event() {
     local ts
 
     [[ -n "$journal_file" ]] || return 0
+    if [[ -n "${CLEANUP_TEST_FAIL_JOURNAL_ACTION:-}" && "$action" == "$CLEANUP_TEST_FAIL_JOURNAL_ACTION" ]]; then
+        return 1
+    fi
     case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
     ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 
@@ -1120,6 +1123,19 @@ cleanup_restore_record() {
     return 0
 }
 
+_quarantine_drop_last_restore_row() {
+    local manifest="${CLEANUP_RESTORE_MANIFEST:-}"
+    local tmp
+
+    [[ -n "$manifest" && -f "$manifest" ]] || return 0
+    tmp="${manifest}.tmp.$$"
+    if sed '$d' "$manifest" > "$tmp" 2>/dev/null && mv "$tmp" "$manifest"; then
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
+}
+
 path_is_within() {
     local candidate="$1"
     local root="$2"
@@ -1209,6 +1225,11 @@ _quarantine_rollback_move() {
     local dest="$1"
     local target="$2"
     local size="${3:-0}"
+    local drop_restore_row="${4:-0}"
+
+    if [[ "$drop_restore_row" == "1" ]]; then
+        _quarantine_drop_last_restore_row || true
+    fi
 
     if mv "$dest" "$target" 2>/dev/null; then
         print_warn "Rolled back quarantine because metadata could not be written: ${target}"
@@ -1280,7 +1301,7 @@ quarantine_remove() {
     fi
 
     if ! cleanup_journal_event "quarantined" "$target" "$dest" "$size" "ok" ""; then
-        _quarantine_rollback_move "$dest" "$target" "$size" || true
+        _quarantine_rollback_move "$dest" "$target" "$size" 1 || true
         return 1
     fi
 
@@ -1667,8 +1688,10 @@ safe_remove() {
     else
         if [[ "${REMOVE_MODE:-permanent}" == "quarantine" ]]; then
             if is_user_space_path "$normalized_target"; then
-                quarantine_remove "$normalized_target" "$size"
-                return
+                if quarantine_remove "$normalized_target" "$size"; then
+                    return 0
+                fi
+                return 1
             fi
 
             print_skip "Skipping non-user path in quarantine mode: ${normalized_target}"

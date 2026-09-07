@@ -60,4 +60,66 @@ assert_neq "$rc" "0" "quarantine_remove must fail when journal cannot be written
 assert_eq "$TOTAL_QUARANTINED_ITEMS" "0" "must not count a journal-less move as success"
 assert_file_exists "$HOME/Library/Caches/victim/data.bin" "source must be restored or never moved"
 
+begin_test "post-mv journal failure rolls back and drops restore row"
+# Restore writable journal/manifest after the EISDIR case.
+if [[ -d "$CLEANUP_JOURNAL_FILE" ]]; then
+    rm -rf "$CLEANUP_JOURNAL_FILE"
+fi
+if [[ -d "${SANDBOX}/reports/restore_run.tsv" ]]; then
+    rm -rf "${SANDBOX}/reports/restore_run.tsv"
+fi
+mkdir -p "${SANDBOX}/reports"
+: > "$CLEANUP_JOURNAL_FILE"
+: > "${SANDBOX}/reports/restore.tsv"
+# CLEANUP_RESTORE_MANIFEST is readonly from defaults; if it still points at nested.tsv, use that parent.
+manifest_parent="$(dirname "$CLEANUP_RESTORE_MANIFEST")"
+if [[ -f "${SANDBOX}/reports/restore_run.tsv" ]]; then
+    :
+elif [[ -d "$manifest_parent" ]]; then
+    : > "$CLEANUP_RESTORE_MANIFEST"
+else
+    mkdir -p "$manifest_parent"
+    : > "$CLEANUP_RESTORE_MANIFEST"
+fi
+mkdir -p "$HOME/Library/Caches/victim"
+echo payload > "$HOME/Library/Caches/victim/data.bin"
+TOTAL_QUARANTINED_ITEMS=0
+TOTAL_QUARANTINED_BYTES=0
+CLEANUP_TEST_FAIL_JOURNAL_ACTION=quarantined
+set +e
+quarantine_remove "$HOME/Library/Caches/victim" 100
+rc=$?
+set -e
+unset CLEANUP_TEST_FAIL_JOURNAL_ACTION
+assert_neq "$rc" "0" "post-mv journal failure must fail closed"
+assert_eq "$TOTAL_QUARANTINED_ITEMS" "0" "rollback must not increment quarantine count"
+assert_file_exists "$HOME/Library/Caches/victim/data.bin" "payload must be rolled back to source"
+assert_eq "$(cat "$HOME/Library/Caches/victim/data.bin")" "payload" "source bytes must be identical after rollback"
+if [[ -f "$CLEANUP_RESTORE_MANIFEST" ]]; then
+    leftover=0
+    if [[ -s "$CLEANUP_RESTORE_MANIFEST" ]]; then
+        leftover="$(wc -l < "$CLEANUP_RESTORE_MANIFEST" | tr -d ' ')"
+    fi
+    assert_eq "$leftover" "0" "restore TSV must not keep a row for a rolled-back item"
+fi
+
+begin_test "safe_remove does not abort the shell on quarantine metadata failure"
+mkdir -p "$HOME/Library/Caches/keep_me"
+echo keep > "$HOME/Library/Caches/keep_me/x"
+mkdir -p "$HOME/Library/Caches/victim"
+echo payload > "$HOME/Library/Caches/victim/data.bin"
+TOTAL_QUARANTINED_ITEMS=0
+DRY_RUN=0
+REMOVE_MODE=quarantine
+CLEANUP_TEST_FAIL_JOURNAL_ACTION=quarantined
+set +e
+safe_remove "$HOME/Library/Caches/victim"
+rc1=$?
+safe_remove "$HOME/Library/Caches/keep_me"
+rc2=$?
+set -e
+unset CLEANUP_TEST_FAIL_JOURNAL_ACTION
+assert_neq "$rc1" "0" "first safe_remove should fail closed"
+assert_file_exists "$HOME/Library/Caches/keep_me/x" "second item must still be reachable after first failure"
+
 print_test_summary
