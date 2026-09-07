@@ -286,6 +286,23 @@ def resolve_under(base: Path, relpath: str | Path) -> Path:
     return candidate
 
 
+def resolve_under_leaf(base: Path, relpath: str | Path) -> Path:
+    rel = safe_relpath(relpath)
+    base_resolved = base.resolve()
+    current = base_resolved
+    parts = Path(rel).parts
+    for index, part in enumerate(parts):
+        current = current / part
+        is_leaf = index == len(parts) - 1
+        if current.is_symlink() and not is_leaf:
+            raise DevSyncError(f"Refusing to walk through symlinked ancestor: {current}")
+    try:
+        current.relative_to(base_resolved)
+    except ValueError as exc:
+        raise DevSyncError(f"Resolved path escapes base directory: {current}") from exc
+    return current
+
+
 def path_matches_pattern(relpath: str, pattern: str, *, is_dir: bool = False) -> bool:
     rel = normalize_relpath(relpath)
     if not rel:
@@ -348,6 +365,24 @@ def should_include_candidate(relative_path: str, config: DevSyncConfig) -> bool:
     )
 
 
+def approved_overlay_relpaths(provider_files: Iterable[str], tracked: Iterable[str]) -> list[str]:
+    tracked_set = {normalize_relpath(item) for item in tracked if normalize_relpath(item)}
+    approved: list[str] = []
+    seen: set[str] = set()
+    for raw in provider_files:
+        rel = normalize_relpath(raw)
+        if not rel:
+            continue
+        rel = safe_relpath(rel)
+        if rel in seen or rel in tracked_set:
+            continue
+        if any(tracked_rel == rel or tracked_rel.startswith(rel + "/") for tracked_rel in tracked_set):
+            continue
+        seen.add(rel)
+        approved.append(rel)
+    return sorted(approved)
+
+
 def directory_exclude_patterns(config: DevSyncConfig) -> list[str]:
     patterns = list(config.exclude_patterns or DEFAULT_EXCLUDE_PATTERNS)
     hard_dirs = [pattern for pattern in HARD_EXCLUDE_PATTERNS if pattern.endswith("/")]
@@ -369,7 +404,19 @@ def read_json(path: Path) -> dict:
 
 
 def write_json(path: Path, payload: dict) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if path.is_symlink() or os.path.islink(path):
+        raise DevSyncError(f"Refusing to write JSON through symlink: {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp-" + str(os.getpid()))
+    if lexists(tmp):
+        tmp.unlink()
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        os.replace(tmp, path)
+    except Exception:
+        if lexists(tmp):
+            tmp.unlink()
+        raise
 
 
 def _ordered_unique(values: Sequence[str]) -> list[str]:
@@ -735,7 +782,9 @@ class CloudProvider:
     def sync_to(self, files: list[str], source_root: Path, dry_run: bool = False) -> tuple[list[str], str]:
         raise NotImplementedError
 
-    def sync_from(self, dest_root: Path, dry_run: bool = False) -> tuple[list[str], str]:
+    def sync_from(
+        self, dest_root: Path, dry_run: bool = False, files: Iterable[str] | None = None
+    ) -> tuple[list[str], str]:
         raise NotImplementedError
 
 
@@ -796,11 +845,17 @@ class LocalFileSystemProvider(CloudProvider):
         finally:
             logger.close()
 
-    def sync_from(self, dest_root: Path, dry_run: bool = False) -> tuple[list[str], str]:
+    def sync_from(
+        self, dest_root: Path, dry_run: bool = False, files: Iterable[str] | None = None
+    ) -> tuple[list[str], str]:
         project_folder = self.get_project_folder()
         if not project_folder.exists():
             raise DevSyncError(f"Project folder not found in {self.config.provider}: {project_folder}")
-        files_to_copy = sorted(scan_overlay_files(project_folder, self.config))
+        if files is None:
+            candidate_files = scan_overlay_files(project_folder, self.config)
+        else:
+            candidate_files = files
+        files_to_copy = approved_overlay_relpaths(candidate_files, tracked_files(dest_root))
         options = RunOptions(dry_run=dry_run, verbose=False)
         logger = Logger(dest_root, "provider-import", options)
         try:
@@ -851,11 +906,34 @@ class RCloneProvider(CloudProvider):
             )
         return files, "rclone"
 
-    def sync_from(self, dest_root: Path, dry_run: bool = False) -> tuple[list[str], str]:
+    def list_remote_files(self) -> list[str]:
+        result = run_command(
+            ["rclone", "lsf", "-R", "--files-only", self._remote_root()],
+            cwd=Path.home(),
+        )
+        files: list[str] = []
+        for line in result.stdout.splitlines():
+            item = line.strip().rstrip("/")
+            if not item:
+                continue
+            files.append(safe_relpath(item))
+        return files
+
+    def sync_from(
+        self, dest_root: Path, dry_run: bool = False, files: Iterable[str] | None = None
+    ) -> tuple[list[str], str]:
+        approved = sorted({safe_relpath(relpath) for relpath in (files or [])})
+        if not approved:
+            return [], "rclone"
         remote_root = self._remote_root()
-        if not dry_run:
-            run_command(["rclone", "copy", remote_root, str(dest_root), "--checksum"], cwd=dest_root)
-        return [], "rclone"
+        if dry_run:
+            return approved, "rclone"
+        run_command(
+            ["rclone", "copy", remote_root, str(dest_root), "--checksum", "--files-from", "-"],
+            cwd=dest_root,
+            input_text="".join(f"{relpath}\n" for relpath in approved),
+        )
+        return approved, "rclone"
 
 
 def create_provider(config: DevSyncConfig) -> CloudProvider:
@@ -938,23 +1016,51 @@ def copy_relpaths(
     logger: Logger,
     options: RunOptions,
 ) -> None:
+    pid = str(os.getpid())
     for rel in sorted({safe_relpath(relpath) for relpath in relpaths}):
         source = source_base / rel
         dest = dest_base / rel
         logger.verbose(f"copy {source} -> {dest}")
         if options.dry_run:
             continue
+        if not lexists(source):
+            raise DevSyncError(f"Source path vanished during copy: {source}")
         validate_no_symlink_dest_ancestors(dest_base, [rel])
         dest.parent.mkdir(parents=True, exist_ok=True)
-        remove_path(dest, dry_run=False)
-        if source.is_symlink():
-            os.symlink(os.readlink(source), dest)
-        elif source.is_file():
-            shutil.copy2(source, dest)
-        elif source.is_dir():
-            shutil.copytree(source, dest, dirs_exist_ok=True, symlinks=True)
-        else:
-            raise DevSyncError(f"Source path vanished during copy: {source}")
+        importing = dest.with_name(dest.name + ".importing-" + pid)
+        if lexists(importing):
+            remove_path(importing, dry_run=False)
+        try:
+            if source.is_symlink() or source.is_file():
+                if source.is_symlink():
+                    os.symlink(os.readlink(source), importing)
+                else:
+                    shutil.copy2(source, importing)
+                if not files_match(source, importing):
+                    raise DevSyncError(f"Copy verification failed for {source}")
+                os.replace(importing, dest)
+            elif source.is_dir():
+                shutil.copytree(source, importing, symlinks=True)
+                replaced = dest.with_name(dest.name + ".replaced-" + pid)
+                if lexists(replaced):
+                    remove_path(replaced, dry_run=False)
+                dest_existed = lexists(dest)
+                try:
+                    if dest_existed:
+                        os.rename(dest, replaced)
+                    os.rename(importing, dest)
+                except Exception:
+                    if dest_existed and lexists(replaced) and not lexists(dest):
+                        os.rename(replaced, dest)
+                    raise
+                if lexists(replaced):
+                    remove_path(replaced, dry_run=False)
+            else:
+                raise DevSyncError(f"Source path vanished during copy: {source}")
+        except Exception:
+            if lexists(importing):
+                remove_path(importing, dry_run=False)
+            raise
 
 
 def sync_relpaths(
@@ -1086,8 +1192,8 @@ def import_overlay(
             provider_files = manifest_files if manifest_files is not None else scan_overlay_files(source, config)
             provider_files = {rel for rel in provider_files if should_include_candidate(rel, config)}
             tracked = tracked_files(repo_root)
-            skipped_tracked = sorted(provider_files & tracked)
-            files_to_copy = sorted(provider_files - tracked)
+            files_to_copy = approved_overlay_relpaths(provider_files, tracked)
+            skipped_tracked = sorted(set(provider_files) - set(files_to_copy))
             if skipped_tracked:
                 logger.log(f"Skipping {len(skipped_tracked)} tracked Git file(s) from provider overlay")
                 for relpath in skipped_tracked:
@@ -1096,8 +1202,15 @@ def import_overlay(
             transport = sync_relpaths(source, repo_root, files_to_copy, logger, options)
         else:
             source = Path(f"{config.rclone_remote}:{config.rclone_remote_path}/{config.project_name}")
-            files_to_copy, transport = provider.sync_from(repo_root, dry_run=dry_run)
-            skipped_tracked = []
+            tracked = tracked_files(repo_root)
+            remote_files = provider.list_remote_files() if isinstance(provider, RCloneProvider) else []
+            files_to_copy = approved_overlay_relpaths(remote_files, tracked)
+            skipped_tracked = sorted(set(remote_files) - set(files_to_copy))
+            if skipped_tracked:
+                logger.log(f"Skipping {len(skipped_tracked)} tracked Git file(s) from provider overlay")
+                for relpath in skipped_tracked:
+                    logger.log(f"  - {relpath}")
+            files_to_copy, transport = provider.sync_from(repo_root, dry_run=dry_run, files=files_to_copy)
             logger.log("Manifest support is unavailable for rclone imports.", always_stdout=False)
 
         logger.log(f"project_root={repo_root}", always_stdout=False)
@@ -1241,6 +1354,7 @@ def compare_overlay_content(
         local_path = local_base / relpath
         provider_path = provider_base / relpath
         if not lexists(local_path) or not lexists(provider_path):
+            mismatches.append(relpath)
             continue
         if content_check_is_sensitive(relpath):
             skipped_sensitive.append(relpath)
@@ -1265,14 +1379,16 @@ def verify_full_state(repo_root: Path, config: DevSyncConfig, verbose: bool = Fa
         classification = classify_repo(repo_root, config)
         git_snapshot = classification.tracked_files
         manifest_files = read_manifest(provider_root)
-        provider_snapshot = manifest_files if manifest_files is not None else scan_overlay_files(provider_root, config)
-        provider_snapshot = {rel for rel in provider_snapshot if should_include_candidate(rel, config)}
-        raw_provider_snapshot = scan_overlay_files(provider_root, config)
+        provider_snapshot = scan_overlay_files(provider_root, config)
+        raw_provider_snapshot = provider_snapshot
         local_snapshot = classification.local_files
 
-        expected_overlay = classification.overlay_files
+        expected_overlay = set(classification.overlay_files)
+        if manifest_files is not None:
+            expected_overlay |= {rel for rel in manifest_files if should_include_candidate(rel, config)}
+
         missing_from_local = sorted(
-            classification.tracked_missing_local | ((provider_snapshot & expected_overlay) - local_snapshot)
+            classification.tracked_missing_local | (expected_overlay - local_snapshot)
         )
         missing_from_provider = sorted(expected_overlay - provider_snapshot)
         orphan_local = sorted((local_snapshot - git_snapshot - provider_snapshot) - expected_overlay)
@@ -1280,7 +1396,7 @@ def verify_full_state(repo_root: Path, config: DevSyncConfig, verbose: bool = Fa
         content_mismatches, content_not_checked = compare_overlay_content(
             repo_root,
             provider_root,
-            expected_overlay & provider_snapshot,
+            expected_overlay,
         )
         dirty = sorted(classification.dirty_tracked_entries)
 
