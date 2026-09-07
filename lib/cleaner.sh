@@ -622,7 +622,7 @@ clean_dev_caches() {
             --size       "$total_h" \
             --paths      "$paths_str" \
             --what       "Package manager caches for development tools." \
-            --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
+            --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "$(t "package_managers_safe_if")" \
             --risk       "$cat_risk" || {
                 mark_category_outcome "dev" skipped

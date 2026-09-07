@@ -40,6 +40,7 @@ i18n_get_pt() {
         consequence_review_permanent) echo "Aviso (RISCO REVIEW): Arquivos removidos permanentemente sem quarentena." ;;
         consequence_dangerous_quarantine) echo "ATENÇÃO (RISCO DANGEROUS): Alto risco de perda de dados. Requer backup atualizado." ;;
         consequence_dangerous_permanent) echo "ATENÇÃO (RISCO DANGEROUS): Remoção irreversível de dados críticos do sistema ou usuário." ;;
+        consequence_native_irreversible) echo "Isto executa um comando nativo da ferramenta. É irreversível e não é colocado em quarentena." ;;
         dangerous_blocked) echo "Não sujeito à limpeza automática ou interativa." ;;
         auto_yes_blocked) echo "--yes automático não aprova risco" ;;
         category_review_title) echo "Caches de aplicações que exigem revisão (REVIEW)" ;;

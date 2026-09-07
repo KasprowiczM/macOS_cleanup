@@ -40,6 +40,7 @@ i18n_get_de() {
         consequence_review_permanent) echo "Warnung (REVIEW RISIKO): Dateien werden ohne Quarantäne dauerhaft gelöscht." ;;
         consequence_dangerous_quarantine) echo "ACHTUNG (DANGEROUS RISIKO): Hohes Risiko für Datenverlust. Quarantäne erfordert Backup." ;;
         consequence_dangerous_permanent) echo "ACHTUNG (DANGEROUS RISIKO): Unwiderrufliche Löschung kritischer System- oder Benutzerdaten." ;;
+        consequence_native_irreversible) echo "Dies führt einen nativen Werkzeugbefehl aus. Er ist unumkehrbar und wird nicht in Quarantäne verschoben." ;;
         dangerous_blocked) echo "Nicht Gegenstand der automatischen oder interaktiven Bereinigung." ;;
         auto_yes_blocked) echo "Automatisches --yes genehmigt Risiko nicht" ;;
         category_review_title) echo "Überprüfungsbedürftige Anwendungs-Caches (REVIEW)" ;;

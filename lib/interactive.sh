@@ -95,6 +95,11 @@ consequence_for_mode() {
     local risk="${1:-REVIEW}"
     local mode="${2:-${REMOVE_MODE:-quarantine}}"
 
+    if [[ "$mode" == "native" ]]; then
+        t "consequence_native_irreversible"
+        return
+    fi
+
     # Normalize legacy risk strings
     case "$risk" in
         LOW)  risk="SAFE" ;;

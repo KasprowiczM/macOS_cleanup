@@ -39,6 +39,7 @@ i18n_get_en() {
         consequence_review_permanent) echo "Warning (REVIEW RISK): Files will be permanently deleted from disk without quarantine." ;;
         consequence_dangerous_quarantine) echo "WARNING (DANGEROUS RISK): High risk of data damage. Quarantine requires an up-to-date backup." ;;
         consequence_dangerous_permanent) echo "WARNING (DANGEROUS RISK): Irreversible deletion of critical system or user data." ;;
+        consequence_native_irreversible) echo "This runs a native tool command. It is irreversible and is not quarantined." ;;
         dangerous_blocked) echo "Not subject to automatic or interactive cleaning." ;;
         auto_yes_blocked) echo "Automatic --yes does not approve risk" ;;
         category_review_title) echo "Application caches requiring review (REVIEW)" ;;

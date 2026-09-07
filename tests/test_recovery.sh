@@ -42,11 +42,12 @@ trap cleanup EXIT
 
 begin_test "Plan file checksum verification succeeds on valid plan"
 plan_file="${SANDBOX}/valid_plan.json"
-cat <<'EOF' > "$plan_file"
+empty_ops_chk="$(python3 -c 'import hashlib, json; print(hashlib.sha256(json.dumps([], sort_keys=True, separators=(",", ":")).encode()).hexdigest())')"
+cat > "$plan_file" <<EOF
 {
   "schema_version": "1.0",
   "tool": "cleanup_all.sh",
-  "checksum": "1-1-0-0",
+  "checksum": "${empty_ops_chk}",
   "summary": {
     "operations": 1,
     "safe_operations": 1,

@@ -14,6 +14,8 @@ declare -a PLAN_OP_COMMANDS=()
 declare -a PLAN_OP_BYTES=()
 declare -a PLAN_OP_DESCS=()
 declare -a PLAN_OP_RECS=()
+declare -a PLAN_OP_ROLLBACK=()
+declare -a PLAN_OP_TOOLS=()
 
 plan_reset() {
     PLAN_OP_IDS=()
@@ -25,6 +27,8 @@ plan_reset() {
     PLAN_OP_BYTES=()
     PLAN_OP_DESCS=()
     PLAN_OP_RECS=()
+    PLAN_OP_ROLLBACK=()
+    PLAN_OP_TOOLS=()
 }
 
 plan_next_id() {
@@ -33,6 +37,15 @@ plan_next_id() {
 
 plan_add_operation() {
     local id="$1" category="$2" risk="$3" action="$4" path="$5" command="$6" bytes="$7" description="$8" recommendation="$9"
+    local rollback="${10:-}"
+    local tool="${11:-}"
+    if [[ -z "$rollback" ]]; then
+        if [[ "$action" == "remove_path" ]]; then
+            rollback="true"
+        else
+            rollback="false"
+        fi
+    fi
     PLAN_OP_IDS+=("$id")
     PLAN_OP_CATEGORIES+=("$category")
     PLAN_OP_RISKS+=("$risk")
@@ -42,27 +55,31 @@ plan_add_operation() {
     PLAN_OP_BYTES+=("${bytes:-0}")
     PLAN_OP_DESCS+=("$description")
     PLAN_OP_RECS+=("$recommendation")
+    PLAN_OP_ROLLBACK+=("$rollback")
+    PLAN_OP_TOOLS+=("$tool")
 }
 
 plan_add_path() {
     local category="$1" risk="$2" path="$3" description="$4" recommendation="$5"
     local bytes
     bytes="$(path_size_bytes "$path")"
-    plan_add_operation "$(plan_next_id)" "$category" "$risk" "remove_path" "$path" "" "$bytes" "$description" "$recommendation"
+    plan_add_operation "$(plan_next_id)" "$category" "$risk" "remove_path" "$path" "" "$bytes" "$description" "$recommendation" "true" ""
 }
 
 plan_add_report_only() {
     local category="$1" risk="$2" path="$3" bytes="$4" description="$5" recommendation="$6"
-    plan_add_operation "$(plan_next_id)" "$category" "$risk" "report_only" "$path" "" "$bytes" "$description" "$recommendation"
+    plan_add_operation "$(plan_next_id)" "$category" "$risk" "report_only" "$path" "" "$bytes" "$description" "$recommendation" "false" ""
 }
 
 plan_add_native() {
     local category="$1" risk="$2" command="$3" bytes="$4" description="$5" recommendation="$6"
-    plan_add_operation "$(plan_next_id)" "$category" "$risk" "native_command" "" "$command" "$bytes" "$description" "$recommendation"
+    local path="${7:-}"
+    local tool="${8:-}"
+    plan_add_operation "$(plan_next_id)" "$category" "$risk" "native_command" "$path" "$command" "$bytes" "$description" "$recommendation" "false" "$tool"
 }
 
 build_cleanup_plan_from_analysis() {
-    local item path label key
+    local item path label key brew_b
     plan_reset
 
     if (( ${#FOUND_TRASH_ITEMS[@]} > 0 )); then
@@ -159,28 +176,37 @@ build_cleanup_plan_from_analysis() {
                         "Review in Xcode Organizer before deletion."
                     ;;
                 ios_simulators)
-                    plan_add_native "dev" "REVIEW" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
                         "Deletes only unavailable simulators." \
-                        "Execute after review; runtimes can be re-downloaded."
+                        "Execute after review; runtimes can be re-downloaded." "$path" "xcrun"
+                    ;;
+                npx_cache|pnpm_stale_store)
+                    plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
+                        "Recreateable package manager cache." \
+                        "The tool will re-download packages as needed."
                     ;;
                 npm_cache)
-                    plan_add_native "dev" "SAFE" "npm cache clean --force" "$(catbytes_get "npm")" \
-                        "npm cache." "Packages will be re-downloaded if needed." ;;
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "npm cache clean --force" "$(catbytes_get "npm")" \
+                        "npm cache." "Packages will be re-downloaded if needed." "$path" "npm" ;;
                 yarn_cache)
-                    plan_add_native "dev" "SAFE" "yarn cache clean" "$(catbytes_get "yarn")" \
-                        "Yarn cache." "Packages will be re-downloaded if needed." ;;
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "yarn cache clean" "$(catbytes_get "yarn")" \
+                        "Yarn cache." "Packages will be re-downloaded if needed." "$path" "yarn" ;;
                 pnpm_cache)
-                    plan_add_native "dev" "SAFE" "pnpm store prune" "$(catbytes_get "pnpm")" \
-                        "pnpm store." "pnpm prunes unused store items." ;;
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pnpm store prune" "$(catbytes_get "pnpm")" \
+                        "pnpm store." "pnpm prunes unused store items." "$path" "pnpm" ;;
                 pip_cache)
-                    plan_add_native "dev" "SAFE" "pip cache purge" "$(catbytes_get "pip")" \
-                        "pip cache." "Packages will be re-downloaded if needed." ;;
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pip cache purge" "$(catbytes_get "pip")" \
+                        "pip cache." "Packages will be re-downloaded if needed." "$path" "pip" ;;
                 brew_cache|brew_cleanup)
-                    plan_add_native "dev" "SAFE" "brew cleanup --prune=all" "$(catbytes_get "brew-stale")" \
-                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." ;;
+                    brew_b="$(catbytes_get "brew")"
+                    if [[ "$brew_b" == "0" || -z "$brew_b" ]]; then
+                        brew_b="$(catbytes_get "brew-stale")"
+                    fi
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "brew cleanup --prune=all" "$brew_b" \
+                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." "$path" "brew" ;;
                 gem_cache)
-                    plan_add_native "dev" "SAFE" "gem cleanup" "$(catbytes_get "gem")" \
-                        "Ruby gems cache / old versions." "Gems can be reinstalled." ;;
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "gem cleanup" "$(catbytes_get "gem")" \
+                        "Ruby gems cache / old versions." "Gems can be reinstalled." "$path" "gem" ;;
                 gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Recreateable dev tool cache." \
@@ -197,9 +223,9 @@ build_cleanup_plan_from_analysis() {
                         "Remove via Android Studio Device Manager after review."
                     ;;
                 docker_prune)
-                    plan_add_native "dev" "REVIEW" "docker system prune -f" "$(catbytes_get "docker")" \
+                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "docker system prune -f" "$(catbytes_get "docker")" \
                         "Docker: images, stopped containers, networks, and build cache." \
-                        "Execute only if stopped container data is no longer required."
+                        "Execute only if stopped container data is no longer required." "$path" "docker"
                     ;;
             esac
         done
@@ -287,7 +313,7 @@ generate_plan_json() {
     done
 
     local checksum_val
-    checksum_val="${count}-${safe_count}-${review_count}-${dangerous_count}"
+    checksum_val="pending"
 
     local dir
     dir="$(dirname "$output")"
@@ -318,11 +344,17 @@ generate_plan_json() {
             local sep=","
             (( i == count - 1 )) && sep=""
 
-            local json_path json_cmd json_desc json_rec
+            local json_path json_cmd json_desc json_rec json_tool json_rollback
             json_path="$(json_escape "${PLAN_OP_PATHS[$i]}")"
             json_cmd="$(json_escape "${PLAN_OP_COMMANDS[$i]}")"
             json_desc="$(json_escape "${PLAN_OP_DESCS[$i]}")"
             json_rec="$(json_escape "${PLAN_OP_RECS[$i]}")"
+            json_tool="$(json_escape "${PLAN_OP_TOOLS[$i]:-}")"
+            json_rollback="${PLAN_OP_ROLLBACK[$i]:-false}"
+            case "$json_rollback" in
+                true|false) ;;
+                *) json_rollback="false" ;;
+            esac
 
             printf '    {\n'
             printf '      "id": "%s",\n' "${PLAN_OP_IDS[$i]}"
@@ -334,12 +366,37 @@ generate_plan_json() {
             printf '      "estimated_bytes": %s,\n' "${PLAN_OP_BYTES[$i]:-0}"
             printf '      "size": %s,\n' "${PLAN_OP_BYTES[$i]:-0}"
             printf '      "description": "%s",\n' "$json_desc"
-            printf '      "recommendation": "%s"\n' "$json_rec"
+            printf '      "recommendation": "%s",\n' "$json_rec"
+            printf '      "rollback": %s,\n' "$json_rollback"
+            printf '      "tool": "%s"\n' "$json_tool"
             printf '    }%s\n' "$sep"
         done
         printf '  ]\n'
         printf '}\n'
     } > "$output"
+
+    if ! python3 - "$output" <<'PLANCKSUM'
+import hashlib
+import json
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    raw = f.read()
+data = json.loads(raw)
+ops = data.get("operations", [])
+chk = hashlib.sha256(json.dumps(ops, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+new, n = re.subn(r'"checksum":\s*"[^"]*"', '"checksum": "%s"' % chk, raw, count=1)
+if n != 1:
+    sys.exit(1)
+with open(path, "w", encoding="utf-8") as f:
+    f.write(new)
+PLANCKSUM
+    then
+        print_error "Failed to stamp plan checksum: ${output}"
+        return 1
+    fi
 
     cleanup_journal_event "plan_generated" "$output" "" 0 "ok" "operations=${count}" "plan"
     TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count ))
@@ -349,11 +406,22 @@ generate_plan_json() {
     if (( dangerous_count > 0 )); then
         USER_DECISION_ITEMS+=("Plan JSON: ${dangerous_count} DANGEROUS operations will never execute automatically")
     fi
+    if type json_summary_record_plan >/dev/null 2>&1; then
+        json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" "$safe_bytes" "$review_bytes" "$dangerous_bytes"
+    fi
     print_ok "Plan JSON saved: ${output}"
 }
 
 execute_plan_native_command() {
-    local command="$1" bytes="${2:-0}"
+    local command="$1"
+    local bytes="${2:-0}"
+    local path="${3:-}"
+    local before=0
+    local after=0
+
+    if [[ -n "$path" && -e "$path" ]]; then
+        before="$(path_size_bytes "$path")"
+    fi
 
     if [[ "${DRY_RUN:-0}" == "1" ]]; then
         print_dry "Would run: ${command}"
@@ -421,8 +489,13 @@ execute_plan_native_command() {
     esac
 
     if (( _cmd_rc == 0 )); then
+        if [[ -n "$path" && -e "$path" ]]; then
+            after="$(path_size_bytes "$path")"
+        else
+            after=0
+        fi
         print_cleaned "Executed plan command: ${command}"
-        record_native_command_event "$command" "ok" "$bytes" "plan apply"
+        record_native_command_freed "$command" "$before" "$after" "plan apply"
     else
         print_warn "Plan command failed: ${command}"
         record_native_command_event "$command" "failed" "$bytes" "plan apply failed"
@@ -456,21 +529,35 @@ plan_require_review_confirmation() {
 verify_plan_file_checksum() {
     local plan_file="$1"
     python3 -c '
-import json, sys
-with open(sys.argv[1]) as f:
+import hashlib, json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
     data = json.load(f)
 chk = data.get("checksum", "")
 if not chk:
-    sys.exit(0)
-summary = data.get("summary", {})
-ops = summary.get("total_operations", summary.get("operations", 0))
-safe = summary.get("safe_operations", 0)
-rev = summary.get("review_operations", 0)
-dang = summary.get("dangerous_operations", 0)
-expected = f"{ops}-{safe}-{rev}-{dang}"
+    sys.exit(1)
+ops = data.get("operations", [])
+expected = hashlib.sha256(json.dumps(ops, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 if chk != expected:
     sys.exit(1)
 ' "$plan_file" 2>/dev/null
+}
+
+_plan_path_blocked_or_escalated() {
+    local path="$1"
+    local risk="$2"
+    local explicit_risk current_rank plan_rank
+    explicit_risk="$(policy_explicit_risk_for_path "$path" 2>/dev/null || true)"
+    if [[ -n "$explicit_risk" ]]; then
+        current_rank="$(policy_risk_rank "$explicit_risk")"
+        plan_rank="$(policy_risk_rank "$risk")"
+    else
+        current_rank=0
+        plan_rank=0
+    fi
+    if (( current_rank > plan_rank )) || is_protected_path "$path"; then
+        return 0
+    fi
+    return 1
 }
 
 apply_plan_file() {
@@ -484,8 +571,84 @@ apply_plan_file() {
         return 2
     fi
 
+    local parsed_ops apply_failed
+    parsed_ops="$(mktemp -t macos_cleanup_plan_parsed.XXXXXX)"
+    apply_failed=0
+    if ! python3 - "$plan_file" > "$parsed_ops" <<'PLANPARSE'
+import base64
+import json
+import sys
+
+ALLOWLIST = {
+    "npm cache clean --force",
+    "yarn cache clean",
+    "pnpm store prune",
+    "pip cache purge",
+    "brew cleanup --prune=all",
+    "gem cleanup",
+}
+ACTIONS = {"remove_path", "native_command", "report_only"}
+RISKS = {"SAFE", "REVIEW", "DANGEROUS"}
+
+def b64(value):
+    if value is None:
+        value = ""
+    return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
+
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(1)
+
+ops = data.get("operations")
+if not isinstance(ops, list):
+    sys.exit(1)
+
+for op in ops:
+    if not isinstance(op, dict):
+        sys.exit(1)
+    op_id = op.get("id")
+    action = op.get("action")
+    risk = op.get("risk")
+    estimated = op.get("estimated_bytes")
+    if not isinstance(op_id, str) or not op_id:
+        sys.exit(1)
+    if action not in ACTIONS:
+        sys.exit(1)
+    if risk not in RISKS:
+        sys.exit(1)
+    if isinstance(estimated, bool) or not isinstance(estimated, int) or estimated < 0:
+        sys.exit(1)
+    if action == "native_command":
+        command = op.get("command")
+        path = op.get("path")
+        if not isinstance(command, str) or command not in ALLOWLIST:
+            sys.exit(1)
+        if not isinstance(path, str) or not path.strip():
+            sys.exit(1)
+
+for op in ops:
+    print("\x1f".join([
+        b64(op.get("id", "")),
+        str(op.get("risk", "")),
+        str(op.get("action", "")),
+        b64(op.get("path", "")),
+        b64(op.get("command", "")),
+        str(op.get("estimated_bytes")),
+        b64(op.get("category", "")),
+    ]))
+PLANPARSE
+    then
+        rm -f "$parsed_ops"
+        print_error "Plan document validation failed: ${plan_file}"
+        cleanup_journal_event "plan_apply_blocked" "$plan_file" "" 0 "blocked" "parser error" "plan"
+        return 1
+    fi
+
     local id_b64 risk action path_b64 command_b64 bytes category_b64
     local id path command category
+    local explicit_risk
 
     while IFS=$'\x1f' read -u3 -r id_b64 risk action path_b64 command_b64 bytes category_b64; do
         id="$(base64_decode_string "$id_b64")"
@@ -523,26 +686,29 @@ apply_plan_file() {
         case "$action" in
             remove_path)
                 if [[ -n "$path" ]]; then
-                    local explicit_risk current_rank plan_rank
+                    path="$(normalize_path "$path" || echo "$path")"
                     explicit_risk="$(policy_explicit_risk_for_path "$path" 2>/dev/null || true)"
-                    if [[ -n "$explicit_risk" ]]; then
-                        current_rank="$(policy_risk_rank "$explicit_risk")"
-                        plan_rank="$(policy_risk_rank "$risk")"
-                    else
-                        current_rank=0
-                        plan_rank=0
-                    fi
-
-                    if (( current_rank > plan_rank )) || is_protected_path "$path"; then
+                    if _plan_path_blocked_or_escalated "$path" "$risk"; then
                         print_warn "Plan ${id}: risk escalated (${risk}->${explicit_risk:-protected}) or path protected — skipping."
                         cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "risk escalated since plan: ${risk}->${explicit_risk:-protected}" "$category"
                         continue
                     fi
-                    safe_remove "$path"
+                    if ! safe_remove "$path"; then
+                        apply_failed=1
+                    fi
                 fi
                 ;;
             native_command)
-                execute_plan_native_command "$command" "$bytes" || true
+                path="$(normalize_path "$path" || echo "$path")"
+                explicit_risk="$(policy_explicit_risk_for_path "$path" 2>/dev/null || true)"
+                if _plan_path_blocked_or_escalated "$path" "$risk"; then
+                    print_warn "Plan ${id}: native target blocked (${risk}->${explicit_risk:-protected}) or path protected — skipping."
+                    cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "native target protected or risk escalated: ${risk}->${explicit_risk:-protected}" "$category"
+                    continue
+                fi
+                if ! execute_plan_native_command "$command" "$bytes" "$path"; then
+                    apply_failed=1
+                fi
                 ;;
             report_only)
                 print_skip "Plan ${id}: report_only does not apply changes."
@@ -552,29 +718,11 @@ apply_plan_file() {
                 cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "unknown action" "$category"
                 ;;
         esac
-    done 3< <(python3 - "$plan_file" <<'PY'
-import base64
-import json
-import sys
+    done 3< "$parsed_ops"
+    rm -f "$parsed_ops"
 
-with open(sys.argv[1], "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-def b64(value):
-    if value is None:
-        value = ""
-    return base64.b64encode(str(value).encode("utf-8")).decode("ascii")
-
-for op in data.get("operations", []):
-    print("\x1f".join([
-        b64(op.get("id", "")),
-        str(op.get("risk", "")),
-        str(op.get("action", "")),
-        b64(op.get("path", "")),
-        b64(op.get("command", "")),
-        str(int(op.get("estimated_bytes") or op.get("size") or 0)),
-        b64(op.get("category", "")),
-    ]))
-PY
-)
+    if (( apply_failed != 0 )); then
+        return 1
+    fi
+    return 0
 }

@@ -69,7 +69,9 @@
           "estimated_bytes": { "type": "integer", "minimum": 0 },
           "size": { "type": "integer", "minimum": 0 },
           "description": { "type": "string", "minLength": 1 },
-          "recommendation": { "type": "string", "minLength": 1 }
+          "recommendation": { "type": "string", "minLength": 1 },
+          "rollback": { "type": "boolean" },
+          "tool": { "type": "string" }
         }
       }
     }

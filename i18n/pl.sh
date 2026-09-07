@@ -39,6 +39,7 @@ i18n_get_pl() {
         consequence_review_permanent) echo "Ostrzeżenie (RYZYKO REVIEW): Pliki zostaną trwale usunięte z dysku bez kwarantanny." ;;
         consequence_dangerous_quarantine) echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej." ;;
         consequence_dangerous_permanent) echo "UWAGA (RYZYKO DANGEROUS): Nieodwracalne usunięcie kluczowych danych systemowych lub użytkownika." ;;
+        consequence_native_irreversible) echo "To uruchamia natywną komendę narzędzia. Operacja jest nieodwracalna i nie trafia do kwarantanny." ;;
         dangerous_blocked) echo "Nie podlega automatycznemu ani interaktywnemu czyszczeniu." ;;
         auto_yes_blocked) echo "Automatyczne --yes nie zatwierdza ryzyka" ;;
         category_review_title) echo "Cache aplikacji wymagające przeglądu (REVIEW)" ;;
