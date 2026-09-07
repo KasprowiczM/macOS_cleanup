@@ -44,6 +44,7 @@ declare -a FOUND_MAS_APPS=()
 declare -a FOUND_MAIL_ITEMS=()
 declare -a FOUND_BROWSER_CACHE_ITEMS=()
 declare -a FOUND_BROWSER_DATA_ITEMS=()
+ANALYSIS_PARTIAL=0
 
 optional_command_with_timeout() {
     local seconds="$1"
@@ -450,6 +451,9 @@ analyze_user_caches() {
     while IFS= read -r -d '' item; do
         is_protected_path "$item" && continue
         is_known_app_specific_cache_path "$item" && continue
+        case "${item##*/}" in
+            Google|BraveSoftware) continue ;;
+        esac
         local bytes
         bytes=$(path_size_bytes "$item")
         local b="${bytes:-0}"
@@ -1453,6 +1457,7 @@ analyze_large_dmg_pkg() {
 _run_analyzer() {
     local fn="$1"
     "$fn" || {
+        ANALYSIS_PARTIAL=1
         print_warn "Analysis '${fn}' failed (skipping, continuing)."
         log_warn "Analyzer function '${fn}' failed — continuing."
     }

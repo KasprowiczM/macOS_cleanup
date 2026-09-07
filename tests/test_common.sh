@@ -350,6 +350,41 @@ _KP_FIXED_OUT="$(_run_keepalive_scenario fixed)"
 assert_false "printf '%s' \"\$_KP_FIXED_OUT\" | grep -qi terminated" \
     "disowned keepalive must NOT print a 'Terminated' job-control notice"
 
+begin_test "print_warn records WARNINGS_LIST"
+WARNINGS_LIST=()
+print_warn "hello-warn" >/dev/null
+assert_array_var_contains_exact "WARNINGS_LIST" "hello-warn"
+
+begin_test "path_size_bytes returns 0 for a missing path"
+set +e
+_psb_out="$(path_size_bytes "${_COMMON_TEST_TMPDIR}/no-such-path-$$")"
+_psb_rc=$?
+set -u
+assert_eq "$_psb_out" "0" "missing path echoes 0"
+assert_eq "$_psb_rc" "0" "missing path returns 0"
+
+begin_test "path_size_bytes warns and returns 1 when du fails on an existing path"
+_stub_bin="${_COMMON_TEST_TMPDIR}/stub_bin"
+mkdir -p "$_stub_bin"
+cat > "${_stub_bin}/du" << 'EOF'
+#!/bin/sh
+exit 1
+EOF
+chmod +x "${_stub_bin}/du"
+_exist="${_COMMON_TEST_TMPDIR}/du_fail_target"
+echo "measure-me" > "$_exist"
+WARNINGS_LIST=()
+_psb_out_file="${_COMMON_TEST_TMPDIR}/psb_out.txt"
+_psb_err_file="${_COMMON_TEST_TMPDIR}/psb_err.txt"
+set +e
+PATH="${_stub_bin}:${PATH}" path_size_bytes "$_exist" > "$_psb_out_file" 2> "$_psb_err_file"
+_psb_rc=$?
+set -u
+_psb_out="$(cat "$_psb_out_file")"
+assert_eq "$_psb_out" "0" "du failure still echoes 0 so arithmetic does not break"
+assert_eq "$_psb_rc" "1" "du failure returns 1"
+assert_array_var_contains_fragment "WARNINGS_LIST" "$_exist"
+
 begin_test "warn_if_no_fresh_backup detects local APFS snapshots when destination backup is missing"
 WARNINGS_LIST=()
 tmutil() {

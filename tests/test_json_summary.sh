@@ -194,4 +194,49 @@ emit_json_summary "dry-run" > "$JSON_OUT"
 assert_true "json_valid \"$JSON_OUT\"" "empty categories still produces valid JSON"
 rm -f "$JSON_OUT"
 
+# ---------------------------------------------------------------------------
+# TC9: CLI --json plan.operations must match the written plan file
+# ---------------------------------------------------------------------------
+begin_test "CLI --json plan.operations matches written plan file"
+JSON_CLI_HOME="${SANDBOX}/json_plan_home"
+JSON_CLI_LOGS="${SANDBOX}/json_plan_logs"
+JSON_CLI_REPORTS="${SANDBOX}/json_plan_reports"
+mkdir -p "${JSON_CLI_HOME}/.Trash" "$JSON_CLI_LOGS" "$JSON_CLI_REPORTS"
+dd if=/dev/zero of="${JSON_CLI_HOME}/.Trash/task6-item.bin" bs=1024 count=4 2>/dev/null
+JSON_CAPTURE="$(mktemp -t json_summary_tc9.XXXXXX)"
+RC=$(set +e; env \
+    HOME="$JSON_CLI_HOME" \
+    LOGS_DIR="$JSON_CLI_LOGS" \
+    REPORTS_DIR="$JSON_CLI_REPORTS" \
+    CLEANUP_JOURNAL_FILE="${JSON_CLI_REPORTS}/journal.jsonl" \
+    CLEANUP_RESTORE_MANIFEST="${JSON_CLI_REPORTS}/restore.tsv" \
+    QUARANTINE_ROOT="${JSON_CLI_HOME}/quarantine" \
+    bash "$SCRIPT_PATH" --dry-run --non-interactive --json --category trash --no-color \
+    > "$JSON_CAPTURE" 2>/dev/null; echo $?)
+assert_eq "$RC" "0" "--json with sandbox trash exits 0"
+assert_true "json_valid \"$JSON_CAPTURE\"" "--json stdout is valid JSON"
+assert_true "python3 - \"$JSON_CAPTURE\" <<'PY'
+import json, sys
+stdout_path = sys.argv[1]
+with open(stdout_path, encoding='utf-8') as f:
+    d = json.load(f)
+stdout_ops = d.get('plan', {}).get('operations')
+plan_path = (d.get('artifacts') or {}).get('plan') or ''
+if not plan_path:
+    sys.stderr.write('artifacts.plan missing from stdout JSON\n')
+    sys.exit(1)
+with open(plan_path, encoding='utf-8') as f:
+    written = json.load(f)
+summary_ops = written.get('summary', {}).get('operations')
+len_ops = len(written.get('operations') or [])
+if stdout_ops != summary_ops or stdout_ops != len_ops:
+    sys.stderr.write('plan.operations mismatch stdout=%s summary=%s len=%s\n' % (stdout_ops, summary_ops, len_ops))
+    sys.exit(1)
+if not isinstance(stdout_ops, int) or stdout_ops < 1:
+    sys.stderr.write('expected >=1 plan op from sandbox trash, got %s\n' % stdout_ops)
+    sys.exit(1)
+PY
+" "stdout plan.operations equals written plan summary.operations and len(operations)"
+rm -f "$JSON_CAPTURE"
+
 print_test_summary

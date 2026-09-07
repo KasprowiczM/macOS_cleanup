@@ -227,7 +227,7 @@ print_section() {
 
 print_info()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
 print_ok()      { echo -e "  ${C_GREEN}✔${C_RESET}  $*"; log_info "OK: $*"; }
-print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; }
+print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; WARNINGS_LIST+=("$*"); }
 print_error()   { echo -e "  ${C_RED}✖${C_RESET}  $*" >&2; log_error "$*"; }
 print_skip()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
 print_found()   { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
@@ -269,16 +269,30 @@ bytes_to_human() {
     fi
 }
 
-# Return the disk usage of a path in bytes (0 if path doesn't exist).
+# Return the disk usage of a path in bytes.
+# Missing path: echo 0, return 0.
+# Existing path, du succeeds with a numeric KB: echo kb*1024, return 0.
+# Existing path, du fails or yields no numeric: warn, echo 0, return 1.
 path_size_bytes() {
     local path="$1"
-    if [[ -e "$path" ]]; then
-        local kb
-        kb=$(du -sk "$path" 2>/dev/null | awk 'NR==1{print $1+0}')
-        echo $(( ${kb:-0} * 1024 ))
-    else
+    if [[ ! -e "$path" ]]; then
         echo 0
+        return 0
     fi
+    local du_out kb
+    local du_rc=0
+    du_out=$(du -sk "$path" 2>/dev/null) || du_rc=$?
+    kb=$(printf '%s\n' "$du_out" | awk 'NR==1{print $1}')
+    case "$kb" in
+        ''|*[!0-9]*) du_rc=1 ;;
+    esac
+    if (( du_rc != 0 )); then
+        print_warn "Could not measure size of: $path" >&2
+        echo 0
+        return 1
+    fi
+    echo $(( kb * 1024 ))
+    return 0
 }
 
 # Same, but formatted for humans.
@@ -1783,15 +1797,15 @@ catbytes_add() {
 CATEGORY_REGISTRY=(
     "trash|Trash (~/.Trash)|counted"
     "user-caches|User Caches (~/Library/Caches)|counted"
-    "system-caches|System Caches (/Library/Caches)|counted"
+    "system-caches|System Caches (/Library/Caches)|report-only"
     "app-caches|App-specific Caches (Electron/JetBrains/...)|counted"
     "user-logs|User Logs (~/Library/Logs)|counted"
     "system-logs|System Logs (/Library/Logs)|counted"
     "diagnostic-reports|Diagnostic Reports|counted"
     "tmp|Temporary Files (/tmp)|counted"
-    "app-leftovers|App Leftovers|counted"
+    "app-leftovers|App Leftovers|report-only"
     "xcode-derived|Xcode DerivedData|counted"
-    "xcode-archives|Xcode Archives|counted"
+    "xcode-archives|Xcode Archives|report-only"
     "simulators|iOS Simulators (unavailable)|counted"
     "device-support|Xcode Device Support|counted"
     "npm|npm cache (~/.npm/_cacache)|counted"
@@ -1803,14 +1817,14 @@ CATEGORY_REGISTRY=(
     "brew|Homebrew cache|counted"
     "brew-stale|Homebrew stale versions (brew cleanup)|counted"
     "gradle|Gradle cache|counted"
-    "maven|Maven repository (~/.m2)|counted"
+    "maven|Maven repository (~/.m2)|report-only"
     "cocoapods|CocoaPods cache|counted"
     "cargo|Cargo registry cache|counted"
     "swift-pm|Swift Package Manager cache|counted"
     "gem|Ruby gems cache|counted"
     "bundler|Bundler cache|counted"
     "composer|Composer cache (PHP)|counted"
-    "android-avd|Android AVD Emulators|counted"
+    "android-avd|Android AVD Emulators|report-only"
     "docker|Docker (reclaimable)|counted"
     "time-machine|Local TM Snapshots|count"
     "ios-backups|iOS Backups|counted"
