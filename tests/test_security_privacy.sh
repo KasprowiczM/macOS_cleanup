@@ -72,12 +72,24 @@ fi
 assert_eq "$pruned" "1" "rotate_old_artifacts must report how many artifacts it pruned"
 
 begin_test "rotate_old_artifacts is wired into the run, not just unit-tested"
-# It sat unused from March to 2026-08-19 while logs/ grew to 1183 files and
-# reports/ to 1574. A rotation function nobody calls is not rotation.
+# Retention must be an explicit --prune-artifacts operation. Preflight used
+# to call rotate_old_artifacts, so --list-quarantine and --dry-run deleted
+# aged logs/journals. Keep a real CLI entry; never prune from preflight.
+if grep -q -- "--prune-artifacts" "${PROJ_DIR}/cleanup_all.sh"; then
+    _pass
+else
+    _fail "cleanup_all.sh must expose --prune-artifacts as the retention CLI entry"
+fi
 if grep -q "rotate_old_artifacts" "${PROJ_DIR}/cleanup_all.sh"; then
     _pass
 else
     _fail "cleanup_all.sh never calls rotate_old_artifacts — artifacts will grow without bound"
+fi
+_preflight_src="$(awk '/^preflight_checks\(\)/,/^}/' "${PROJ_DIR}/cleanup_all.sh")"
+if printf '%s\n' "$_preflight_src" | grep -q "rotate_old_artifacts"; then
+    _fail "preflight_checks must not call rotate_old_artifacts"
+else
+    _pass
 fi
 
 begin_test "rotate_old_artifacts honours a disable switch"

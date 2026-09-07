@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/KasprowiczM/macOS_cleanup.git"
-RELEASE_TAG="v3.0.2"
+RELEASE_TAG="v3.0.6"
 TARGET_REF="$RELEASE_TAG"
 DEST="${MACOS_CLEANUP_DIR:-$HOME/Dev_Env/macOS_cleanup}"
 
@@ -22,6 +22,17 @@ for arg in "$@"; do
 done
 
 say() { printf '%s\n' "$*"; }
+
+origin_is_official() {
+    local url="${1%/}"
+    url="${url%.git}"
+    case "$url" in
+        https://github.com/KasprowiczM/macOS_cleanup|git@github.com:KasprowiczM/macOS_cleanup)
+            return 0
+            ;;
+    esac
+    return 1
+}
 
 # --- Pre-flight -------------------------------------------------------------
 if [[ "$(uname -s)" != "Darwin" ]]; then
@@ -37,8 +48,23 @@ fi
 # --- Clone or update --------------------------------------------------------
 if [[ -d "$DEST/.git" ]]; then
     say "↻  Updating existing checkout at: $DEST (ref: $TARGET_REF)"
+    origin_url="$(git -C "$DEST" remote get-url origin 2>/dev/null || true)"
+    if ! origin_is_official "$origin_url"; then
+        say "✖  Refusing to update $DEST: origin is not KasprowiczM/macOS_cleanup (https or git@)."
+        [[ -n "$origin_url" ]] && say "    origin: $origin_url"
+        exit 1
+    fi
+    if [[ -n "$(git -C "$DEST" status --porcelain)" ]]; then
+        say "✖  Refusing to update $DEST: working tree is not clean."
+        say "    Commit, stash, or move local changes before running the installer."
+        exit 1
+    fi
     git -C "$DEST" fetch origin "$TARGET_REF"
-    git -C "$DEST" checkout "$TARGET_REF" 2>/dev/null || git -C "$DEST" reset --hard "origin/$TARGET_REF"
+    if ! git -C "$DEST" checkout "$TARGET_REF"; then
+        say "✖  Failed to checkout $TARGET_REF at $DEST."
+        say "    Local files were not rewritten."
+        exit 1
+    fi
 else
     say "⇣  Cloning macOS Cleanup into: $DEST (ref: $TARGET_REF)"
     mkdir -p "$(dirname "$DEST")"
@@ -47,7 +73,10 @@ fi
 
 if [[ -f "$DEST/SHA256SUMS" ]]; then
     say "✓  Verifying checksums in $DEST/SHA256SUMS"
-    ( cd "$DEST" && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 ) || say "⚠ Checksum verification warning."
+    if ! ( cd "$DEST" && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 ); then
+        say "✖  SHA256SUMS checksum mismatch. Aborting."
+        exit 1
+    fi
 fi
 
 chmod +x "$DEST/cleanup_all.sh" 2>/dev/null || true

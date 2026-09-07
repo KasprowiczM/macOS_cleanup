@@ -134,9 +134,16 @@ for k in trash user-caches app-caches user-logs system-logs npm npx pnpm brew \
         "'${k}' must stay in the totalled key list"
 done
 
-for k in browser-data mail-total; do
+for k in browser-data mail-total system-caches app-leftovers maven android-avd xcode-archives; do
     assert_array_var_not_contains_exact ALL_KNOWN_CATEGORY_KEYS "$k" \
         "'${k}' is report-only and must not be summed into the freeable total"
+done
+
+# ---------------------------------------------------------------------------
+begin_test "category_class is report-only for non-counted categories"
+for k in system-caches app-leftovers maven android-avd xcode-archives; do
+    assert_eq "$(category_class "$k")" "report-only" \
+        "'${k}' must be report-only so counted bytes exclude it"
 done
 
 # ---------------------------------------------------------------------------
@@ -261,7 +268,7 @@ probe_cache_root() {
 }
 
 assert_true "probe_cache_root '${PROBE_HOME}/Library/pnpm/store/v11'" \
-    "~/Library/pnpm/store must be an allowed cache root (pnpm >= 8 default on macOS)"
+    "Library/pnpm/store must be an allowed cache root (pnpm >= 8 default on macOS)"
 assert_true "probe_cache_root '${PROBE_HOME}/.local/share/pnpm/store/v11'" \
     "the XDG pnpm store must be an allowed cache root too"
 assert_true "probe_cache_root '${PROBE_HOME}/.pnpm-store'" \

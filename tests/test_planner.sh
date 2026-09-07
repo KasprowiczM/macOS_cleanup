@@ -99,6 +99,20 @@ sys.exit(1)
 PY
 }
 
+stamp_plan_checksum() {
+    python3 - "$1" <<'PY'
+import hashlib, json, sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as f:
+    data = json.load(f)
+ops = data.get("operations", [])
+data["checksum"] = hashlib.sha256(json.dumps(ops, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+PY
+}
+
 plan_operations_have_required_fields() {
     local plan="$1"
     python3 - "$plan" <<'PY'
@@ -244,7 +258,7 @@ assert_true "python3 '$TC2_PYCHECK' '$TC2_PLAN' '$TC2_SCHEMA'" "plan.json valida
 # ---------------------------------------------------------------------------
 # TC3: end-to-end plan apply blocks non-allowlisted native commands and applies safe paths
 # ---------------------------------------------------------------------------
-begin_test "TC3: apply --from-plan quarantines SAFE remove_path and rejects non-allowlisted native_command"
+begin_test "TC3: apply --from-plan fails closed on non-allowlisted native_command"
 reset_plan_fixture
 tc3_file="$HOME/Library/Caches/com.tc3.cachefile"
 create_file_kb "$tc3_file" 4
@@ -257,10 +271,13 @@ cat > "$TC3_PLAN" <<EOF
   "run_id": "test_tc3",
   "generated_at": "2026-06-04T12:00:00Z",
   "summary": {
-    "total_operations": 2,
-    "total_safe_bytes": 4096,
-    "total_review_bytes": 0,
-    "total_dangerous_bytes": 0
+    "operations": 2,
+    "safe_operations": 2,
+    "review_operations": 0,
+    "dangerous_operations": 0,
+    "safe_bytes": 4096,
+    "review_bytes": 0,
+    "dangerous_bytes": 0
   },
   "operations": [
     {
@@ -269,6 +286,8 @@ cat > "$TC3_PLAN" <<EOF
       "risk": "SAFE",
       "action": "remove_path",
       "path": "$tc3_file",
+      "command": "",
+      "estimated_bytes": 4096,
       "description": "Test cache removal",
       "recommendation": "Safe to remove",
       "size": 4096
@@ -278,7 +297,9 @@ cat > "$TC3_PLAN" <<EOF
       "category": "user-caches",
       "risk": "SAFE",
       "action": "native_command",
+      "path": "$tc3_file",
       "command": "rm -rf /",
+      "estimated_bytes": 0,
       "description": "Dangerous disallowed command",
       "recommendation": "Should be blocked",
       "size": 0
@@ -286,25 +307,22 @@ cat > "$TC3_PLAN" <<EOF
   ]
 }
 EOF
+stamp_plan_checksum "$TC3_PLAN"
 
 DRY_RUN=0
 REMOVE_MODE=quarantine
 NON_INTERACTIVE=1
 AUTO_YES=1
 INCLUDE_REVIEW=0
-# Clear/reset journal file
 rm -f "$CLEANUP_JOURNAL_FILE"
 
-apply_plan_file "$TC3_PLAN" >/dev/null
+set +e
+apply_plan_file "$TC3_PLAN" >/dev/null 2>&1
+TC3_RC=$?
+set -u
 
-assert_file_absent "$tc3_file" "TC3: SAFE remove_path should be quarantined"
-assert_true "find \"$QUARANTINE_ROOT\" -path '*com.tc3.cachefile' -type f -print -quit | grep -q ." "TC3: quarantined file exists"
-
-if [[ -f "$CLEANUP_JOURNAL_FILE" ]]; then
-    assert_true "grep -q 'native command not allowlisted' '$CLEANUP_JOURNAL_FILE'" "TC3: journal contains blocked native command log"
-else
-    _fail "TC3: journal file not created"
-fi
+assert_neq "$TC3_RC" "0" "TC3: non-allowlisted native must fail apply"
+assert_file_exists "$tc3_file" "TC3: parser failure must not execute op 1"
 
 # ---------------------------------------------------------------------------
 # TC4: Bug #1 — apply --include-review must not consume plan stream as user input
@@ -366,6 +384,7 @@ cat > "$TC4_PLAN" <<EOF
   ]
 }
 EOF
+stamp_plan_checksum "$TC4_PLAN"
 
 DRY_RUN=0
 REMOVE_MODE=quarantine

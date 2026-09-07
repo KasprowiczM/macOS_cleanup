@@ -133,7 +133,7 @@ fi
 # ---------------------------------------------------------------------------
 begin_test "Every cleaner that prompts also records its outcome"
 
-prompts="$(grep -c 'confirm_category \\' "${PROJ_DIR}/lib/cleaner.sh")"
+prompts="$(awk '/confirm_category/ { n++ } END { print n+0 }' "${PROJ_DIR}/lib/cleaner.sh")"
 skipped_marks="$(grep -c 'mark_category_outcome "[a-z-]*" skipped' "${PROJ_DIR}/lib/cleaner.sh")"
 
 if (( skipped_marks >= prompts )); then

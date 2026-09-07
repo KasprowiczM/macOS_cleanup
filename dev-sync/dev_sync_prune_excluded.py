@@ -23,7 +23,7 @@ from dev_sync_core import (
     normalize_relpath,
     path_is_under_roots,
     read_manifest,
-    resolve_under,
+    resolve_under_leaf,
     require_local_provider,
     safe_relpath,
     should_keep_path,
@@ -283,10 +283,10 @@ def quarantine_from_plan(plan: dict[str, Any], provider_root: Path, quarantine_d
 
     for entry in plan.get("entries", []):
         rel_target = safe_relpath(entry["relpath"])
-        source = resolve_under(provider_root, rel_target)
+        source = resolve_under_leaf(provider_root, rel_target)
         if not lexists(source):
             continue
-        dest = resolve_under(quarantine_base, rel_target)
+        dest = resolve_under_leaf(quarantine_base, rel_target)
         dest.parent.mkdir(parents=True, exist_ok=True)
         logger.log(f"quarantine: {source} -> {dest}")
         if lexists(dest):

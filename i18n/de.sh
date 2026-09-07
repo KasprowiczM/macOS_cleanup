@@ -40,6 +40,7 @@ i18n_get_de() {
         consequence_review_permanent) echo "Warnung (REVIEW RISIKO): Dateien werden ohne Quarantäne dauerhaft gelöscht." ;;
         consequence_dangerous_quarantine) echo "ACHTUNG (DANGEROUS RISIKO): Hohes Risiko für Datenverlust. Quarantäne erfordert Backup." ;;
         consequence_dangerous_permanent) echo "ACHTUNG (DANGEROUS RISIKO): Unwiderrufliche Löschung kritischer System- oder Benutzerdaten." ;;
+        consequence_native_irreversible) echo "Dies führt einen nativen Werkzeugbefehl aus. Er ist unumkehrbar und wird nicht in Quarantäne verschoben." ;;
         dangerous_blocked) echo "Nicht Gegenstand der automatischen oder interaktiven Bereinigung." ;;
         auto_yes_blocked) echo "Automatisches --yes genehmigt Risiko nicht" ;;
         category_review_title) echo "Überprüfungsbedürftige Anwendungs-Caches (REVIEW)" ;;
@@ -203,6 +204,8 @@ i18n_get_de() {
         cli_exclude_req_val) echo "--exclude erfordert Pfad" ;;
         cli_restore_req_val) echo "--restore erfordert Run-ID oder Manifest" ;;
         cli_purge_req_val) echo "--purge-quarantine erfordert Wert" ;;
+        cli_help_prune_artifacts) echo "Alte Lauf-Logs und Berichte löschen (ARTIFACT_RETENTION_DAYS; 0 deaktiviert)" ;;
+        cli_pruned_artifacts) echo "$2 Laufartefakt(e) älter als $3 Tage entfernt." ;;
         cli_from_plan_req_val) echo "--from-plan erfordert Pfad zu plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file erfordert Pfad" ;;
         cli_log_level_req_val) echo "--log-level erfordert Wert" ;;

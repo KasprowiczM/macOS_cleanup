@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.6] — 2026-09-07
+
+Safety release for the 2026-09-06 ultra-review (H1–H10 and MEDIUM). Analyze, list, plan, and dry-run stay non-destructive; apply and restore fail closed; installer and protected-path docs match the tree.
+
+### Added
+
+- **`--prune-artifacts`.** The only operator path that deletes aged run logs and journals. Analyze, list, plan, and dry-run no longer prune those artifacts.
+- Plan schema coverage (`tests/test_plan_schema.sh`) and an apply/restore/purge `mkdir` lock (`tests/test_apply_lock.sh`).
+- Release consistency checks: `SCRIPT_VERSION` vs installer `RELEASE_TAG`, `shasum -a 256 -c SHA256SUMS`, and protected-path docs under an isolated `HOME`.
+
+### Changed
+
+- `SCRIPT_VERSION` is `3.0.6`; `install.sh` `RELEASE_TAG` is `v3.0.6`.
+- Generated NEVER_TOUCH docs rewrite an expanded `$HOME` prefix to `~` so `--check` does not depend on the builder home. Absolute `/Library` and `/System` paths stay as-is.
+- Package-manager confirm copy states that native commands are irreversible and not quarantined.
+- `npx_cache` and `pnpm_stale_store` are `remove_path` (quarantineable), not native commands.
+- Brew reclaimable bytes prefer `catbytes brew`, then `brew-stale`.
+- `system-caches`, `app-leftovers`, `maven`, `android-avd`, and `xcode-archives` are report-only.
+- CI and G01 run `bash -n` per file. `tests/run_all.sh` keeps the Python unittest exit status.
+
+### Fixed
+
+- `--json` `plan.operations` matches the written plan file.
+- `print_warn` appends to `WARNINGS_LIST`.
+- Chrome and Brave cache roots are not listed in `FOUND_USER_CACHES`.
+- Analyzer failure sets `ANALYSIS_PARTIAL`. `du` failure warns and returns 1.
+
+### Security
+
+- **H2/H9:** Native plan operations carry a real path, `rollback:false`, and tool. Apply validates the whole JSON first, checks SHA256 of the canonical operations (empty checksum rejected), and returns non-zero on native failure. NEVER_TOUCH and `--exclude` are re-checked on apply for native targets.
+- **H3:** Quarantine probes metadata durability before `mv`. Post-move journal or restore TSV failure rolls back the move and drops the restore TSV row. Counters increment only after durable metadata. `safe_remove` does not abort the shell on that failure.
+- **H4–H7:** Dev-sync copies via temp + `os.replace`. Overlay directories that contain tracked files are rejected. rclone uses `--files-from`. `verify-full` fails on missing local or provider files. Prune moves the symlink leaf, not the target. `write_json` refuses a symlink destination.
+- **H8:** The installer refuses a dirty checkout and a SHA256 mismatch (exit 1). It never runs `git reset --hard`.
+- **H10:** `SCRIPT_VERSION`, `RELEASE_TAG`, `SHA256SUMS`, and portable `~` protected-path docs stay in lockstep.
+
 ## [3.0.5] — 2026-09-01
 
 Full review on macOS 26.6.2 (Tahoe, Apple Silicon), triggered by the last run

@@ -137,20 +137,40 @@ redact_path() {
     echo "$str"
 }
 
+# Delete one validated run artifact. Returns 0 only if the file was removed.
+# Skip symlinks, non-regular files, names outside the artifact patterns, and
+# paths that escape the configured logs/reports directory.
+_rotate_artifact_file() {
+    local candidate="$1"
+    local root="$2"
+    local base
+
+    [[ -n "$candidate" ]] || return 1
+    [[ -L "$candidate" ]] && return 1
+    [[ -f "$candidate" ]] || return 1
+    path_is_within "$candidate" "$root" || return 1
+    base="${candidate##*/}"
+    case "$base" in
+        cleanup_*.log|report_*.md|plan_*.json|journal_*.jsonl) ;;
+        *) return 1 ;;
+    esac
+    rm -f "$candidate"
+    [[ ! -e "$candidate" ]]
+}
+
 # Prune run artifacts older than $1 days (default 30).
 #
-# This function existed, was unit-tested, and was never called from production
-# code. By 2026-08-19 that had left 1183 files in logs/ and 1574 in reports/,
-# growing since March. It is now wired into cli_init(); ARTIFACT_RETENTION_DAYS
-# tunes the window and 0 disables pruning entirely.
+# Call only from the explicit --prune-artifacts CLI path. Read-only modes
+# (dry-run, plan, --list-quarantine) must not delete aged logs or journals.
+# ARTIFACT_RETENTION_DAYS=0 disables pruning entirely.
 #
-# Echoes the number of files removed so the caller can report it. Silent on a
-# no-op, because the common case is "nothing to prune".
+# Echoes the number of files removed so the caller can report it.
 rotate_old_artifacts() {
     local max_days="${1:-30}"
     local logs_dir="${LOGS_DIR:-}"
     local reports_dir="${REPORTS_DIR:-}"
-    local removed=0 n
+    local removed=0
+    local candidate
 
     case "$max_days" in
         ''|*[!0-9]*) return 0 ;;
@@ -158,15 +178,21 @@ rotate_old_artifacts() {
     (( max_days == 0 )) && return 0
 
     if [[ -n "$logs_dir" && -d "$logs_dir" ]]; then
-        n=$(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
-        removed=$(( removed + ${n:-0} ))
-        find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            if _rotate_artifact_file "$candidate" "$logs_dir"; then
+                removed=$((removed + 1))
+            fi
+        done < <(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null)
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
-        n=$(find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
-        removed=$(( removed + ${n:-0} ))
-        find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            if _rotate_artifact_file "$candidate" "$reports_dir"; then
+                removed=$((removed + 1))
+            fi
+        done < <(find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" 2>/dev/null)
     fi
 
     echo "$removed"
@@ -201,7 +227,7 @@ print_section() {
 
 print_info()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_BLUE}ℹ${C_RESET}  $*"; log_info "$*"; }
 print_ok()      { echo -e "  ${C_GREEN}✔${C_RESET}  $*"; log_info "OK: $*"; }
-print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; }
+print_warn()    { echo -e "  ${C_YELLOW}⚠${C_RESET}  $*"; log_warn "$*"; WARNINGS_LIST+=("$*"); }
 print_error()   { echo -e "  ${C_RED}✖${C_RESET}  $*" >&2; log_error "$*"; }
 print_skip()    { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_DIM}↷${C_RESET}  ${C_DIM}$*${C_RESET}"; log_info "SKIP: $*"; }
 print_found()   { [[ "${QUIET_OUTPUT:-0}" == "1" ]] || echo -e "  ${C_YELLOW}→${C_RESET}  $*"; log_info "FOUND: $*"; }
@@ -243,16 +269,30 @@ bytes_to_human() {
     fi
 }
 
-# Return the disk usage of a path in bytes (0 if path doesn't exist).
+# Return the disk usage of a path in bytes.
+# Missing path: echo 0, return 0.
+# Existing path, du succeeds with a numeric KB: echo kb*1024, return 0.
+# Existing path, du fails or yields no numeric: warn, echo 0, return 1.
 path_size_bytes() {
     local path="$1"
-    if [[ -e "$path" ]]; then
-        local kb
-        kb=$(du -sk "$path" 2>/dev/null | awk 'NR==1{print $1+0}')
-        echo $(( ${kb:-0} * 1024 ))
-    else
+    if [[ ! -e "$path" ]]; then
         echo 0
+        return 0
     fi
+    local du_out kb
+    local du_rc=0
+    du_out=$(du -sk "$path" 2>/dev/null) || du_rc=$?
+    kb=$(printf '%s\n' "$du_out" | awk 'NR==1{print $1}')
+    case "$kb" in
+        ''|*[!0-9]*) du_rc=1 ;;
+    esac
+    if (( du_rc != 0 )); then
+        print_warn "Could not measure size of: $path" >&2
+        echo 0
+        return 1
+    fi
+    echo $(( kb * 1024 ))
+    return 0
 }
 
 # Same, but formatted for humans.
@@ -938,6 +978,23 @@ json_escape() {
     printf '%s' "$s"
 }
 
+# metadata_path_is_durable <path>
+# Parent must be a writable directory. Path must be absent or a writable regular file.
+metadata_path_is_durable() {
+    local path="${1:-}"
+    local parent
+
+    [[ -n "$path" ]] || return 1
+    parent="$(dirname "$path")"
+    mkdir -p "$parent" 2>/dev/null || return 1
+    [[ -d "$parent" && -w "$parent" ]] || return 1
+
+    if [[ -e "$path" || -L "$path" ]]; then
+        [[ -f "$path" && -w "$path" ]] || return 1
+    fi
+    return 0
+}
+
 cleanup_journal_event() {
     local action="${1:-unknown}"
     local path="${2:-}"
@@ -951,10 +1008,13 @@ cleanup_journal_event() {
     local ts
 
     [[ -n "$journal_file" ]] || return 0
+    if [[ -n "${CLEANUP_TEST_FAIL_JOURNAL_ACTION:-}" && "$action" == "$CLEANUP_TEST_FAIL_JOURNAL_ACTION" ]]; then
+        return 1
+    fi
     case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
     ts="$(date '+%Y-%m-%dT%H:%M:%S%z')"
 
-    mkdir -p "$(dirname "$journal_file")" 2>/dev/null || true
+    mkdir -p "$(dirname "$journal_file")" 2>/dev/null || return 1
     printf '{"ts":"%s","run_id":"%s","action":"%s","category":"%s","path":"%s","quarantine_path":"%s","bytes":%s,"status":"%s","message":"%s"}\n' \
         "$(json_escape "$ts")" \
         "$(json_escape "$run_id")" \
@@ -965,7 +1025,7 @@ cleanup_journal_event() {
         "$bytes" \
         "$(json_escape "$status")" \
         "$(json_escape "$message")" \
-	        >> "$journal_file" 2>/dev/null || true
+        >> "$journal_file" 2>/dev/null || return 1
 }
 
 record_native_command_event() {
@@ -1059,15 +1119,35 @@ cleanup_restore_record() {
     local original_path="$2"
     local bytes="${3:-0}"
     local manifest="${CLEANUP_RESTORE_MANIFEST:-}"
+    local encoded_q encoded_o row last
 
     [[ -n "$manifest" ]] || return 0
     case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
 
-    mkdir -p "$(dirname "$manifest")" 2>/dev/null || true
-    printf '%s\t%s\t%s\n' \
-        "$(base64_encode_string "$quarantine_path")" \
-        "$(base64_encode_string "$original_path")" \
-        "$bytes" >> "$manifest" 2>/dev/null || true
+    mkdir -p "$(dirname "$manifest")" 2>/dev/null || return 1
+
+    encoded_q="$(base64_encode_string "$quarantine_path")"
+    encoded_o="$(base64_encode_string "$original_path")"
+    row="$(printf '%s\t%s\t%s' "$encoded_q" "$encoded_o" "$bytes")"
+
+    printf '%s\n' "$row" >> "$manifest" 2>/dev/null || return 1
+    [[ -r "$manifest" ]] || return 1
+    last="$(tail -n 1 "$manifest" 2>/dev/null || true)"
+    [[ "$last" == "$row" ]] || return 1
+    return 0
+}
+
+_quarantine_drop_last_restore_row() {
+    local manifest="${CLEANUP_RESTORE_MANIFEST:-}"
+    local tmp
+
+    [[ -n "$manifest" && -f "$manifest" ]] || return 0
+    tmp="${manifest}.tmp.$$"
+    if sed '$d' "$manifest" > "$tmp" 2>/dev/null && mv "$tmp" "$manifest"; then
+        return 0
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+    return 1
 }
 
 path_is_within() {
@@ -1085,6 +1165,38 @@ path_is_within() {
 is_quarantine_path() {
     [[ -n "${QUARANTINE_ROOT:-}" ]] || return 1
     path_is_within "$1" "$QUARANTINE_ROOT"
+}
+
+# Exclusive apply/restore/purge lock via mkdir(2). Not TOCTOU-proof.
+CLEANUP_LOCK_HELD="${CLEANUP_LOCK_HELD:-0}"
+
+acquire_cleanup_lock() {
+    local lock_dir
+    if [[ -z "${QUARANTINE_ROOT:-}" ]]; then
+        return 1
+    fi
+    mkdir -p "$QUARANTINE_ROOT" 2>/dev/null || return 1
+    lock_dir="${QUARANTINE_ROOT}/.apply.lock"
+    if mkdir "$lock_dir" 2>/dev/null; then
+        CLEANUP_LOCK_HELD=1
+        printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
+release_cleanup_lock() {
+    local lock_dir
+    if [[ "${CLEANUP_LOCK_HELD:-0}" != "1" ]]; then
+        return 0
+    fi
+    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
+    if [[ -d "$lock_dir" ]]; then
+        rm -f "${lock_dir}/pid" 2>/dev/null || true
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
+    CLEANUP_LOCK_HELD=0
+    return 0
 }
 
 is_trash_child_path() {
@@ -1155,39 +1267,94 @@ quarantine_destination_for() {
     echo "$dest"
 }
 
+_quarantine_rollback_move() {
+    local dest="$1"
+    local target="$2"
+    local size="${3:-0}"
+    local drop_restore_row="${4:-0}"
+
+    if [[ "$drop_restore_row" == "1" ]]; then
+        _quarantine_drop_last_restore_row || true
+    fi
+
+    if mv "$dest" "$target" 2>/dev/null; then
+        print_warn "Rolled back quarantine because metadata could not be written: ${target}"
+        record_skipped_item "Quarantine metadata write failed; rolled back: ${target}"
+        cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "metadata write failed; rolled back" || true
+        return 0
+    fi
+
+    print_error "Quarantine recovery needed: ${target} was moved to ${dest} but metadata could not be written and rollback failed"
+    record_skipped_item "Quarantine recovery needed: ${target} -> ${dest}"
+    cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "recovery_needed" "moved but metadata missing; rollback failed" || true
+    return 1
+}
+
 quarantine_remove() {
     local target="$1"
     local size="${2:-0}"
-    local dest
+    local dest dest_dir
+    local journal_file="${CLEANUP_JOURNAL_FILE:-}"
+    local manifest="${CLEANUP_RESTORE_MANIFEST:-}"
 
     dest="$(quarantine_destination_for "$target" 2>/dev/null || true)"
     if [[ -z "$dest" ]]; then
         print_warn "Quarantine is not configured; skipping: ${target}"
         record_skipped_item "Quarantine is not configured: ${target}"
-        cleanup_journal_event "quarantine_failed" "$target" "" "$size" "failed" "quarantine not configured"
+        cleanup_journal_event "quarantine_failed" "$target" "" "$size" "failed" "quarantine not configured" || true
         return 1
     fi
-    mkdir -p "$(dirname "$dest")" 2>/dev/null || {
+    dest_dir="$(dirname "$dest")"
+    mkdir -p "$dest_dir" 2>/dev/null || {
         print_warn "Could not create quarantine directory for: ${target}"
         record_skipped_item "Cannot create quarantine directory for ${target}"
-        cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mkdir failed"
+        cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mkdir failed" || true
         return 1
     }
-
-    print_cleaned "Quarantining: ${target} -> ${dest}  ($(bytes_to_human "$size"))"
-    if mv "$target" "$dest" 2>/dev/null; then
-        TOTAL_QUARANTINED_BYTES=$(( TOTAL_QUARANTINED_BYTES + size ))
-        TOTAL_QUARANTINED_ITEMS=$(( TOTAL_QUARANTINED_ITEMS + 1 ))
-        cleanup_restore_record "$dest" "$target" "$size"
-        cleanup_journal_event "quarantined" "$target" "$dest" "$size" "ok" ""
-        return 0
+    if [[ ! -d "$dest_dir" || ! -w "$dest_dir" ]]; then
+        print_warn "Could not create quarantine directory for: ${target}"
+        record_skipped_item "Cannot create quarantine directory for ${target}"
+        cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mkdir failed" || true
+        return 1
     fi
 
-    print_warn "Could not quarantine: ${target}"
-    log_warn "mv to quarantine failed for: ${target}"
-    record_skipped_item "Failed to move to quarantine: ${target}"
-    cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mv failed"
-    return 1
+    if ! metadata_path_is_durable "$manifest" || ! metadata_path_is_durable "$journal_file"; then
+        print_warn "Cannot persist quarantine metadata for: ${target}"
+        record_skipped_item "Cannot persist quarantine metadata for ${target}"
+        if metadata_path_is_durable "$journal_file"; then
+            cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "metadata not durable" || true
+        fi
+        return 1
+    fi
+
+    if ! cleanup_journal_event "quarantine_intent" "$target" "$dest" "$size" "pending" ""; then
+        print_warn "Could not record quarantine intent for: ${target}"
+        record_skipped_item "Cannot record quarantine intent for ${target}"
+        return 1
+    fi
+
+    if ! mv "$target" "$dest" 2>/dev/null; then
+        print_warn "Could not quarantine: ${target}"
+        log_warn "mv to quarantine failed for: ${target}"
+        record_skipped_item "Failed to move to quarantine: ${target}"
+        cleanup_journal_event "quarantine_failed" "$target" "$dest" "$size" "failed" "mv failed" || true
+        return 1
+    fi
+
+    if ! cleanup_restore_record "$dest" "$target" "$size"; then
+        _quarantine_rollback_move "$dest" "$target" "$size" || true
+        return 1
+    fi
+
+    if ! cleanup_journal_event "quarantined" "$target" "$dest" "$size" "ok" ""; then
+        _quarantine_rollback_move "$dest" "$target" "$size" 1 || true
+        return 1
+    fi
+
+    TOTAL_QUARANTINED_BYTES=$(( TOTAL_QUARANTINED_BYTES + size ))
+    TOTAL_QUARANTINED_ITEMS=$(( TOTAL_QUARANTINED_ITEMS + 1 ))
+    print_cleaned "Quarantining: ${target} -> ${dest}  ($(bytes_to_human "$size"))"
+    return 0
 }
 
 direct_remove() {
@@ -1567,8 +1734,10 @@ safe_remove() {
     else
         if [[ "${REMOVE_MODE:-permanent}" == "quarantine" ]]; then
             if is_user_space_path "$normalized_target"; then
-                quarantine_remove "$normalized_target" "$size"
-                return
+                if quarantine_remove "$normalized_target" "$size"; then
+                    return 0
+                fi
+                return 1
             fi
 
             print_skip "Skipping non-user path in quarantine mode: ${normalized_target}"
@@ -1660,15 +1829,15 @@ catbytes_add() {
 CATEGORY_REGISTRY=(
     "trash|Trash (~/.Trash)|counted"
     "user-caches|User Caches (~/Library/Caches)|counted"
-    "system-caches|System Caches (/Library/Caches)|counted"
+    "system-caches|System Caches (/Library/Caches)|report-only"
     "app-caches|App-specific Caches (Electron/JetBrains/...)|counted"
     "user-logs|User Logs (~/Library/Logs)|counted"
     "system-logs|System Logs (/Library/Logs)|counted"
     "diagnostic-reports|Diagnostic Reports|counted"
     "tmp|Temporary Files (/tmp)|counted"
-    "app-leftovers|App Leftovers|counted"
+    "app-leftovers|App Leftovers|report-only"
     "xcode-derived|Xcode DerivedData|counted"
-    "xcode-archives|Xcode Archives|counted"
+    "xcode-archives|Xcode Archives|report-only"
     "simulators|iOS Simulators (unavailable)|counted"
     "device-support|Xcode Device Support|counted"
     "npm|npm cache (~/.npm/_cacache)|counted"
@@ -1680,14 +1849,14 @@ CATEGORY_REGISTRY=(
     "brew|Homebrew cache|counted"
     "brew-stale|Homebrew stale versions (brew cleanup)|counted"
     "gradle|Gradle cache|counted"
-    "maven|Maven repository (~/.m2)|counted"
+    "maven|Maven repository (~/.m2)|report-only"
     "cocoapods|CocoaPods cache|counted"
     "cargo|Cargo registry cache|counted"
     "swift-pm|Swift Package Manager cache|counted"
     "gem|Ruby gems cache|counted"
     "bundler|Bundler cache|counted"
     "composer|Composer cache (PHP)|counted"
-    "android-avd|Android AVD Emulators|counted"
+    "android-avd|Android AVD Emulators|report-only"
     "docker|Docker (reclaimable)|counted"
     "time-machine|Local TM Snapshots|count"
     "ios-backups|iOS Backups|counted"

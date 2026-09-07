@@ -40,6 +40,7 @@ i18n_get_es() {
         consequence_review_permanent) echo "Advertencia (RIESGO REVIEW): Archivos eliminados permanentemente sin cuarentena." ;;
         consequence_dangerous_quarantine) echo "ATENCIÓN (RIESGO DANGEROUS): Alto riesgo de pérdida de datos. Requiere copia de seguridad." ;;
         consequence_dangerous_permanent) echo "ATENCIÓN (RIESGO DANGEROUS): Eliminación irreversible de datos críticos del sistema o usuario." ;;
+        consequence_native_irreversible) echo "Esto ejecuta un comando nativo de la herramienta. Es irreversible y no se pone en cuarentena." ;;
         dangerous_blocked) echo "No sujeto a limpieza automática o interactiva." ;;
         auto_yes_blocked) echo "--yes automático no aprueba riesgo" ;;
         category_review_title) echo "Cachés de aplicaciones que requieren revisión (REVIEW)" ;;
@@ -203,6 +204,8 @@ i18n_get_es() {
         cli_exclude_req_val) echo "--exclude requiere una ruta" ;;
         cli_restore_req_val) echo "--restore requiere id de ejecución o manifiesto" ;;
         cli_purge_req_val) echo "--purge-quarantine requiere un valor" ;;
+        cli_help_prune_artifacts) echo "Eliminar registros e informes de ejecución antiguos (ARTIFACT_RETENTION_DAYS; 0 desactiva)" ;;
+        cli_pruned_artifacts) echo "Se eliminaron $2 artefacto(s) de ejecución con más de $3 días." ;;
         cli_from_plan_req_val) echo "--from-plan requiere ruta a plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file requiere una ruta" ;;
         cli_log_level_req_val) echo "--log-level requiere un valor" ;;

@@ -8,7 +8,7 @@
 # ---------------------------------------------------------------------------
 # Script identity & versioning
 # ---------------------------------------------------------------------------
-readonly SCRIPT_VERSION="3.0.5"
+readonly SCRIPT_VERSION="3.0.6"
 readonly SCRIPT_NAME="cleanup_all.sh"
 readonly PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

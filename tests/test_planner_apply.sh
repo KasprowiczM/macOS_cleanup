@@ -72,6 +72,10 @@ create_file_kb() {
 # Write a minimal-but-valid plan JSON with the given operations JSON array text.
 write_plan() {
     local dest="$1" ops_json="$2"
+    local checksum
+    checksum="$(python3 -c 'import hashlib, json, sys
+ops = json.loads(sys.argv[1])
+print(hashlib.sha256(json.dumps(ops, sort_keys=True, separators=(",", ":")).encode()).hexdigest())' "$ops_json")"
     cat > "$dest" <<EOF
 {
   "schema_version": "1.0",
@@ -79,6 +83,7 @@ write_plan() {
   "tool_version": "2.0.0",
   "run_id": "test_run",
   "generated_at": "2026-06-10T10:00:00Z",
+  "checksum": "${checksum}",
   "summary": {"operations": 0, "safe_operations": 0,
                "review_operations": 0, "dangerous_operations": 0,
                "safe_bytes": 0, "review_bytes": 0, "dangerous_bytes": 0},
@@ -192,10 +197,12 @@ write_plan "$UK2_PLAN" "[
     \"description\": \"test\", \"recommendation\": \"test\"
   }
 ]"
+set +e
 apply_plan_file "$UK2_PLAN" > /dev/null 2>&1
+UK2_RC=$?
+set -u
+assert_neq "$UK2_RC" "0" "UK2: unknown action must fail closed"
 assert_file_exists "$UK2_FILE" "UK2: unknown action must not remove file"
-assert_true "journal_has_event 'plan_apply_skipped'" "UK2: plan_apply_skipped must be journalled"
-assert_true "journal_has_message 'unknown action'"   "UK2: journal message must say 'unknown action'"
 
 # ---------------------------------------------------------------------------
 # RA1: report_only action → no removal, no journal destruction event
@@ -365,14 +372,17 @@ assert_true "journal_has_event 'plan_apply_blocked'" "SF1b: plan_apply_blocked j
 begin_test "NC1: native_command in DRY_RUN=1 records planned event, does not run"
 reset_apply_state
 DRY_RUN=1
+NC1_CACHE="${SANDBOX}/nc1-gem-cache"
+mkdir -p "$NC1_CACHE"
 NC1_PLAN="${SANDBOX}/nc1.json"
 write_plan "$NC1_PLAN" "[
   {
     \"id\": \"op-nc1\", \"category\": \"dev\",
     \"risk\": \"SAFE\", \"action\": \"native_command\",
-    \"path\": \"\", \"command\": \"gem cleanup\",
+    \"path\": \"${NC1_CACHE}\", \"command\": \"gem cleanup\",
     \"estimated_bytes\": 0, \"size\": 0,
-    \"description\": \"gem cleanup dry\", \"recommendation\": \"test\"
+    \"description\": \"gem cleanup dry\", \"recommendation\": \"test\",
+    \"rollback\": false, \"tool\": \"gem\"
   }
 ]"
 apply_plan_file "$NC1_PLAN" > /dev/null 2>&1
@@ -385,19 +395,23 @@ DRY_RUN=0
 # ---------------------------------------------------------------------------
 begin_test "NC2: non-allowlisted native_command is blocked and journalled"
 reset_apply_state
+NC2_CACHE="${SANDBOX}/nc2-cache"
+mkdir -p "$NC2_CACHE"
 NC2_PLAN="${SANDBOX}/nc2.json"
 write_plan "$NC2_PLAN" "[
   {
     \"id\": \"op-nc2\", \"category\": \"dev\",
     \"risk\": \"SAFE\", \"action\": \"native_command\",
-    \"path\": \"\", \"command\": \"rm -rf /\",
+    \"path\": \"${NC2_CACHE}\", \"command\": \"rm -rf /\",
     \"estimated_bytes\": 0, \"size\": 0,
     \"description\": \"blocked\", \"recommendation\": \"never\"
   }
 ]"
+set +e
 apply_plan_file "$NC2_PLAN" > /dev/null 2>&1
-assert_true "journal_has_event 'plan_apply_blocked'"       "NC2: plan_apply_blocked journalled"
-assert_true "journal_has_message 'native command not allowlisted'" "NC2: 'not allowlisted' in journal"
+NC2_RC=$?
+set -u
+assert_neq "$NC2_RC" "0" "NC2: non-allowlisted native_command must fail closed"
 
 # ---------------------------------------------------------------------------
 # NC3: allowlisted tool unavailable → status=skipped, "tool unavailable: X" in journal
@@ -423,7 +437,7 @@ if [[ -z "$NC3_ABSENT_TOOL" ]]; then
     _pass  # count it as one pass so the suite doesn't break
 else
     DRY_RUN=0
-    execute_plan_native_command "$NC3_ABSENT_CMD" "102400" > /dev/null 2>&1
+    execute_plan_native_command "$NC3_ABSENT_CMD" "102400" "${SANDBOX}/nc3-absent-cache" > /dev/null 2>&1
     assert_true "journal_has_event 'native_command'"     "NC3: native_command event written"
     assert_true "journal_has_message 'tool unavailable'" "NC3: 'tool unavailable' in journal"
     assert_true "journal_has_message 'skipped'"          "NC3: status=skipped (not failed)"
@@ -446,7 +460,7 @@ chmod +x "${FAKE_BIN_NC4}/gem"
 _OLD_PATH_NC4="$PATH"
 PATH="${FAKE_BIN_NC4}:${PATH}"
 DRY_RUN=0
-execute_plan_native_command "gem cleanup" "0" > /dev/null 2>&1
+execute_plan_native_command "gem cleanup" "0" "${SANDBOX}/nc4-gem-cache" > /dev/null 2>&1
 PATH="$_OLD_PATH_NC4"
 assert_true "journal_has_event 'native_command'"          "NC4: native_command event written"
 assert_true "journal_has_message 'failed'"                "NC4: status=failed in journal"
@@ -501,17 +515,20 @@ assert_true "find \"${QUARANTINE_ROOT}\" -name 'mix-safe' -print -quit | grep -q
 # ---------------------------------------------------------------------------
 # R-1: TSV Delimiter & Field Preservation Tests (empty path, quotes, spaces, non-ASCII)
 # ---------------------------------------------------------------------------
-begin_test "R-1: apply_plan_file emitter & reader preserve empty fields (npm native_command)"
+begin_test "R-1: apply_plan_file emitter & reader preserve native path and report_only empty fields"
 reset_apply_state
 
+NATIVE_CACHE="${SANDBOX}/r1-npm-cache"
+mkdir -p "$NATIVE_CACHE"
 NATIVE_PLAN="${SANDBOX}/native_npm.json"
 write_plan "$NATIVE_PLAN" "[
   {
     \"id\": \"op-npm-1\", \"category\": \"dev\",
     \"risk\": \"SAFE\", \"action\": \"native_command\",
-    \"path\": \"\", \"command\": \"npm cache clean --force\",
+    \"path\": \"${NATIVE_CACHE}\", \"command\": \"npm cache clean --force\",
     \"estimated_bytes\": 24530000000, \"size\": 24530000000,
-    \"description\": \"Clean npm cache\", \"recommendation\": \"safe\"
+    \"description\": \"Clean npm cache\", \"recommendation\": \"safe\",
+    \"rollback\": false, \"tool\": \"npm\"
   },
   {
     \"id\": \"op-empty-cmd\", \"category\": \"dev\",
@@ -536,7 +553,7 @@ while IFS=$'\x1f' read -r _id_b64 _risk _action _path_b64 _cmd_b64 _bytes _cat_b
     _cat="$(base64_decode_string "$_cat_b64")"
     if [[ "$_action" == "native_command" ]]; then
         assert_eq "$_cmd" "npm cache clean --force" "R-1: Decoded native command must equal npm cache clean --force"
-        assert_eq "$_path" "" "R-1: Empty path must remain empty"
+        assert_eq "$_path" "$NATIVE_CACHE" "R-1: Native command must carry the sandbox target path"
     fi
     if [[ "$_id_b64" == "$(printf '%s' "op-empty-cmd" | base64 | tr -d '\n')" ]]; then
         assert_eq "$_path" "/path/with spaces 'single' \"double\" ąę/cache" "R-1: Complex path with spaces/quotes/non-ASCII preserved"

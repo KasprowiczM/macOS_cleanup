@@ -201,6 +201,22 @@ begin_test "analyze_disk_overview uses /System/Volumes/Data when present"
 _disk_out="$(analyze_disk_overview 2>&1)"
 assert_true "echo '$_disk_out' | grep -qi 'Size:'" "disk overview should display Size header"
 
+begin_test "Chrome and Brave top-level cache dirs are excluded from FOUND_USER_CACHES"
+run_analyzer_check analyze_user_caches
+create_file_kb "$HOME/Library/Caches/Google/Chrome/cache.dat" 16
+create_file_kb "$HOME/Library/Caches/BraveSoftware/Brave-Browser/cache.dat" 16
+create_file_kb "$HOME/Library/Caches/com.example.generic-browser-skip/cache.dat" 8
+analyze_user_caches
+assert_array_var_not_contains_fragment "FOUND_USER_CACHES" "$HOME/Library/Caches/Google"
+assert_array_var_not_contains_fragment "FOUND_USER_CACHES" "$HOME/Library/Caches/BraveSoftware"
+assert_array_var_contains_exact "FOUND_USER_CACHES" "$HOME/Library/Caches/com.example.generic-browser-skip"
+
+begin_test "_run_analyzer sets ANALYSIS_PARTIAL=1 on failure"
+ANALYSIS_PARTIAL=0
+_failing_analyzer_stub() { return 1; }
+_run_analyzer _failing_analyzer_stub >/dev/null 2>&1
+assert_eq "${ANALYSIS_PARTIAL:-0}" "1" "analyzer failure must set ANALYSIS_PARTIAL=1"
+
 begin_test "app_bundle_exists cross-checks FOUND_INSTALLED_APPS"
 FOUND_INSTALLED_APPS=("$SANDBOX/CustomApps/TestFakeApp.app")
 mkdir -p "$SANDBOX/CustomApps/TestFakeApp.app/Contents"

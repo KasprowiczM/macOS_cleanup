@@ -40,6 +40,7 @@ i18n_get_fr() {
         consequence_review_permanent) echo "Avertissement (RISQUE REVIEW) : Fichiers supprimés définitivement sans quarantaine." ;;
         consequence_dangerous_quarantine) echo "ATTENTION (RISQUE DANGEROUS) : Risque élevé de perte de données. Sauvegarde requise." ;;
         consequence_dangerous_permanent) echo "ATTENTION (RISQUE DANGEROUS) : Suppression irréversible de données système ou utilisateur critiques." ;;
+        consequence_native_irreversible) echo "Ceci exécute une commande native de l'outil. Elle est irréversible et n'est pas mise en quarantaine." ;;
         dangerous_blocked) echo "Non soumis au nettoyage automatique ou interactif." ;;
         auto_yes_blocked) echo "--yes automatique n'approuve pas le risque" ;;
         category_review_title) echo "Caches d'applications nécessitant un examen (REVIEW)" ;;
@@ -203,6 +204,8 @@ i18n_get_fr() {
         cli_exclude_req_val) echo "--exclude nécessite un chemin" ;;
         cli_restore_req_val) echo "--restore nécessite un ID d'exécution ou un manifeste" ;;
         cli_purge_req_val) echo "--purge-quarantine nécessite une valeur" ;;
+        cli_help_prune_artifacts) echo "Supprimer les journaux et rapports d'exécution anciens (ARTIFACT_RETENTION_DAYS ; 0 désactive)" ;;
+        cli_pruned_artifacts) echo "$2 artefact(s) d'exécution de plus de $3 jours supprimé(s)." ;;
         cli_from_plan_req_val) echo "--from-plan nécessite le chemin vers plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file nécessite un chemin" ;;
         cli_log_level_req_val) echo "--log-level nécessite une valeur" ;;

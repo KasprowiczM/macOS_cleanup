@@ -109,9 +109,22 @@ if [[ "$SUITE_RUN_NEEDED" -eq 1 ]]; then
     _GIT_AFTER="$(git status --porcelain)"
 fi
 
-# G01: Syntax check
-run_gate "G01" "Syntax check (/bin/bash -n)" \
-    '/bin/bash -n "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tests/*.sh "${PROJ_DIR}"/tools/*.sh $(ls "${PROJ_DIR}"/i18n/*.sh 2>/dev/null || true)'
+# G01: Syntax check — bash -n one file at a time (bash -n a.b c.sh only parses a.b)
+# Invoked via eval in run_gate.
+# shellcheck disable=SC2329
+g01_syntax_check() {
+    (
+        cd "$PROJ_DIR" || exit 1
+        fail=0
+        for f in cleanup_all.sh lib/*.sh config/*.sh tests/*.sh tools/*.sh i18n/*.sh dev-sync/*.sh dev-sync-*.sh; do
+            [ -f "$f" ] || continue
+            /bin/bash -n "$f" || fail=1
+        done
+        exit "$fail"
+    )
+}
+
+run_gate "G01" "Syntax check (/bin/bash -n)" 'g01_syntax_check'
 
 # G02: Bash 3.2 compatibility
 run_gate "G02" "Bash 3.2 compatibility (no bash 4 constructs)" \
@@ -179,7 +192,7 @@ run_gate "G17" "Plan risk vs policy parity (tests/test_plan_policy_parity.sh)" \
 
 # G18: Plan native_command round-trip preservation
 run_gate "G18" "Plan native_command round-trip preservation (apply_plan_file native_command)" \
-    '_g18_tmp=$(mktemp -d) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && mkdir -p "${_g18_bin}" && echo "#!/bin/bash" > "${_g18_bin}/npm" && echo "echo NPM:\$* >> \"${_g18_rec}\"" >> "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && printf '\''{\n  "schema_version": "1.0",\n  "tool": "cleanup_all.sh",\n  "operations": [\n    {\n      "id": "op-g18", "category": "dev", "risk": "SAFE", "action": "native_command",\n      "path": "", "command": "npm cache clean --force", "estimated_bytes": 1024\n    }\n  ]\n}\n'\'' > "${_g18_plan}" && PATH="${_g18_bin}:${PATH}" DRY_RUN=0 /bin/bash -c '\''source "'"${PROJ_DIR}"'/config/defaults.sh"; source "'"${PROJ_DIR}"'/lib/common.sh"; source "'"${PROJ_DIR}"'/lib/policy.sh"; source "'"${PROJ_DIR}"'/lib/planner.sh"; apply_plan_file "$1"'\'' _ "${_g18_plan}" >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
+    '_g18_tmp=$(mktemp -d) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && _g18_cache="${_g18_tmp}/npm-cache" && mkdir -p "${_g18_bin}" "${_g18_cache}" "${_g18_tmp}/logs" "${_g18_tmp}/reports" "${_g18_tmp}/quarantine" && printf "#!/bin/bash\necho NPM:\$* >> \"${_g18_rec}\"\n" > "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && python3 -c "import hashlib,json,sys; p,c=sys.argv[1],sys.argv[2]; ops=[{\"id\":\"op-g18\",\"category\":\"dev\",\"risk\":\"SAFE\",\"action\":\"native_command\",\"path\":c,\"command\":\"npm cache clean --force\",\"estimated_bytes\":1024,\"size\":1024,\"description\":\"g18\",\"recommendation\":\"test\",\"rollback\":False,\"tool\":\"npm\"}]; chk=hashlib.sha256(json.dumps(ops,sort_keys=True,separators=(\",\",\":\")).encode()).hexdigest(); json.dump({\"schema_version\":\"1.0\",\"tool\":\"cleanup_all.sh\",\"tool_version\":\"3.0.0\",\"run_id\":\"g18\",\"generated_at\":\"2026-09-07T00:00:00Z\",\"checksum\":chk,\"summary\":{\"operations\":1,\"safe_operations\":1,\"review_operations\":0,\"dangerous_operations\":0,\"safe_bytes\":1024,\"review_bytes\":0,\"dangerous_bytes\":0},\"operations\":ops}, open(p,\"w\"))" "${_g18_plan}" "${_g18_cache}" && PATH="${_g18_bin}:${PATH}" DRY_RUN=0 HOME="${_g18_tmp}" LOGS_DIR="${_g18_tmp}/logs" REPORTS_DIR="${_g18_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g18_tmp}/reports/journal.jsonl" QUARANTINE_ROOT="${_g18_tmp}/quarantine" /bin/bash -c '\''source "'"${PROJ_DIR}"'/config/defaults.sh"; source "'"${PROJ_DIR}"'/lib/common.sh"; source "'"${PROJ_DIR}"'/lib/policy.sh"; source "'"${PROJ_DIR}"'/lib/planner.sh"; apply_plan_file "$1"'\'' _ "${_g18_plan}" >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
 
 # G19: Protected path documentation sync
 run_gate "G19" "Protected paths docs sync (tools/gen_protected_docs.sh --check)" \
