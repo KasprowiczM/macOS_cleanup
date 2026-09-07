@@ -1167,6 +1167,38 @@ is_quarantine_path() {
     path_is_within "$1" "$QUARANTINE_ROOT"
 }
 
+# Exclusive apply/restore/purge lock via mkdir(2). Not TOCTOU-proof.
+CLEANUP_LOCK_HELD="${CLEANUP_LOCK_HELD:-0}"
+
+acquire_cleanup_lock() {
+    local lock_dir
+    if [[ -z "${QUARANTINE_ROOT:-}" ]]; then
+        return 1
+    fi
+    mkdir -p "$QUARANTINE_ROOT" 2>/dev/null || return 1
+    lock_dir="${QUARANTINE_ROOT}/.apply.lock"
+    if mkdir "$lock_dir" 2>/dev/null; then
+        CLEANUP_LOCK_HELD=1
+        printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
+release_cleanup_lock() {
+    local lock_dir
+    if [[ "${CLEANUP_LOCK_HELD:-0}" != "1" ]]; then
+        return 0
+    fi
+    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
+    if [[ -d "$lock_dir" ]]; then
+        rm -f "${lock_dir}/pid" 2>/dev/null || true
+        rmdir "$lock_dir" 2>/dev/null || true
+    fi
+    CLEANUP_LOCK_HELD=0
+    return 0
+}
+
 is_trash_child_path() {
     local normalized home_norm
     normalized="$(normalize_path "$1" || echo "$1")"

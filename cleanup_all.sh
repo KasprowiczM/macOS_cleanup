@@ -190,6 +190,7 @@ build_active_categories() {
 # ---------------------------------------------------------------------------
 _on_exit() {
     local exit_code=$?
+    release_cleanup_lock
     cleanup_sudo_keepalive
     if (( exit_code == 0 )); then
         log_info "Script completed successfully (exit 0)."
@@ -735,6 +736,12 @@ run_auto_safe_phase() {
 run_restore_phase() {
     print_header "$(t "mode_restore")"
 
+    if ! acquire_cleanup_lock; then
+        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
+        exit 1
+    fi
+    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+
     if [[ -z "$RESTORE_TARGET" ]]; then
         print_error "$(t "cli_no_manifest")"
         exit 2
@@ -752,6 +759,12 @@ run_list_quarantine_phase() {
 
 run_purge_quarantine_phase() {
     print_header "$(t "mode_purge")"
+
+    if ! acquire_cleanup_lock; then
+        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
+        exit 1
+    fi
+    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
 
     if [[ -z "$PURGE_TARGET" ]]; then
         print_error "$(t "cli_no_purge_target")"
@@ -772,6 +785,12 @@ run_purge_quarantine_phase() {
 
 run_apply_plan_phase() {
     print_header "$(t "mode_apply")"
+
+    if ! acquire_cleanup_lock; then
+        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
+        exit 1
+    fi
+    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
 
     if [[ -z "$PLAN_FROM_FILE" ]]; then
         print_error "$(t "cli_apply_requires_plan")"

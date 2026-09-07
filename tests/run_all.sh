@@ -42,11 +42,18 @@ done
 if [[ -f "${TEST_DIR}/test_dev_sync_safety.py" ]]; then
     echo
     echo ">>> test_dev_sync_safety.py"
-    if ( cd "${TEST_DIR}/.." && python3 -m unittest tests/test_dev_sync_safety.py ) 2>&1 | tail -3; then
-        :
+    # Do not pipe unittest into tail: tail always exits 0, so python's
+    # non-zero status (e.g. 7) would still report ALL TEST FILES PASSED.
+    _py_log="$(mktemp)"
+    _py_rc=0
+    ( cd "${TEST_DIR}/.." && python3 -m unittest tests/test_dev_sync_safety.py ) >"$_py_log" 2>&1 || _py_rc=$?
+    if [[ "$_py_rc" -eq 0 ]]; then
+        tail -3 "$_py_log"
     else
+        cat "$_py_log"
         FAIL_COUNT=$(( FAIL_COUNT + 1 ))
     fi
+    rm -f "$_py_log"
 fi
 
 echo

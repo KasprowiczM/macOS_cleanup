@@ -109,9 +109,20 @@ if [[ "$SUITE_RUN_NEEDED" -eq 1 ]]; then
     _GIT_AFTER="$(git status --porcelain)"
 fi
 
-# G01: Syntax check
-run_gate "G01" "Syntax check (/bin/bash -n)" \
-    '/bin/bash -n "${PROJ_DIR}/cleanup_all.sh" "${PROJ_DIR}"/lib/*.sh "${PROJ_DIR}"/config/*.sh "${PROJ_DIR}"/tests/*.sh "${PROJ_DIR}"/tools/*.sh $(ls "${PROJ_DIR}"/i18n/*.sh 2>/dev/null || true)'
+# G01: Syntax check — bash -n one file at a time (bash -n a.b c.sh only parses a.b)
+g01_syntax_check() {
+    (
+        cd "$PROJ_DIR" || exit 1
+        fail=0
+        for f in cleanup_all.sh lib/*.sh config/*.sh tests/*.sh tools/*.sh i18n/*.sh dev-sync/*.sh dev-sync-*.sh; do
+            [ -f "$f" ] || continue
+            /bin/bash -n "$f" || fail=1
+        done
+        exit "$fail"
+    )
+}
+
+run_gate "G01" "Syntax check (/bin/bash -n)" 'g01_syntax_check'
 
 # G02: Bash 3.2 compatibility
 run_gate "G02" "Bash 3.2 compatibility (no bash 4 constructs)" \

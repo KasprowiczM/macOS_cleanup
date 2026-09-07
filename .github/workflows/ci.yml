@@ -30,7 +30,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Syntax check
-        run: bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
+        run: |
+          fail=0
+          for f in cleanup_all.sh lib/*.sh config/*.sh tests/*.sh tools/*.sh i18n/*.sh dev-sync/*.sh dev-sync-*.sh; do
+            [ -f "$f" ] || continue
+            bash -n "$f" || fail=1
+          done
+          exit $fail
 
       - name: Python dev-sync tests
         run: python3 -m unittest tests/test_dev_sync_safety.py
@@ -50,7 +56,13 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Syntax check
-        run: /bin/bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
+        run: |
+          fail=0
+          for f in cleanup_all.sh lib/*.sh config/*.sh tests/*.sh tools/*.sh i18n/*.sh dev-sync/*.sh dev-sync-*.sh; do
+            [ -f "$f" ] || continue
+            /bin/bash -n "$f" || fail=1
+          done
+          exit $fail
 
       - name: Shell tests (System bash 3.2)
         run: /bin/bash tests/run_all.sh
