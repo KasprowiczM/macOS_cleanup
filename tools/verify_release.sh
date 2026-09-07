@@ -110,6 +110,8 @@ if [[ "$SUITE_RUN_NEEDED" -eq 1 ]]; then
 fi
 
 # G01: Syntax check — bash -n one file at a time (bash -n a.b c.sh only parses a.b)
+# Invoked via eval in run_gate.
+# shellcheck disable=SC2329
 g01_syntax_check() {
     (
         cd "$PROJ_DIR" || exit 1

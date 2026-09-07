@@ -14,6 +14,28 @@ source "${PROJ_DIR}/config/defaults.sh"
 DOC_FILE="${PROJ_DIR}/docs/PROTECTED_PATHS.md"
 mkdir -p "${PROJ_DIR}/docs"
 
+# Rewrite an expanded $HOME prefix to ~ so generated docs stay portable
+# when --check runs with an isolated HOME. Keep /Library and /System as-is.
+portable_never_touch_path() {
+    local path="$1"
+    local home="${HOME%/}"
+    if [[ -z "$home" || "$home" == "/" ]]; then
+        printf '%s\n' "$path"
+        return 0
+    fi
+    case "$path" in
+        "$home")
+            printf '%s\n' '~'
+            ;;
+        "$home"/*)
+            printf '%s\n' "~${path#"$home"}"
+            ;;
+        *)
+            printf '%s\n' "$path"
+            ;;
+    esac
+}
+
 generate_docs() {
     cat << 'EOF'
 # Protected Paths & Exclusions Policy
@@ -27,7 +49,7 @@ The `macOS_cleanup` script **never touches** the following locations under any c
 EOF
 
     for path in "${NEVER_TOUCH_PATHS[@]}"; do
-        echo "- \`${path}\`"
+        printf -- '- `%s`\n' "$(portable_never_touch_path "$path")"
     done
 
     cat << 'EOF'
@@ -51,7 +73,7 @@ EOF
 
 generate_readme_list() {
     for path in "${NEVER_TOUCH_PATHS[@]}"; do
-        echo "- \`${path}\`"
+        printf -- '- `%s`\n' "$(portable_never_touch_path "$path")"
     done
 }
 

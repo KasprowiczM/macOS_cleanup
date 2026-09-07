@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REPO_URL="https://github.com/KasprowiczM/macOS_cleanup.git"
-RELEASE_TAG="v3.0.2"
+RELEASE_TAG="v3.0.6"
 TARGET_REF="$RELEASE_TAG"
 DEST="${MACOS_CLEANUP_DIR:-$HOME/Dev_Env/macOS_cleanup}"
 

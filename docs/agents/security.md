@@ -37,7 +37,7 @@ safe_remove()          ← The ONLY permitted removal function
 > [!CAUTION]
 > Using `rm` directly (outside of `safe_remove`) is a hard violation of the project policy.
 > Controlled exception: quarantine purge removes only direct runs under `QUARANTINE_ROOT` and requires `--purge-quarantine ... --apply`.
-> Controlled exception: native tools like `brew cleanup`, `docker system prune`, `xcrun simctl delete unavailable`, and `tmutil deletelocalsnapshots` can do their own cleanup after confirmation; they must record `native_command` to the journal and clearly communicate the lack of a quarantine rollback.
+> Controlled exception: native tools like `brew cleanup`, `docker system prune`, `xcrun simctl delete unavailable`, and `tmutil deletelocalsnapshots` can do their own cleanup after confirmation; they must record `native_command` to the journal and clearly communicate the lack of a quarantine rollback. Native package-manager commands are irreversible and are not quarantined (`rollback:false`).
 
 ## Path Protection
 
@@ -49,6 +49,12 @@ The `is_protected_path()` function automatically blocks:
 
 `app-leftovers` is a report-only category: heuristics might point to data of an active app, so the script does not delete these paths automatically.
 `--yes` in non-interactive mode does not approve `MEDIUM`/`HIGH` categories, Time Machine, or iOS backups.
+
+Apply re-checks `is_protected_path` and the current policy for every target, including native commands. Malformed plans fail before the first mutation.
+
+## Artifact retention
+
+Artifact retention is explicit `--prune-artifacts` only. Read-only modes (`analyze`, `list`, `plan`, `--dry-run`) must not delete logs or journals.
 
 ## What is NEVER removed
 
@@ -72,6 +78,7 @@ Do not bypass this list by deleting the parent directory.
 - `--purge-quarantine latest|<run_id>|all` is a preview; permanent deletion requires `--apply`.
 - Quarantine does not immediately reclaim space. Space is reclaimed by `--permanent` or a later quarantine purge.
 - Paths outside `$HOME` are not quarantined in default mode; they require `--permanent` after analysis.
+- Quarantine metadata is fail-closed: if the journal or restore TSV cannot be written, roll back the move and do not count success. Counters increment only after durable metadata.
 
 Quarantine is not a backup. Before a real apply, the user should have a current system backup. Treat iOS backups, Time Machine, local mail archives, and distribution archives as at least `REVIEW`, and if unsure, as `DANGEROUS`.
 
@@ -86,6 +93,12 @@ Browser guidelines:
 - Browser cache might be a `REVIEW` candidate; precise leaf cache might be `SAFE`.
 - Browser profiles are `DANGEROUS` because they contain sessions, cookies, passwords, history, bookmarks, and extensions.
 - Browser sync is not a sufficient assumption to automatically delete a profile.
+
+## Installer
+
+- Refuse a dirty checkout (exit 1); do not overwrite local edits.
+- Abort on SHA256 mismatch (exit 1); do not treat it as a warning.
+- Never run `git reset --hard`.
 
 ## Exit codes
 
@@ -109,3 +122,5 @@ Browser guidelines:
 - Default dev-sync exclusions block `logs/`, `reports/`, `graphify-out/`, caches, dependency folders, `secrets/`, `.ssh/`, keys/certificates, and machine-local agent settings.
 - `dev-sync-prune-excluded.sh` and `dev-sync-purge-quarantine.sh` operate strictly inside the configured provider mirror. This is a controlled exception to `safe_remove()`: it uses `safe_relpath()` / `resolve_under()` and the plan -> quarantine -> verify -> purge workflow, not broad deletion in the repo.
 - Do not use `rm`, `truncate`, `xattr`, `chflags`, or placeholder edits in `~/Library/CloudStorage`; for Proton offload use `dev-sync-proton-status.sh --full`, and then Finder/Proton Drive "Remove Download".
+- Never delete the destination before a verified copy.
+- On prune, move the symlink leaf; do not follow it to the target.

@@ -268,7 +268,7 @@ probe_cache_root() {
 }
 
 assert_true "probe_cache_root '${PROBE_HOME}/Library/pnpm/store/v11'" \
-    "~/Library/pnpm/store must be an allowed cache root (pnpm >= 8 default on macOS)"
+    "Library/pnpm/store must be an allowed cache root (pnpm >= 8 default on macOS)"
 assert_true "probe_cache_root '${PROBE_HOME}/.local/share/pnpm/store/v11'" \
     "the XDG pnpm store must be an allowed cache root too"
 assert_true "probe_cache_root '${PROBE_HOME}/.pnpm-store'" \

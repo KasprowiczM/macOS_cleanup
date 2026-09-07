@@ -5,6 +5,7 @@ set -u
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
+# shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
 
 SANDBOX="$(mktemp -d -t macos_cleanup_plan_fail_closed.XXXXXX)"

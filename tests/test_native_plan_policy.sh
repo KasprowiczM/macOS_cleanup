@@ -5,6 +5,7 @@ set -u
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
+# shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
 
 SANDBOX="$(mktemp -d -t macos_cleanup_native_plan_policy.XXXXXX)"
@@ -168,19 +169,37 @@ assert_false "[[ -f \"${RECORDER_LOG}\" ]]" "protected npm cache must not invoke
 
 begin_test "package-manager confirm_category uses native consequence, not quarantine"
 pm_block="$(awk '/t \"package_managers_title\"/,/--risk/' "${PROJ_DIR}/lib/cleaner.sh")"
-assert_true "printf '%s\\n' \"\$pm_block\" | grep -q 'consequence_for_mode'" \
-    "package manager confirm must call consequence_for_mode"
-assert_true "printf '%s\\n' \"\$pm_block\" | grep 'consequence_for_mode' | grep -q '\"native\"'" \
-    "package manager consequence_for_mode must use native"
-assert_false "printf '%s\\n' \"\$pm_block\" | grep 'consequence_for_mode' | grep -q 'REMOVE_MODE'" \
-    "package manager consequence must not use REMOVE_MODE"
-assert_false "printf '%s\\n' \"\$pm_block\" | grep 'consequence_for_mode' | grep -q 'quarantine'" \
-    "package manager consequence must not claim quarantine"
+if printf '%s\n' "$pm_block" | grep -q 'consequence_for_mode'; then
+    _pass
+else
+    _fail "package manager confirm must call consequence_for_mode"
+fi
+if printf '%s\n' "$pm_block" | grep 'consequence_for_mode' | grep -q '"native"'; then
+    _pass
+else
+    _fail "package manager consequence_for_mode must use native"
+fi
+if printf '%s\n' "$pm_block" | grep 'consequence_for_mode' | grep -q 'REMOVE_MODE'; then
+    _fail "package manager consequence must not use REMOVE_MODE"
+else
+    _pass
+fi
+if printf '%s\n' "$pm_block" | grep 'consequence_for_mode' | grep -q 'quarantine'; then
+    _fail "package manager consequence must not claim quarantine"
+else
+    _pass
+fi
 
 native_txt="$(consequence_for_mode "SAFE" "native")"
-assert_true "printf '%s\\n' \"\$native_txt\" | grep -qi 'irreversible'" \
-    "native consequence must mention irreversible"
-assert_true "printf '%s\\n' \"\$native_txt\" | grep -qi 'not quarantined'" \
-    "native consequence must mention not quarantined"
+if printf '%s\n' "$native_txt" | grep -qi 'irreversible'; then
+    _pass
+else
+    _fail "native consequence must mention irreversible"
+fi
+if printf '%s\n' "$native_txt" | grep -qi 'not quarantined'; then
+    _pass
+else
+    _fail "native consequence must mention not quarantined"
+fi
 
 print_test_summary

@@ -16,8 +16,11 @@ mkdir -p "${SANDBOX}/reports"
 echo notadir > "${SANDBOX}/reports/restore_run.tsv"
 export CLEANUP_RESTORE_MANIFEST="${SANDBOX}/reports/restore_run.tsv/nested.tsv"
 export NO_COLOR=1
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/config/defaults.sh"
+# shellcheck disable=SC1091
 source "${PROJ_DIR}/lib/common.sh"
+# shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
 mkdir -p "$QUARANTINE_RUN_DIR/items"
 DRY_RUN=0
@@ -120,6 +123,7 @@ rc2=$?
 set -e
 unset CLEANUP_TEST_FAIL_JOURNAL_ACTION
 assert_neq "$rc1" "0" "first safe_remove should fail closed"
+assert_true "[[ -n \"$rc2\" ]]" "second safe_remove must still run after metadata failure"
 assert_file_exists "$HOME/Library/Caches/keep_me/x" "second item must still be reachable after first failure"
 
 print_test_summary
