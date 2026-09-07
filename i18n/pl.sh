@@ -203,6 +203,8 @@ i18n_get_pl() {
         cli_exclude_req_val) echo "--exclude wymaga ścieżki" ;;
         cli_restore_req_val) echo "--restore wymaga identyfikatora run albo ścieżki manifestu" ;;
         cli_purge_req_val) echo "--purge-quarantine wymaga wartości: latest, all albo run id" ;;
+        cli_help_prune_artifacts) echo "Usuń stare logi i raporty przebiegów (ARTIFACT_RETENTION_DAYS; 0 wyłącza)" ;;
+        cli_pruned_artifacts) echo "Usunięto $2 artefakt(ów) przebiegu starszych niż $3 dni." ;;
         cli_from_plan_req_val) echo "--from-plan wymaga ścieżki do plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file wymaga ścieżki" ;;
         cli_log_level_req_val) echo "--log-level wymaga wartości (DEBUG|INFO|WARN|ERROR)" ;;

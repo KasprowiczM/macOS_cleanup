@@ -26,6 +26,7 @@
 #   --include <category>  Alias to --category
 #   --restore <id|file>   Restore files from a previous quarantine manifest
 #   --list-quarantine     List quarantine runs
+#   --prune-artifacts     Delete aged run logs/reports (ARTIFACT_RETENTION_DAYS; 0 disables)
 #   --purge-quarantine <latest|id|all>
 #                         Permanently remove quarantine run(s); requires --apply
 #   --quarantine          Move user-scope removals to restoreable quarantine (default)
@@ -220,6 +221,8 @@ show_help() {
         sed '/^# =\{5,\}$/d' | \
         grep '^#' | sed 's/^# \?//'
     echo
+    echo "  --prune-artifacts     $(t "cli_help_prune_artifacts")"
+    echo
     echo "$(t "cli_categories"):"
     for cat in "${ALL_CATEGORIES[@]}"; do
         echo "  $cat"
@@ -303,6 +306,10 @@ parse_args() {
                 ;;
             --list-quarantine)
                 MODE="list-quarantine"
+                shift
+                ;;
+            --prune-artifacts)
+                MODE="prune-artifacts"
                 shift
                 ;;
             --purge-quarantine)
@@ -456,15 +463,9 @@ preflight_checks() {
     # Create log and report directories
     mkdir -p "$LOGS_DIR" "$REPORTS_DIR"
 
-    # Prune our own run artifacts. A disk-cleanup tool that grows its own
-    # logs/ and reports/ without bound is not a good look: before this was
-    # wired up, logs/ held 1183 files and reports/ 1574, accumulated since
-    # March. ARTIFACT_RETENTION_DAYS=0 disables pruning.
-    local _pruned
-    _pruned="$(rotate_old_artifacts "${ARTIFACT_RETENTION_DAYS:-30}")"
-    if [[ "${_pruned:-0}" =~ ^[0-9]+$ ]] && (( _pruned > 0 )); then
-        print_info "Pruned ${_pruned} run artifact(s) older than ${ARTIFACT_RETENTION_DAYS:-30} days."
-    fi
+    # Artifact retention is --prune-artifacts only. Read-only modes that
+    # reach preflight (dry-run, plan, --list-quarantine) must not delete
+    # aged logs or journals.
 
     # Apply YAML-driven protected paths and normalize all protected entries.
     load_policy_rules_from_yaml
@@ -794,6 +795,16 @@ main() {
     if (( SHOW_EXPLAIN )); then explain_categories; exit 0; fi
 
     preflight_checks
+
+    if [[ "$MODE" == "prune-artifacts" ]]; then
+        local _pruned
+        _pruned="$(rotate_old_artifacts "${ARTIFACT_RETENTION_DAYS:-30}")"
+        case "${_pruned}" in
+            ''|*[!0-9]*) _pruned=0 ;;
+        esac
+        print_info "$(t "cli_pruned_artifacts" "$_pruned" "${ARTIFACT_RETENTION_DAYS:-30}")"
+        exit 0
+    fi
 
     # --json: redirect all human-readable output (fd 1) to stderr so that
     # only the JSON summary reaches the caller's stdout.  We stash the

@@ -203,6 +203,8 @@ i18n_get_en() {
         cli_exclude_req_val) echo "--exclude requires path" ;;
         cli_restore_req_val) echo "--restore requires run id or manifest path" ;;
         cli_purge_req_val) echo "--purge-quarantine requires value: latest, all, or run id" ;;
+        cli_help_prune_artifacts) echo "Delete aged run logs and reports (ARTIFACT_RETENTION_DAYS; 0 disables)" ;;
+        cli_pruned_artifacts) echo "Pruned $2 run artifact(s) older than $3 days." ;;
         cli_from_plan_req_val) echo "--from-plan requires path to plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file requires path" ;;
         cli_log_level_req_val) echo "--log-level requires value (DEBUG|INFO|WARN|ERROR)" ;;

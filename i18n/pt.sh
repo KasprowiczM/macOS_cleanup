@@ -203,6 +203,8 @@ i18n_get_pt() {
         cli_exclude_req_val) echo "--exclude requer um caminho" ;;
         cli_restore_req_val) echo "--restore requer id de execução ou manifesto" ;;
         cli_purge_req_val) echo "--purge-quarantine requer um valor" ;;
+        cli_help_prune_artifacts) echo "Eliminar logs e relatórios de execução antigos (ARTIFACT_RETENTION_DAYS; 0 desativa)" ;;
+        cli_pruned_artifacts) echo "Removido(s) $2 artefacto(s) de execução com mais de $3 dias." ;;
         cli_from_plan_req_val) echo "--from-plan requer caminho para plan.json" ;;
         cli_plan_file_req_val) echo "--plan-file requer um caminho" ;;
         cli_log_level_req_val) echo "--log-level requer um valor" ;;

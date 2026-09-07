@@ -137,20 +137,40 @@ redact_path() {
     echo "$str"
 }
 
+# Delete one validated run artifact. Returns 0 only if the file was removed.
+# Skip symlinks, non-regular files, names outside the artifact patterns, and
+# paths that escape the configured logs/reports directory.
+_rotate_artifact_file() {
+    local candidate="$1"
+    local root="$2"
+    local base
+
+    [[ -n "$candidate" ]] || return 1
+    [[ -L "$candidate" ]] && return 1
+    [[ -f "$candidate" ]] || return 1
+    path_is_within "$candidate" "$root" || return 1
+    base="${candidate##*/}"
+    case "$base" in
+        cleanup_*.log|report_*.md|plan_*.json|journal_*.jsonl) ;;
+        *) return 1 ;;
+    esac
+    rm -f "$candidate"
+    [[ ! -e "$candidate" ]]
+}
+
 # Prune run artifacts older than $1 days (default 30).
 #
-# This function existed, was unit-tested, and was never called from production
-# code. By 2026-08-19 that had left 1183 files in logs/ and 1574 in reports/,
-# growing since March. It is now wired into cli_init(); ARTIFACT_RETENTION_DAYS
-# tunes the window and 0 disables pruning entirely.
+# Call only from the explicit --prune-artifacts CLI path. Read-only modes
+# (dry-run, plan, --list-quarantine) must not delete aged logs or journals.
+# ARTIFACT_RETENTION_DAYS=0 disables pruning entirely.
 #
-# Echoes the number of files removed so the caller can report it. Silent on a
-# no-op, because the common case is "nothing to prune".
+# Echoes the number of files removed so the caller can report it.
 rotate_old_artifacts() {
     local max_days="${1:-30}"
     local logs_dir="${LOGS_DIR:-}"
     local reports_dir="${REPORTS_DIR:-}"
-    local removed=0 n
+    local removed=0
+    local candidate
 
     case "$max_days" in
         ''|*[!0-9]*) return 0 ;;
@@ -158,15 +178,21 @@ rotate_old_artifacts() {
     (( max_days == 0 )) && return 0
 
     if [[ -n "$logs_dir" && -d "$logs_dir" ]]; then
-        n=$(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
-        removed=$(( removed + ${n:-0} ))
-        find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            if _rotate_artifact_file "$candidate" "$logs_dir"; then
+                removed=$((removed + 1))
+            fi
+        done < <(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null)
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
-        n=$(find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" 2>/dev/null | wc -l | tr -d ' ')
-        removed=$(( removed + ${n:-0} ))
-        find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" -exec rm -f {} + 2>/dev/null || true
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            if _rotate_artifact_file "$candidate" "$reports_dir"; then
+                removed=$((removed + 1))
+            fi
+        done < <(find "$reports_dir" -type f \( -name "report_*.md" -o -name "plan_*.json" -o -name "journal_*.jsonl" \) -mtime +"$max_days" 2>/dev/null)
     fi
 
     echo "$removed"
