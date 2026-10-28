@@ -364,12 +364,23 @@ declare -a _NEVER_TOUCH_NORMALIZED=()
 
 _path_expand_home_and_vars() {
     local p="$1"
+    local user
 
     p="${p/#\~/$HOME}"
     p="${p//\$HOME/$HOME}"
     p="${p//\$\{HOME\}/$HOME}"
-    p="${p//\$USER/$USER}"
-    p="${p//\$\{USER\}/$USER}"
+    # P1-6: USER is unset under launchd/cron/`env -i`; under `set -u` a bare
+    # $USER aborted expansion and callers fell back to raw paths. Resolve it
+    # only when the path needs it, and fail when it cannot be resolved.
+    case "$p" in
+        *'$USER'*|*'${USER}'*)
+            user="${USER:-}"
+            [[ -n "$user" ]] || user="$(id -un 2>/dev/null || true)"
+            [[ -n "$user" ]] || return 1
+            p="${p//\$USER/$user}"
+            p="${p//\$\{USER\}/$user}"
+            ;;
+    esac
 
     # Trim quotes used in YAML-style values.
     case "$p" in
@@ -389,7 +400,7 @@ normalize_path() {
     local norm=""
     local top=0 is_abs=0 i seg
 
-    path="$(_path_expand_home_and_vars "$input")"
+    path="$(_path_expand_home_and_vars "$input")" || return 1
 
     # P0-2: collapse consecutive slashes with tr. The global parameter-
     # expansion form ${path//\/\//\/} mis-handles on bash 3.2 (it can leave a

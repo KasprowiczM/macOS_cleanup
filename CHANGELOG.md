@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3).
+Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-6.
 
 ### Fixed
 
@@ -15,11 +15,12 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 - **P0-2: the protected-path guard is case-insensitive.** On case-insensitive APFS, `~/Library/mail`, `~/documents`, or `~/.SSH` no longer pass as unprotected. Repeated slashes collapse correctly on bash 3.2. A path that cannot be normalized (`/`, `//`, `/.`) counts as protected. `normalize_path` no longer returns success with an empty path.
 - **P0-3: runtime config fails closed.** `REMOVE_MODE` must be exactly `quarantine` or `permanent`; before, a typo meant permanent deletion. `QUARANTINE_ROOT` must be an absolute `…/quarantine` path with no `.` or `..` segments; before, `QUARANTINE_ROOT=$HOME` plus a purge removed every directory under HOME. Both values are checked at startup (exit 2), and again inside `safe_remove` and `purge_quarantine`.
 - **P0-2 (remainder): policy rule lookup sees case variants.** A hand-edited plan with `$HOME/.NPM` no longer skips the REVIEW escalation for the `~/.npm` `ask` rule. Matching is asymmetric: a case-insensitive match can only raise risk, and a SAFE rule lowers a REVIEW default only on an exact-case match.
+- **P1-6: unset `USER` no longer fails open.** Under launchd, cron or `env -i`, `set -u` made path expansion abort, and callers fell back to raw paths (a `~/.npm` policy rule was stored unexpanded and never matched). `$USER` tokens now fall back to `id -un`, and expansion fails when neither source resolves.
 
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
-- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, and `tests/test_policy_case.sh`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, and `tests/test_user_unset.sh`.
 
 ## [3.0.6] — 2026-09-07
 
