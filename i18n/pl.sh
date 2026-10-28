@@ -159,6 +159,7 @@ i18n_get_pl() {
         disk_volumes_header) echo "Wolumeny (/ główny):" ;;
         disk_util_err) echo "(Nie można odczytać z diskutil)" ;;
         disk_home_top10) echo "Największe katalogi w katalogu domowym (top 10):" ;;
+        disk_home_top10_partial) echo "Przerwano po $2 s; lista może być niepełna (limit ustawia HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Największe elementy w koszu:" ;;
         user_caches_section) echo "Cache użytkownika (~/Library/Caches)" ;;
         user_caches_ok) echo "Brak istotnych elementów w cache użytkownika." ;;

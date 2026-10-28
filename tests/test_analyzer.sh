@@ -211,8 +211,12 @@ _failing_analyzer_stub() { return 1; }
 _run_analyzer _failing_analyzer_stub >/dev/null 2>&1
 assert_eq "${ANALYSIS_PARTIAL:-0}" "1" "analyzer failure must set ANALYSIS_PARTIAL=1"
 
-begin_test "app_bundle_exists cross-checks FOUND_INSTALLED_APPS"
-FOUND_INSTALLED_APPS=("$SANDBOX/CustomApps/TestFakeApp.app")
+begin_test "app_bundle_exists finds an app in the indexed application folders"
+# Phase 2: the bundle-id index replaced the per-app FOUND_INSTALLED_APPS
+# plist loop; it walks the same folders (APP_BUNDLE_SEARCH_DIRS).
+APP_BUNDLE_SEARCH_DIRS=("$SANDBOX/CustomApps")
+APP_BUNDLE_ID_CACHE_LOADED=0
+APP_BUNDLE_ID_CACHE=""
 mkdir -p "$SANDBOX/CustomApps/TestFakeApp.app/Contents"
 cat << 'PLIST' > "$SANDBOX/CustomApps/TestFakeApp.app/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -224,6 +228,6 @@ cat << 'PLIST' > "$SANDBOX/CustomApps/TestFakeApp.app/Contents/Info.plist"
 </dict>
 </plist>
 PLIST
-assert_true "app_bundle_exists 'com.fakeapp.uniquebundleid12345'" "app_bundle_exists should return 0 for installed app bundle in FOUND_INSTALLED_APPS"
+assert_true "app_bundle_exists 'com.fakeapp.uniquebundleid12345'" "app_bundle_exists should return 0 for an app in an indexed folder"
 
 print_test_summary

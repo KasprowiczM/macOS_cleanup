@@ -159,6 +159,7 @@ i18n_get_en() {
         disk_volumes_header) echo "Volumes (/ root):" ;;
         disk_util_err) echo "(Cannot read from diskutil)" ;;
         disk_home_top10) echo "Largest directories in home folder (top 10):" ;;
+        disk_home_top10_partial) echo "Stopped after $2 s; the list may be incomplete (HOME_TOP_DIRS_TIMEOUT sets the limit)." ;;
         trash_top_items) echo "Largest items in trash:" ;;
         user_caches_section) echo "User Caches (~/Library/Caches)" ;;
         user_caches_ok) echo "No significant items in user caches." ;;

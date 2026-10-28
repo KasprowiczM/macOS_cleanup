@@ -160,6 +160,7 @@ i18n_get_pt() {
         disk_volumes_header) echo "Volumes (/ raiz):" ;;
         disk_util_err) echo "(Não foi possível ler o diskutil)" ;;
         disk_home_top10) echo "Maiores diretórios na pasta pessoal (top 10):" ;;
+        disk_home_top10_partial) echo "Interrompido após $2 s; a lista pode estar incompleta (limite: HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Maiores itens na lixeira:" ;;
         user_caches_section) echo "Caches de Usuário (~/Library/Caches)" ;;
         user_caches_ok) echo "Nenhum item significativo no cache de usuário." ;;

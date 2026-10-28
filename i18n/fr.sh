@@ -160,6 +160,7 @@ i18n_get_fr() {
         disk_volumes_header) echo "Volumes (/ racine) :" ;;
         disk_util_err) echo "(Impossible de lire diskutil)" ;;
         disk_home_top10) echo "Plus grands répertoires du dossier personnel (top 10) :" ;;
+        disk_home_top10_partial) echo "Arrêté après $2 s ; la liste peut être incomplète (limite : HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Plus grands éléments de la corbeille :" ;;
         user_caches_section) echo "Caches Utilisateur (~/Library/Caches)" ;;
         user_caches_ok) echo "Aucun élément significatif dans les caches utilisateur." ;;

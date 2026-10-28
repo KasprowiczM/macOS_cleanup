@@ -378,12 +378,48 @@ analyze_disk_overview() {
     fi
 
     # --- Largest directories in home (PF2: skip for --category X) ---
+    # Phase 2: this walk alone took ~102 s of a ~322 s full scan. It is
+    # informational only, so it is bounded (HOME_TOP_DIRS_TIMEOUT, default
+    # 20 s), stays on the home volume (-x) and skips iCloud Drive and
+    # CloudStorage, whose dataless files must not be enumerated or fetched.
     if _is_full_scan; then
         print_info "$(t "disk_home_top10")"
-        du -sh "$HOME"/*/ 2>/dev/null | sort -rh 2>/dev/null | head -10 | \
-            while IFS= read -r line; do
-                echo "    $line"
-            done || true
+        local home_top="" home_line home_dir home_left home_rc home_cut=0
+        local home_limit="${HOME_TOP_DIRS_TIMEOUT:-20}"
+        case "$home_limit" in ''|*[!0-9]*) home_limit=20 ;; esac
+        (( home_limit >= 1 )) || home_limit=20
+        # One du per directory under a shared deadline: du block-buffers its
+        # output, so a single timed-out du over every directory printed nothing.
+        # Each directory gets at most a quarter of the budget, so one huge
+        # tree cannot starve the rest; it is listed as not measured instead.
+        local home_deadline=$(( $(date +%s) + home_limit )) home_cap=$(( home_limit / 4 ))
+        local home_slow=""
+        (( home_cap >= 1 )) || home_cap=1
+        for home_dir in "$HOME"/*/; do
+            [[ -d "$home_dir" ]] || continue
+            home_left=$(( home_deadline - $(date +%s) ))
+            if (( home_left < 1 )); then home_cut=1; break; fi
+            (( home_left > home_cap )) && home_left=$home_cap
+            home_rc=0
+            home_line="$(optional_command_with_timeout "$home_left" \
+                du -x -sh -I 'Mobile Documents' -I CloudStorage "$home_dir" 2>/dev/null)" || home_rc=$?
+            if (( home_rc == 124 )); then
+                home_cut=1
+                home_slow+="    >${home_left}s	${home_dir}"$'\n'
+                continue
+            fi
+            [[ -n "$home_line" ]] && home_top+="${home_line}"$'\n'
+        done
+        if [[ -n "$home_top" ]]; then
+            printf '%s' "$home_top" | sort -rh 2>/dev/null | head -10 | \
+                while IFS= read -r line; do
+                    echo "    $line"
+                done || true
+        fi
+        [[ -n "$home_slow" ]] && printf '%s' "$home_slow"
+        if (( home_cut == 1 )); then
+            print_info "    $(t "disk_home_top10_partial" "$home_limit")"
+        fi
         echo
     fi
 }
@@ -805,10 +841,11 @@ analyze_tmp() {
 analyze_app_leftovers() {
     print_section "$(t "leftovers_section")"
 
+    # Phase 2: Containers and Group Containers are protected (is_protected_path
+    # skips every child) and walking them can raise macOS "access data from
+    # other apps" prompts, so they are not scanned at all.
     local search_dirs=(
         "$HOME/Library/Application Support"
-        "$HOME/Library/Containers"
-        "$HOME/Library/Group Containers"
     )
 
     local total=0
@@ -834,8 +871,9 @@ analyze_app_leftovers() {
 
             # Check reverse-DNS bundle ID pattern
             if [[ "$basename" =~ ^[a-zA-Z]{2,}\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+ ]]; then
+                # Phase 2: the cheap protection check before the bundle lookup.
+                is_protected_path "$item" && continue
                 if ! app_bundle_exists "$basename" 2>/dev/null; then
-                    is_protected_path "$item" && continue
                     local bytes
                     bytes=$(path_size_bytes "$item")
                     local b="${bytes:-0}"

@@ -160,6 +160,7 @@ i18n_get_de() {
         disk_volumes_header) echo "Volumes (/ Hauptverzeichnis):" ;;
         disk_util_err) echo "(diskutil nicht lesbar)" ;;
         disk_home_top10) echo "Größte Verzeichnisse im Benutzerordner (Top 10):" ;;
+        disk_home_top10_partial) echo "Nach $2 s abgebrochen; die Liste ist evtl. unvollständig (Limit über HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Größte Elemente im Papierkorb:" ;;
         user_caches_section) echo "Benutzer-Caches (~/Library/Caches)" ;;
         user_caches_ok) echo "Keine wesentlichen Elemente im Benutzer-Cache." ;;

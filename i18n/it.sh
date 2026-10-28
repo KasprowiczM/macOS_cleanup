@@ -160,6 +160,7 @@ i18n_get_it() {
         disk_volumes_header) echo "Volumi (/ radice):" ;;
         disk_util_err) echo "(Impossibile leggere da diskutil)" ;;
         disk_home_top10) echo "Cartelle più grandi nella home (top 10):" ;;
+        disk_home_top10_partial) echo "Interrotto dopo $2 s; l'elenco potrebbe essere incompleto (limite: HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Elementi più grandi nel cestino:" ;;
         user_caches_section) echo "Cache Utente (~/Library/Caches)" ;;
         user_caches_ok) echo "Nessun elemento significativo nella cache utente." ;;

@@ -945,32 +945,27 @@ except Exception:
 
 app_bundle_exists() {
     local bundle_id="$1"
+    [[ -n "$bundle_id" ]] || return 1
 
-    # Attempt to use mdfind first
+    # Phase 2: the one-time bundle-id index of /Applications, ~/Applications
+    # and /System/Applications answers most lookups without a fork. It covers
+    # the same apps as FOUND_INSTALLED_APPS, whose per-app `defaults read`
+    # loop used to run for every orphan candidate (~60 s per full scan).
+    if (( APP_BUNDLE_ID_CACHE_LOADED == 0 )); then
+        _load_app_bundle_id_cache
+    fi
+    case $'\n'"${APP_BUNDLE_ID_CACHE}"$'\n' in
+        *$'\n'"${bundle_id}"$'\n'*) return 0 ;;
+    esac
+
+    # Apps outside those folders (other volumes, Setapp, ...): ask Spotlight.
     if command -v mdfind >/dev/null 2>&1; then
         local found
         if found="$(mdfind "kMDItemCFBundleIdentifier == \"$bundle_id\"" 2>/dev/null)" && [[ -n "$found" ]]; then
             return 0
         fi
     fi
-
-    # Direct check against FOUND_INSTALLED_APPS if available
-    if [[ -n "${FOUND_INSTALLED_APPS+x}" ]] && (( ${#FOUND_INSTALLED_APPS[@]} > 0 )); then
-        local app plist bid
-        for app in "${FOUND_INSTALLED_APPS[@]}"; do
-            plist="${app}/Contents/Info.plist"
-            [[ -f "$plist" ]] || continue
-            bid="$(get_plist_bundle_id "$plist")"
-            if [[ "$bid" == "$bundle_id" ]]; then
-                return 0
-            fi
-        done
-    fi
-
-    if (( APP_BUNDLE_ID_CACHE_LOADED == 0 )); then
-        _load_app_bundle_id_cache
-    fi
-    printf '%s' "$APP_BUNDLE_ID_CACHE" | grep -Fxq "$bundle_id"
+    return 1
 }
 
 app_name_exists() {

@@ -160,6 +160,7 @@ i18n_get_es() {
         disk_volumes_header) echo "Volúmenes (/ raíz):" ;;
         disk_util_err) echo "(No se puede leer de diskutil)" ;;
         disk_home_top10) echo "Directorios más grandes en inicio (top 10):" ;;
+        disk_home_top10_partial) echo "Detenido tras $2 s; la lista puede estar incompleta (límite: HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Elementos más grandes en papelera:" ;;
         user_caches_section) echo "Cachés de Usuario (~/Library/Caches)" ;;
         user_caches_ok) echo "Sin elementos significativos en cachés de usuario." ;;
