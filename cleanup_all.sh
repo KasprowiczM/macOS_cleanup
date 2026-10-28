@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # cleanup_all.sh — Professional macOS System Cleaner
-# Version: 3.0.0
+# Version: 3.0.6
 #
 # SYNOPSIS
 #   bash cleanup_all.sh [OPTIONS]

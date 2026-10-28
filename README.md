@@ -424,4 +424,4 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG in ~/Downloads
 
 ---
 
-Project: `macOS_cleanup` | Version: 2.1.0 | License: MIT
+Project: `macOS_cleanup` | Version: 3.0.6 | License: MIT

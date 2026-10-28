@@ -442,7 +442,7 @@ generate_plan_json() {
         printf '  "schema_version": "1.0",\n'
         printf '  "version": "1.0",\n'
         printf '  "tool": "%s",\n' "$(json_escape "${SCRIPT_NAME:-cleanup_all.sh}")"
-        printf '  "tool_version": "%s",\n' "$(json_escape "${SCRIPT_VERSION:-3.0.0}")"
+        printf '  "tool_version": "%s",\n' "$(json_escape "${SCRIPT_VERSION:-unknown}")"
         printf '  "run_id": "%s",\n' "$(json_escape "${RUN_TIMESTAMP:-test_run}")"
         printf '  "generated_at": "%s",\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         printf '  "checksum": "%s",\n' "$checksum_val"
