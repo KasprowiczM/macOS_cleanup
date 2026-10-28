@@ -39,13 +39,14 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 
 ### Changed
 
+- **P2: exit codes no longer hide failures.** `--restore` exited 0 even when no row could be restored. It now writes its report and exits 1 if any entry was blocked, conflicted or failed. `--purge-quarantine` returned its failure count, so two failed runs looked like exit 2 ("bad argument"); it now returns 1 for any failure.
 - **P2: the exit-code table matches the code.** `docs/agents/security.md` listed a security-violation exit 99 that is never emitted, and it omitted 3 (unsupported macOS) and 130 (interrupted).
 - **P2: historical prompts and reviews moved to `docs/history/`.** 22 dated prompts, reviews, release notes and progress logs left the repository root. `docs/history/README.md` says they are kept for reference only.
 
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
-- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, `tests/test_quarantine_honesty.sh`, `tests/test_native_target_binding.sh`, `tests/test_lock_atomic.sh`, `tests/test_scan_performance.sh`, `tests/test_tm_snapshots.sh`, `tests/test_privacy_status.sh`, `tests/test_busy_check.sh`, `tests/test_pathguard_anchor.sh`, `tests/test_logs_claims.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, `tests/test_quarantine_honesty.sh`, `tests/test_native_target_binding.sh`, `tests/test_lock_atomic.sh`, `tests/test_scan_performance.sh`, `tests/test_tm_snapshots.sh`, `tests/test_privacy_status.sh`, `tests/test_busy_check.sh`, `tests/test_pathguard_anchor.sh`, `tests/test_logs_claims.sh`, `tests/test_exit_codes.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
 
 ## [3.0.6] — 2026-09-07
 

@@ -762,6 +762,11 @@ run_restore_phase() {
 
     restore_quarantine_manifest "$RESTORE_TARGET"
     generate_report "restore"
+    # P2: a restore that left rows behind is not a success.
+    if (( RESTORE_INCOMPLETE == 1 )); then
+        print_warn "Restore incomplete: some entries were not restored (see the report)."
+        exit 1
+    fi
 }
 
 run_list_quarantine_phase() {

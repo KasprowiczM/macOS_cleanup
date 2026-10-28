@@ -1462,6 +1462,7 @@ is_quarantine_path() {
 # Exclusive lock for every mutating mode (apply, restore, purge, interactive,
 # auto-safe) via mkdir(2). Not TOCTOU-proof.
 CLEANUP_LOCK_HELD="${CLEANUP_LOCK_HELD:-0}"
+RESTORE_INCOMPLETE=0
 
 # P1-7: _cleanup_lock_holder_gone <lock_dir> — true when the recorded holder is
 # no longer running. `ps -p` sees other users' processes too (kill -0 fails
@@ -1783,6 +1784,11 @@ restore_quarantine_manifest() {
         return 2
     fi
 
+    # P2: a row that is not restored (blocked, conflict, failure) marks the
+    # restore incomplete; run_restore_phase reports it and exits 1.
+    local _skipped_before="${TOTAL_SKIPPED_ITEMS:-0}"
+    RESTORE_INCOMPLETE=0
+
     manifest="$(resolve_restore_manifest "$requested" 2>/dev/null || true)"
     if [[ -z "$manifest" ]]; then
         print_error "Restore manifest not found: ${requested}"
@@ -1910,6 +1916,11 @@ restore_quarantine_manifest() {
             cleanup_journal_event "restore_failed" "$target_norm" "$source_norm" "$bytes" "failed" "mv failed"
         fi
     done < "$manifest"
+    if (( ${TOTAL_SKIPPED_ITEMS:-0} > _skipped_before )); then
+        # shellcheck disable=SC2034  # read by run_restore_phase in cleanup_all.sh
+        RESTORE_INCOMPLETE=1
+    fi
+    return 0
 }
 
 latest_quarantine_run_dir() {
@@ -2029,7 +2040,8 @@ purge_quarantine() {
             [[ -d "$run_dir" ]] || continue
             purge_one_quarantine_run "$run_dir" "$apply" || failures=$(( failures + 1 ))
         done
-        return "$failures"
+        (( failures == 0 )) || return 1
+        return 0
     fi
 
     if [[ "$requested" == "expired" ]]; then
@@ -2043,7 +2055,8 @@ purge_quarantine() {
                 purge_one_quarantine_run "$run_dir" "$apply" || failures=$(( failures + 1 ))
             fi
         done
-        return "$failures"
+        (( failures == 0 )) || return 1
+        return 0
     fi
 
     run_dir="$(resolve_quarantine_run_dir "$requested" 2>/dev/null || true)"
