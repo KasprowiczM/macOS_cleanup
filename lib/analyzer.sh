@@ -709,6 +709,11 @@ analyze_logs() {
         if [[ "$dir" == "$normalized_home"* || "$dir" == /Library* ]]; then
             while IFS= read -r -d '' f; do
                 is_protected_path "$f" && continue
+                # P2: a file another category already owns is not listed twice
+                # (app caches claim ~/Library/Logs/JetBrains; DiagnosticReports
+                # has its own analyzer).
+                case "$f" in */DiagnosticReports/*) continue ;; esac
+                is_path_claimed "$f" && continue
                 local bytes
                 bytes=$(path_size_bytes "$f")
                 if (( target_is_user_log == 1 )); then

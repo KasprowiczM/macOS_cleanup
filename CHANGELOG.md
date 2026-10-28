@@ -26,6 +26,7 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 - **Phase 3: caches in use are not removed.** Several caches were removed even while a build was using them: Gradle, Cargo, CocoaPods, SwiftPM, Bundler and Composer, the npx cache, the pnpm stale store and Xcode DerivedData. Removing a cache mid-build breaks that build. `cache_owner_running` now checks with `pgrep`, using command lines as macOS shows them. npm renames itself "npm exec …", so live npx users (such as MCP servers) are found by their `~/.npm/_npx/` path. Other checks cover the Gradle daemon, `cargo`/`rustc`, Xcode/`xcodebuild`, and pnpm and composer running as scripts. A matching cache is skipped and reported as "in use". `apply --from-plan` runs the same check through a shared path→owner map. When `pgrep` cannot tell, the cache counts as in use.
 - **P2: no environment escape hatch in the cache-root allowlist.** `_is_within_allowed_cache_root` used to accept any path under `$SANDBOX`, an environment variable production code should not trust: `SANDBOX=/` made every path an allowed cache root. It also accepted any path whose name merely started with the quarantine root (`…/quarantine-evil`). The `$SANDBOX` hatch is gone, and the quarantine root is matched as a directory.
 - **P2: one version everywhere.** The README footers said 2.1.0 and the `cleanup_all.sh` header said 3.0.0, while `SCRIPT_VERSION` is 3.0.6. The planner's fallback is now `unknown` instead of a stale number. `tests/test_release_consistency.sh` checks that every footer and the header carry `SCRIPT_VERSION`.
+- **P2: logs are not planned twice.** `analyze_logs` listed files that the app-cache analyzer had already claimed, such as `~/Library/Logs/JetBrains`. It also listed `DiagnosticReports` files, which have their own analyzer. The plan counted them twice, and apply tried to remove them twice.
 
 ### Performance
 
@@ -39,7 +40,7 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
-- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, `tests/test_quarantine_honesty.sh`, `tests/test_native_target_binding.sh`, `tests/test_lock_atomic.sh`, `tests/test_scan_performance.sh`, `tests/test_tm_snapshots.sh`, `tests/test_privacy_status.sh`, `tests/test_busy_check.sh`, `tests/test_pathguard_anchor.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, `tests/test_quarantine_honesty.sh`, `tests/test_native_target_binding.sh`, `tests/test_lock_atomic.sh`, `tests/test_scan_performance.sh`, `tests/test_tm_snapshots.sh`, `tests/test_privacy_status.sh`, `tests/test_busy_check.sh`, `tests/test_pathguard_anchor.sh`, `tests/test_logs_claims.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
 
 ## [3.0.6] — 2026-09-07
 
