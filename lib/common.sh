@@ -1353,8 +1353,49 @@ is_quarantine_path() {
     )
 }
 
-# Exclusive apply/restore/purge lock via mkdir(2). Not TOCTOU-proof.
+# Exclusive lock for every mutating mode (apply, restore, purge, interactive,
+# auto-safe) via mkdir(2). Not TOCTOU-proof.
 CLEANUP_LOCK_HELD="${CLEANUP_LOCK_HELD:-0}"
+
+# P1-7: _cleanup_lock_holder_gone <lock_dir> — true when the recorded holder is
+# no longer running. `ps -p` sees other users' processes too (kill -0 fails
+# with EPERM for a live root-owned run); when ps itself does not work, every
+# holder is presumed alive. A lock without a pid may belong to a holder between
+# mkdir and the pid write, so it counts as abandoned only after 10 minutes.
+_cleanup_lock_holder_gone() {
+    local lock_dir="$1" pid
+    pid="$(head -n 1 "${lock_dir}/pid" 2>/dev/null)" || pid=""
+    case "$pid" in
+        ''|*[!0-9]*)
+            [[ -n "$(find "$lock_dir" -maxdepth 0 -mmin +10 2>/dev/null)" ]] ;;
+        *)
+            ps -p "$$" >/dev/null 2>&1 || return 1
+            [[ "$pid" != "$$" ]] && ! ps -p "$pid" >/dev/null 2>&1 ;;
+    esac
+}
+
+# P1-7: _recover_stale_cleanup_lock <lock_dir> — remove a lock whose holder is
+# gone. Only one process recovers at a time (mkdir of "<lock>.recover"), and
+# only a recoverer ever removes another process's lock, so the lock re-checked
+# under that mutex cannot be swapped for a live one before it is removed.
+# A recovery mutex older than 10 minutes was abandoned by a crashed recoverer.
+_recover_stale_cleanup_lock() {
+    local lock_dir="$1" mutex="${1}.recover" rc=1
+    if ! mkdir "$mutex" 2>/dev/null; then
+        [[ -n "$(find "$mutex" -maxdepth 0 -mmin +10 2>/dev/null)" ]] || return 1
+        rmdir "$mutex" 2>/dev/null || return 1
+        mkdir "$mutex" 2>/dev/null || return 1
+    fi
+    if [[ -d "$lock_dir" ]] && _cleanup_lock_holder_gone "$lock_dir"; then
+        rm -f "${lock_dir}/pid" 2>/dev/null || true
+        if rmdir "$lock_dir" 2>/dev/null; then
+            log_warn "Recovered a stale cleanup lock: ${lock_dir}"
+            rc=0
+        fi
+    fi
+    rmdir "$mutex" 2>/dev/null || true
+    return "$rc"
+}
 
 acquire_cleanup_lock() {
     local lock_dir
@@ -1363,25 +1404,36 @@ acquire_cleanup_lock() {
     fi
     mkdir -p "$QUARANTINE_ROOT" 2>/dev/null || return 1
     lock_dir="${QUARANTINE_ROOT}/.apply.lock"
-    if mkdir "$lock_dir" 2>/dev/null; then
-        CLEANUP_LOCK_HELD=1
-        printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null || true
-        return 0
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        _recover_stale_cleanup_lock "$lock_dir" || return 1
+        mkdir "$lock_dir" 2>/dev/null || return 1
     fi
-    return 1
+    # A lock without a pid would look abandoned to others after 10 minutes.
+    if ! printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null; then
+        rmdir "$lock_dir" 2>/dev/null || true
+        return 1
+    fi
+    CLEANUP_LOCK_HELD=1
+    return 0
 }
 
+# release_cleanup_lock — removes the lock only while it still records this
+# process; a lock recovered and re-taken by another run is left alone.
 release_cleanup_lock() {
-    local lock_dir
+    local lock_dir pid
     if [[ "${CLEANUP_LOCK_HELD:-0}" != "1" ]]; then
         return 0
     fi
-    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
-    if [[ -d "$lock_dir" ]]; then
-        rm -f "${lock_dir}/pid" 2>/dev/null || true
-        rmdir "$lock_dir" 2>/dev/null || true
-    fi
     CLEANUP_LOCK_HELD=0
+    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
+    [[ -d "$lock_dir" ]] || return 0
+    pid="$(head -n 1 "${lock_dir}/pid" 2>/dev/null)" || pid=""
+    if [[ "$pid" != "$$" ]]; then
+        log_warn "Cleanup lock now belongs to ${pid:-nobody}; leaving it: ${lock_dir}"
+        return 0
+    fi
+    rm -f "${lock_dir}/pid" 2>/dev/null || true
+    rmdir "$lock_dir" 2>/dev/null || true
     return 0
 }
 

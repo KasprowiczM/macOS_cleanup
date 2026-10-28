@@ -72,12 +72,12 @@ for name in names:
     rest = text[start:]
     m = re.search(r"\n(?=[a-zA-Z_]+\(\) \{|# ----)", rest)
     body = rest[: m.start()] if m else rest
-    if "acquire_cleanup_lock" not in body:
+    if "require_cleanup_lock" not in body:
         missing.append(name + ":no-lock")
 if missing:
     sys.stderr.write("lock wiring: %s\n" % ", ".join(missing))
     sys.exit(1)
 PY
-assert_eq "$?" "0" "restore/apply/purge call acquire_cleanup_lock"
+assert_eq "$?" "0" "restore/apply/purge call require_cleanup_lock"
 
 print_test_summary

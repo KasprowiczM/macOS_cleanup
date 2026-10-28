@@ -50,7 +50,7 @@ The `is_protected_path()` function automatically blocks:
 `app-leftovers` is a report-only category: heuristics might point to data of an active app, so the script does not delete these paths automatically.
 `--yes` in non-interactive mode does not approve `MEDIUM`/`HIGH` categories, Time Machine, or iOS backups.
 
-Apply re-checks `is_protected_path` and the current policy for every target, including native commands. A native command is also bound to its tool's target: apply re-resolves it through `native_tool_target` (the same table the analyzer and planner use) and refuses the op when the plan's path differs. Docker has no host target, so plans report it and only the interactive mode runs it. Malformed plans fail before the first mutation.
+Apply re-checks `is_protected_path` and the current policy for every target, including native commands. A native command is also bound to its tool's target: apply re-resolves it through `native_tool_target` (the same table the analyzer and planner use) and refuses the op when the plan's path differs. Docker has no host target, so plans report it and only the interactive mode runs it. Malformed plans fail before the first mutation. Apply checks and parses one private snapshot of the plan file, and plans are written to a temp file and renamed into place. Every mutating mode (apply, restore, purge, interactive, auto-safe) holds `${QUARANTINE_ROOT}/.apply.lock`; a lock whose recorded holder is no longer running (or a pid-less lock older than 10 minutes) is recovered under a separate recovery mutex, and a run releases the lock only while it still records its own pid.
 
 ## Artifact retention
 

@@ -191,6 +191,9 @@ build_active_categories() {
 _on_exit() {
     local exit_code=$?
     release_cleanup_lock
+    if type remove_plan_temp_files >/dev/null 2>&1; then
+        remove_plan_temp_files
+    fi
     cleanup_sudo_keepalive
     if (( exit_code == 0 )); then
         log_info "Script completed successfully (exit 0)."
@@ -617,6 +620,21 @@ run_plan_phase() {
 }
 
 # ---------------------------------------------------------------------------
+# require_cleanup_lock — every mutating mode holds ${QUARANTINE_ROOT}/.apply.lock,
+# or exits 1. P1-7: interactive and auto-safe used to run unlocked, so a
+# concurrent `--purge-quarantine latest` could delete the run they were filling.
+# ---------------------------------------------------------------------------
+require_cleanup_lock() {
+    if ! acquire_cleanup_lock; then
+        print_error "Another cleanup run (apply, restore, purge, interactive or auto-safe) holds ${QUARANTINE_ROOT}/.apply.lock"
+        exit 1
+    fi
+    # set +e: under errexit `(exit "$rc")` with rc != 0 would end the trap
+    # before _on_exit (temp files, sudo keepalive) ever ran.
+    trap 'rc=$?; release_cleanup_lock; set +e; (exit "$rc"); _on_exit' EXIT
+}
+
+# ---------------------------------------------------------------------------
 # run_interactive_phase — clean category by category with confirmations
 # ---------------------------------------------------------------------------
 run_interactive_phase() {
@@ -625,6 +643,7 @@ run_interactive_phase() {
     echo -e "  ${C_DIM}$(t "cli_interact_desc2")${C_RESET}"
     echo
 
+    require_cleanup_lock
     DRY_RUN=0
 
     run_cleanup "${ACTIVE_CATEGORIES[@]}"
@@ -645,6 +664,7 @@ run_auto_safe_phase() {
     echo -e "  ${C_DIM}$(t "cli_auto_safe_desc2")${C_RESET}"
     echo
 
+    require_cleanup_lock
     DRY_RUN=0
 
     # Run only safe-rated cleanups.
@@ -733,11 +753,7 @@ run_auto_safe_phase() {
 run_restore_phase() {
     print_header "$(t "mode_restore")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
     if [[ -z "$RESTORE_TARGET" ]]; then
         print_error "$(t "cli_no_manifest")"
@@ -757,11 +773,7 @@ run_list_quarantine_phase() {
 run_purge_quarantine_phase() {
     print_header "$(t "mode_purge")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
     if [[ -z "$PURGE_TARGET" ]]; then
         print_error "$(t "cli_no_purge_target")"
@@ -783,11 +795,7 @@ run_purge_quarantine_phase() {
 run_apply_plan_phase() {
     print_header "$(t "mode_apply")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
     if [[ -z "$PLAN_FROM_FILE" ]]; then
         print_error "$(t "cli_apply_requires_plan")"

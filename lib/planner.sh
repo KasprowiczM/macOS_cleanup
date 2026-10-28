@@ -14,6 +14,17 @@ if ! command -v validate_cache_path >/dev/null 2>&1; then
     fi
 fi
 
+# P1-7: temp files removed by remove_plan_temp_files when a run aborts.
+PLAN_TMP_OUTPUT=""
+APPLY_PLAN_SNAPSHOT=""
+
+# remove_plan_temp_files — called from the EXIT handler.
+remove_plan_temp_files() {
+    [[ -n "${PLAN_TMP_OUTPUT:-}" ]] && rm -f "$PLAN_TMP_OUTPUT" 2>/dev/null
+    [[ -n "${APPLY_PLAN_SNAPSHOT:-}" ]] && rm -f "$APPLY_PLAN_SNAPSHOT" 2>/dev/null
+    return 0
+}
+
 declare -a PLAN_OP_IDS=()
 declare -a PLAN_OP_CATEGORIES=()
 declare -a PLAN_OP_RISKS=()
@@ -411,9 +422,20 @@ generate_plan_json() {
     local checksum_val
     checksum_val="pending"
 
-    local dir
+    local dir tmp_output
     dir="$(dirname "$output")"
     mkdir -p "$dir" 2>/dev/null || true
+    # P1-7: write and stamp a temp file next to the destination, then rename it
+    # into place, so a failed stamp or an interrupted run never leaves a
+    # half-written plan where apply --from-plan will read it.
+    tmp_output="${output}.tmp.$$"
+    if [[ -d "$output" ]]; then
+        print_error "Plan file is a directory: ${output}"
+        return 1
+    fi
+    # Bare (no `|| handler`) so set -e still aborts on a failed write; the
+    # EXIT handler removes the temp file in that case.
+    PLAN_TMP_OUTPUT="$tmp_output"
 
     {
         printf '{\n'
@@ -472,9 +494,9 @@ generate_plan_json() {
         done
         printf '  ]\n'
         printf '}\n'
-    } > "$output"
+    } > "$tmp_output"
 
-    if ! python3 - "$output" <<'PLANCKSUM'
+    if ! python3 - "$tmp_output" <<'PLANCKSUM'
 import hashlib
 import json
 import re
@@ -493,9 +515,17 @@ with open(path, "w", encoding="utf-8") as f:
     f.write(new)
 PLANCKSUM
     then
+        rm -f "$tmp_output"
+        PLAN_TMP_OUTPUT=""
         print_error "Failed to stamp plan checksum: ${output}"
         return 1
     fi
+    if ! mv -f "$tmp_output" "$output"; then
+        rm -f "$tmp_output"
+        print_error "Failed to write plan: ${output}"
+        return 1
+    fi
+    PLAN_TMP_OUTPUT=""
 
     cleanup_journal_event "plan_generated" "$output" "" 0 "ok" "operations=${count}" "plan"
     TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count + report_only_count ))
@@ -653,7 +683,31 @@ apply_plan_file() {
     [[ -f "$plan_file" ]] || { print_error "Plan file not found: ${plan_file}"; return 2; }
     command -v python3 >/dev/null 2>&1 || { print_error "apply --from-plan requires python3 for safe JSON parsing."; return 2; }
 
-    if ! verify_plan_file_checksum "$plan_file"; then
+    # P1-7: verify and parse one private snapshot, so the plan cannot change
+    # between the checksum check and the parse.
+    local plan_snapshot
+    plan_snapshot="$(mktemp -t macos_cleanup_plan_snapshot.XXXXXX)" || { print_error "Cannot snapshot plan: ${plan_file}"; return 2; }
+    if ! cp "$plan_file" "$plan_snapshot" 2>/dev/null; then
+        rm -f "$plan_snapshot"
+        print_error "Cannot snapshot plan: ${plan_file}"
+        return 2
+    fi
+    # Called bare so set -e keeps aborting inside the apply loop; on such an
+    # abort the EXIT handler removes the snapshot.
+    APPLY_PLAN_SNAPSHOT="$plan_snapshot"
+    local _apply_rc=0
+    _apply_plan_snapshot "$plan_file" "$plan_snapshot"
+    _apply_rc=$?
+    rm -f "$plan_snapshot"
+    APPLY_PLAN_SNAPSHOT=""
+    return "$_apply_rc"
+}
+
+# _apply_plan_snapshot <plan-file-for-messages> <snapshot> — body of apply_plan_file.
+_apply_plan_snapshot() {
+    local plan_file="$1" plan_snapshot="$2"
+
+    if ! verify_plan_file_checksum "$plan_snapshot"; then
         print_error "Plan checksum verification failed: ${plan_file}"
         cleanup_journal_event "plan_apply_blocked" "$plan_file" "" 0 "blocked" "checksum mismatch" "plan"
         return 2
@@ -662,7 +716,7 @@ apply_plan_file() {
     local parsed_ops apply_failed
     parsed_ops="$(mktemp -t macos_cleanup_plan_parsed.XXXXXX)"
     apply_failed=0
-    if ! python3 - "$plan_file" > "$parsed_ops" <<'PLANPARSE'
+    if ! python3 - "$plan_snapshot" > "$parsed_ops" <<'PLANPARSE'
 import base64
 import json
 import sys
