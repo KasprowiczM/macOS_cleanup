@@ -130,10 +130,18 @@ mkdir -p "$brew_path"
 catbytes_set "brew" 123
 catbytes_set "brew-stale" 9
 FOUND_DEV_ITEMS=("brew_cache:${brew_path}")
+# P1-4: the plan binds brew to `brew --cache`; stub it to the fixture path.
+BREW_STUB_BIN="${SANDBOX}/stub_bin_brew"
+mkdir -p "$BREW_STUB_BIN"
+printf '#!/bin/sh\n[ "$1" = "--cache" ] && echo "%s"\nexit 0\n' "$brew_path" > "${BREW_STUB_BIN}/brew"
+chmod +x "${BREW_STUB_BIN}/brew"
+_old_path="$PATH"
+export PATH="${BREW_STUB_BIN}:${PATH}"
 build_cleanup_plan_from_analysis
+export PATH="$_old_path"
 BREW_PLAN="${SANDBOX}/brew-plan.json"
 generate_plan_json "$BREW_PLAN" >/dev/null 2>&1
-brew_bytes="$(plan_bytes_for_path "$BREW_PLAN" "$brew_path")"
+brew_bytes="$(plan_bytes_for_path "$BREW_PLAN" "$(normalize_path "$brew_path")")"
 assert_eq "$brew_bytes" "123" "brew_cache must use catbytes brew=123, not brew-stale=9"
 
 begin_test "native npm on NEVER_TOUCH_PATHS does not run the npm stub"
@@ -144,21 +152,23 @@ echo cache > "${npm_cache}/index-v5"
 NEVER_TOUCH_PATHS+=("$npm_cache")
 normalize_never_touch_paths
 FOUND_DEV_ITEMS=("npm_cache:${npm_cache}")
-build_cleanup_plan_from_analysis
-NPM_PLAN="${SANDBOX}/npm-protected-plan.json"
-generate_plan_json "$NPM_PLAN" >/dev/null 2>&1
-
 RECORDER_LOG="${SANDBOX}/npm_protected_recorder.log"
 STUB_BIN="${SANDBOX}/stub_bin_protected"
 mkdir -p "$STUB_BIN"
+# P1-4: plan and apply resolve the target via `npm config get cache`; only
+# the cleanup command itself is recorded.
 cat > "${STUB_BIN}/npm" << STUB
 #!/usr/bin/env bash
+[ "\$*" = "config get cache" ] && { echo "${npm_cache}"; exit 0; }
 echo "NPM_CALLED: \$*" >> "${RECORDER_LOG}"
 exit 0
 STUB
 chmod +x "${STUB_BIN}/npm"
 _old_path="$PATH"
 export PATH="${STUB_BIN}:${PATH}"
+build_cleanup_plan_from_analysis
+NPM_PLAN="${SANDBOX}/npm-protected-plan.json"
+generate_plan_json "$NPM_PLAN" >/dev/null 2>&1
 DRY_RUN=0
 NON_INTERACTIVE=1
 set +e

@@ -935,7 +935,7 @@ analyze_dev_environment() {
     # reachable — just honestly labelled.
     if command -v npm &>/dev/null; then
         local npm_cache_dir npm_cacache npm_npx
-        npm_cache_dir=$(npm config get cache 2>/dev/null || echo "$HOME/.npm")
+        npm_cache_dir=$(native_tool_target npm) || npm_cache_dir="$HOME/.npm"
         if [[ -d "$npm_cache_dir" ]]; then
             if validate_cache_path "$npm_cache_dir"; then
                 npm_cacache="${npm_cache_dir}/_cacache"
@@ -968,7 +968,7 @@ analyze_dev_environment() {
     # --- yarn cache ---
     if command -v yarn &>/dev/null; then
         local yarn_cache
-        yarn_cache=$(yarn cache dir 2>/dev/null || echo "")
+        yarn_cache=$(native_tool_target yarn) || yarn_cache=""
         if [[ -n "$yarn_cache" && -d "$yarn_cache" ]]; then
             if validate_cache_path "$yarn_cache"; then
                 local yarn_size
@@ -988,7 +988,7 @@ analyze_dev_environment() {
     # --- pnpm cache ---
     if command -v pnpm &>/dev/null; then
         local pnpm_cache
-        pnpm_cache=$(pnpm store path 2>/dev/null || echo "")
+        pnpm_cache=$(native_tool_target pnpm) || pnpm_cache=""
         if [[ -n "$pnpm_cache" && -d "$pnpm_cache" ]]; then
             if validate_cache_path "$pnpm_cache"; then
                 local pnpm_size
@@ -1034,7 +1034,9 @@ analyze_dev_environment() {
 
     # --- pip cache ---
     if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
-        local pip_cache="$HOME/Library/Caches/pip"
+        # P1-4: ask pip (PIP_CACHE_DIR / pip.conf), as plan apply does.
+        local pip_cache
+        pip_cache=$(native_tool_target pip) || pip_cache="$HOME/Library/Caches/pip"
         if [[ -d "$pip_cache" ]]; then
             if validate_cache_path "$pip_cache"; then
                 local pip_size
@@ -1055,7 +1057,7 @@ analyze_dev_environment() {
     if command -v brew &>/dev/null; then
         local brew_cache
         local brew_cache_found=0
-        brew_cache=$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")
+        brew_cache=$(native_tool_target brew) || brew_cache="$HOME/Library/Caches/Homebrew"
         if [[ -d "$brew_cache" ]]; then
             if validate_cache_path "$brew_cache"; then
                 local brew_size
@@ -1203,27 +1205,24 @@ analyze_dev_environment() {
     # --- Docker ---
     if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
         local docker_output=""
-        docker_output=$(docker system df 2>/dev/null) || docker_output=""
+        # CN2 (P1-5): ask for TYPE|RECLAIMABLE directly. Splitting the table on
+        # whitespace shifted the two-word "Build Cache" row one column, so its
+        # SIZE was read as RECLAIMABLE. Docker prints decimal SI units.
+        docker_output=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null) || docker_output=""
         if [[ -n "$docker_output" ]]; then
-            # CN2: Use awk to robustly extract RECLAIMABLE bytes from
-            # variable-column docker system df output.
             local docker_reclaim=0
             local rb
-            rb=$(echo "$docker_output" | awk '
-                NR==1 {
-                    # Find RECLAIMABLE column index from header
-                    for(i=1;i<=NF;i++) {
-                        if($i=="RECLAIMABLE") { rc=i; break }
-                    }
-                    next
-                }
-                rc && !/^Local Volumes/ && !/^Volumes/ && $rc ~ /^[0-9]/ {
-                    val=$rc
-                    gsub(/\(.*\)/,"",val)   # strip (XX%)
-                    if (val ~ /GB$/)      { sub(/GB$/,"",val); total += val * 1073741824 }
-                    else if (val ~ /MB$/) { sub(/MB$/,"",val); total += val * 1048576 }
-                    else if (val ~ /[kK]B$/) { sub(/[kK]B$/,"",val); total += val * 1024 }
-                    else if (val ~ /B$/)  { sub(/B$/,"",val);  total += val }
+            rb=$(printf '%s\n' "$docker_output" | awk -F'|' '
+                $1 == "Local Volumes" || $1 == "Volumes" { next }
+                {
+                    val=$2
+                    sub(/[[:space:]]*\(.*$/, "", val)   # strip " (XX%)"
+                    gsub(/[[:space:]]/, "", val)
+                    if (val ~ /^[0-9.]+TB$/)      { sub(/TB$/,"",val); total += val * 1000000000000 }
+                    else if (val ~ /^[0-9.]+GB$/) { sub(/GB$/,"",val); total += val * 1000000000 }
+                    else if (val ~ /^[0-9.]+MB$/) { sub(/MB$/,"",val); total += val * 1000000 }
+                    else if (val ~ /^[0-9.]+[kK]B$/) { sub(/[kK]B$/,"",val); total += val * 1000 }
+                    else if (val ~ /^[0-9.]+B$/)  { sub(/B$/,"",val);  total += val }
                 }
                 END { printf "%d", total }
             ') || rb=0

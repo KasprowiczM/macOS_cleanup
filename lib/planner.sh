@@ -5,6 +5,15 @@
 # Bash 3.2 compatible.
 # =============================================================================
 
+# P1-4: native targets are checked with validate_cache_path.
+if ! command -v validate_cache_path >/dev/null 2>&1; then
+    _PLANNER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    if [[ -f "${_PLANNER_LIB_DIR}/pathguard.sh" ]]; then
+        # shellcheck disable=SC1091
+        source "${_PLANNER_LIB_DIR}/pathguard.sh"
+    fi
+fi
+
 declare -a PLAN_OP_IDS=()
 declare -a PLAN_OP_CATEGORIES=()
 declare -a PLAN_OP_RISKS=()
@@ -76,6 +85,28 @@ plan_add_native() {
     local path="${7:-}"
     local tool="${8:-}"
     plan_add_operation "$(plan_next_id)" "$category" "$risk" "native_command" "$path" "$command" "$bytes" "$description" "$recommendation" "false" "$tool"
+}
+
+# P1-4: plan_add_bound_native <category> <default-risk> <command> <bytes> <desc> <rec>
+# The op's path is the target its tool resolves now (native_tool_target), the
+# same value apply re-resolves and must match. A tool that cannot name its
+# target is reported instead of planned.
+plan_add_bound_native() {
+    local category="$1" default_risk="$2" command="$3" bytes="$4" description="$5" recommendation="$6"
+    local tool target
+    tool="$(native_tool_for_command "$command")" || return 1
+    if ! target="$(native_tool_target "$tool")" || [[ -z "$target" ]]; then
+        plan_add_report_only "$category" "REVIEW" "${tool}: target unresolved" "$bytes" "$description" \
+            "${tool} did not report the directory it cleans; run it by hand after review."
+        return 0
+    fi
+    if ! native_target_allowed "$tool" "$target"; then
+        plan_add_report_only "$category" "REVIEW" "$target" "$bytes" "$description" \
+            "${tool} cleans ${target}, which is outside the known cache roots; review it by hand."
+        return 0
+    fi
+    plan_add_native "$category" "$(policy_adjust_risk_for_path "$target" "$default_risk")" "$command" "$bytes" \
+        "$description" "$recommendation" "$target" "$tool"
 }
 
 # P1-1: plan_op_is_executable <index> — true when this run's mode would act on
@@ -240,9 +271,9 @@ build_cleanup_plan_from_analysis() {
                         "Review in Xcode Organizer before deletion."
                     ;;
                 ios_simulators)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
+                    plan_add_bound_native "dev" "REVIEW" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
                         "Deletes only unavailable simulators." \
-                        "Execute after review; runtimes can be re-downloaded." "$path" "xcrun"
+                        "Execute after review; runtimes can be re-downloaded."
                     ;;
                 npx_cache|pnpm_stale_store)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
@@ -250,17 +281,17 @@ build_cleanup_plan_from_analysis() {
                         "The tool will re-download packages as needed."
                     ;;
                 npm_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "npm cache clean --force" "$(catbytes_get "npm")" \
-                        "npm cache." "Packages will be re-downloaded if needed." "$path" "npm" ;;
+                    plan_add_bound_native "dev" "SAFE" "npm cache clean --force" "$(catbytes_get "npm")" \
+                        "npm cache." "Packages will be re-downloaded if needed." ;;
                 yarn_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "yarn cache clean" "$(catbytes_get "yarn")" \
-                        "Yarn cache." "Packages will be re-downloaded if needed." "$path" "yarn" ;;
+                    plan_add_bound_native "dev" "SAFE" "yarn cache clean" "$(catbytes_get "yarn")" \
+                        "Yarn cache." "Packages will be re-downloaded if needed." ;;
                 pnpm_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pnpm store prune" "$(catbytes_get "pnpm")" \
-                        "pnpm store." "pnpm prunes unused store items." "$path" "pnpm" ;;
+                    plan_add_bound_native "dev" "SAFE" "pnpm store prune" "$(catbytes_get "pnpm")" \
+                        "pnpm store." "pnpm prunes unused store items." ;;
                 pip_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pip cache purge" "$(catbytes_get "pip")" \
-                        "pip cache." "Packages will be re-downloaded if needed." "$path" "pip" ;;
+                    plan_add_bound_native "dev" "SAFE" "pip cache purge" "$(catbytes_get "pip")" \
+                        "pip cache." "Packages will be re-downloaded if needed." ;;
                 brew_cache|brew_cleanup)
                     # P1-1: one brew cleanup covers the cache and the stale
                     # versions, which overlap; count the larger estimate once.
@@ -268,11 +299,13 @@ build_cleanup_plan_from_analysis() {
                     if (( $(catbytes_get "brew-stale") > brew_b )); then
                         brew_b="$(catbytes_get "brew-stale")"
                     fi
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "brew cleanup --prune=all" "$brew_b" \
-                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." "$path" "brew" ;;
+                    # P1-4: --prune=all also removes old formula versions (REVIEW).
+                    plan_add_bound_native "dev" "REVIEW" "brew cleanup --prune=all" "$brew_b" \
+                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." ;;
                 gem_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "gem cleanup" "$(catbytes_get "gem")" \
-                        "Ruby gems cache / old versions." "Gems can be reinstalled." "$path" "gem" ;;
+                    # P1-4: gem cleanup uninstalls old gem versions (REVIEW).
+                    plan_add_bound_native "dev" "REVIEW" "gem cleanup" "$(catbytes_get "gem")" \
+                        "Ruby gems cache / old versions." "Gems can be reinstalled." ;;
                 gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Recreateable dev tool cache." \
@@ -289,9 +322,12 @@ build_cleanup_plan_from_analysis() {
                         "Remove via Android Studio Device Manager after review."
                     ;;
                 docker_prune)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "docker system prune -f" "$(catbytes_get "docker")" \
+                    # P1-4: Docker storage lives in its VM, so there is no host
+                    # target to bind; a plan reports it and the interactive
+                    # mode runs it with its own confirmation.
+                    plan_add_report_only "dev" "REVIEW" "docker: reclaimable (docker system df)" "$(catbytes_get "docker")" \
                         "Docker: images, stopped containers, networks, and build cache." \
-                        "Execute only if stopped container data is no longer required." "$path" "docker"
+                        "Run 'docker system prune' yourself, or use --interactive, if stopped container data is no longer required."
                     ;;
             esac
         done
@@ -490,69 +526,54 @@ execute_plan_native_command() {
         before="$(path_size_bytes "$path")"
     fi
 
+    local _cmd_rc=0 tool bin target want
+    if ! tool="$(native_tool_for_command "$command")"; then
+        print_warn "Plan native command not in allowlist: ${command}"
+        cleanup_journal_event "plan_apply_blocked" "$command" "" "$bytes" "blocked" "native command not allowlisted" "plan"
+        return 1
+    fi
+    bin="$tool"
+    if [[ "$tool" == "pip" ]]; then
+        bin="$(native_pip_bin)" || bin=""
+    fi
+    if [[ -z "$bin" ]] || ! command -v "$bin" >/dev/null 2>&1; then
+        [[ "$tool" == "pip" ]] && tool="pip/pip3"
+        record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: ${tool}"
+        print_skip "${tool} unavailable — skipping: ${command}"
+        return 0
+    fi
+
+    # P1-4: the op is bound to its tool's target, re-resolved now. A plan that
+    # names another directory, or a config that moved the cache since the
+    # plan was written, is refused instead of cleaning something else.
+    target="$(native_tool_target "$tool")" || target=""
+    want="$(normalize_path "$path" 2>/dev/null)" || want=""
+    if [[ -z "$target" || "$target" != "$want" ]]; then
+        print_warn "Plan command target mismatch: ${command} (plan: ${path:-none}, ${tool}: ${target:-unresolved})"
+        cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "native target mismatch: ${target:-unresolved}" "plan"
+        return 1
+    fi
+    if ! native_target_allowed "$tool" "$target"; then
+        print_warn "Plan command target outside the cache roots: ${command} (${target})"
+        cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "native target outside cache roots" "plan"
+        return 1
+    fi
+
+    # P1-4: a dry-run previews only what a real apply would run.
     if is_dry_run; then
         print_dry "Would run: ${command}"
         record_native_command_event "$command" "planned" "$bytes" "plan dry-run"
         return 0
     fi
 
-    local _cmd_rc=0
     case "$command" in
-        "npm cache clean --force")
-            if ! command -v npm >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: npm"
-                print_skip "npm unavailable — skipping: ${command}"
-                return 0
-            fi
-            npm cache clean --force || _cmd_rc=$?
-            ;;
-        "yarn cache clean")
-            if ! command -v yarn >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: yarn"
-                print_skip "yarn unavailable — skipping: ${command}"
-                return 0
-            fi
-            yarn cache clean || _cmd_rc=$?
-            ;;
-        "pnpm store prune")
-            if ! command -v pnpm >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pnpm"
-                print_skip "pnpm unavailable — skipping: ${command}"
-                return 0
-            fi
-            pnpm store prune || _cmd_rc=$?
-            ;;
-        "pip cache purge")
-            local _pip_cmd=""
-            command -v pip3 >/dev/null 2>&1 && _pip_cmd="pip3"
-            [[ -z "$_pip_cmd" ]] && command -v pip >/dev/null 2>&1 && _pip_cmd="pip"
-            if [[ -z "$_pip_cmd" ]]; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pip/pip3"
-                print_skip "pip/pip3 unavailable — skipping: ${command}"
-                return 0
-            fi
-            $_pip_cmd cache purge || _cmd_rc=$?
-            ;;
-        "brew cleanup --prune=all")
-            if ! command -v brew >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: brew"
-                print_skip "brew unavailable — skipping: ${command}"
-                return 0
-            fi
-            brew cleanup --prune=all || _cmd_rc=$?
-            ;;
-        "gem cleanup")
-            if ! command -v gem >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: gem"
-                print_skip "gem unavailable — skipping: ${command}"
-                return 0
-            fi
-            gem cleanup || _cmd_rc=$?
-            ;;
-        *)
-            print_warn "Plan native command not in allowlist: ${command}"
-            cleanup_journal_event "plan_apply_blocked" "$command" "" "$bytes" "blocked" "native command not allowlisted" "plan"
-            return 1 ;;
+        "npm cache clean --force")         npm cache clean --force || _cmd_rc=$? ;;
+        "yarn cache clean")                yarn cache clean || _cmd_rc=$? ;;
+        "pnpm store prune")                pnpm store prune || _cmd_rc=$? ;;
+        "pip cache purge")                 "$bin" cache purge || _cmd_rc=$? ;;
+        "brew cleanup --prune=all")        brew cleanup --prune=all || _cmd_rc=$? ;;
+        "gem cleanup")                     gem cleanup || _cmd_rc=$? ;;
+        "xcrun simctl delete unavailable") xcrun simctl delete unavailable || _cmd_rc=$? ;;
     esac
 
     if (( _cmd_rc == 0 )); then
@@ -653,6 +674,7 @@ ALLOWLIST = {
     "pip cache purge",
     "brew cleanup --prune=all",
     "gem cleanup",
+    "xcrun simctl delete unavailable",
 }
 ACTIONS = {"remove_path", "native_command", "report_only"}
 RISKS = {"SAFE", "REVIEW", "DANGEROUS"}

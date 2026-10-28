@@ -374,6 +374,13 @@ reset_apply_state
 DRY_RUN=1
 NC1_CACHE="${SANDBOX}/nc1-gem-cache"
 mkdir -p "$NC1_CACHE"
+# P1-4: dry-run previews only bound ops, so gem must name the plan's target.
+NC1_BIN="${SANDBOX}/nc1_bin"
+mkdir -p "$NC1_BIN"
+printf '#!/bin/sh\n[ "$1 $2" = "env gemdir" ] && echo "%s"\nexit 0\n' "$NC1_CACHE" > "${NC1_BIN}/gem"
+chmod +x "${NC1_BIN}/gem"
+_OLD_PATH_NC1="$PATH"
+PATH="${NC1_BIN}:${PATH}"
 NC1_PLAN="${SANDBOX}/nc1.json"
 write_plan "$NC1_PLAN" "[
   {
@@ -386,6 +393,7 @@ write_plan "$NC1_PLAN" "[
   }
 ]"
 apply_plan_file "$NC1_PLAN" > /dev/null 2>&1
+PATH="$_OLD_PATH_NC1"
 assert_true "journal_has_event 'native_command'"   "NC1: native_command event written"
 assert_true "journal_has_message 'planned'"        "NC1: status=planned in journal"
 DRY_RUN=0
@@ -452,8 +460,12 @@ begin_test "NC4: allowlisted tool present but fails → status=failed in journal
 reset_apply_state
 FAKE_BIN_NC4="${SANDBOX}/nc4_fakedir"
 mkdir -p "$FAKE_BIN_NC4"
-cat > "${FAKE_BIN_NC4}/gem" << 'STUB'
+# P1-4: apply re-resolves the target, so the stub answers `gem env gemdir`
+# with the plan's path and fails only the cleanup itself.
+mkdir -p "${SANDBOX}/nc4-gem-cache"
+cat > "${FAKE_BIN_NC4}/gem" << STUB
 #!/bin/sh
+[ "\$1 \$2" = "env gemdir" ] && { echo "${SANDBOX}/nc4-gem-cache"; exit 0; }
 exit 1
 STUB
 chmod +x "${FAKE_BIN_NC4}/gem"
@@ -518,7 +530,7 @@ assert_true "find \"${QUARANTINE_ROOT}\" -name 'mix-safe' -print -quit | grep -q
 begin_test "R-1: apply_plan_file emitter & reader preserve native path and report_only empty fields"
 reset_apply_state
 
-NATIVE_CACHE="${SANDBOX}/r1-npm-cache"
+NATIVE_CACHE="${HOME}/.npm"   # P1-4: native targets must be the tool's own folder
 mkdir -p "$NATIVE_CACHE"
 NATIVE_PLAN="${SANDBOX}/native_npm.json"
 write_plan "$NATIVE_PLAN" "[
@@ -584,8 +596,10 @@ reset_apply_state
 RECORDER_LOG="${SANDBOX}/npm_recorder.log"
 STUB_BIN_DIR="${SANDBOX}/stub_bin"
 mkdir -p "$STUB_BIN_DIR"
+# P1-4: apply re-resolves the target via `npm config get cache`.
 cat << STUB > "${STUB_BIN_DIR}/npm"
 #!/usr/bin/env bash
+[ "\$*" = "config get cache" ] && { echo "${NATIVE_CACHE}"; exit 0; }
 echo "NPM_CALLED: \$*" >> "${RECORDER_LOG}"
 exit 0
 STUB

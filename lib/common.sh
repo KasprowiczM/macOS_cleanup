@@ -1124,6 +1124,84 @@ cleanup_journal_event() {
         >> "$journal_file" 2>/dev/null || return 1
 }
 
+# ---------------------------------------------------------------------------
+# P1-4: one tool→target table for native cleanup commands. The analyzer, the
+# planner and plan apply all resolve a command's target here, so a plan op is
+# bound to the directory its tool actually cleans. Before, apply accepted
+# `npm cache clean --force` with ~/Library/Messages as its path, resolved the
+# __brew__ sentinel against the cwd, and never noticed an npmrc/pnpm/pip
+# config that moved the cache after the plan was written.
+# ---------------------------------------------------------------------------
+
+# native_tool_for_command <command> — the tool an allowlisted command uses.
+native_tool_for_command() {
+    case "${1:-}" in
+        "npm cache clean --force")         echo npm ;;
+        "yarn cache clean")                echo yarn ;;
+        "pnpm store prune")                echo pnpm ;;
+        "pip cache purge")                 echo pip ;;
+        "brew cleanup --prune=all")        echo brew ;;
+        "gem cleanup")                     echo gem ;;
+        "xcrun simctl delete unavailable") echo xcrun ;;
+        *) return 1 ;;
+    esac
+}
+
+# native_pip_bin — pip3 when present, else pip (the same choice apply makes).
+native_pip_bin() {
+    if command -v pip3 >/dev/null 2>&1; then echo pip3
+    elif command -v pip >/dev/null 2>&1; then echo pip
+    else return 1
+    fi
+}
+
+# native_tool_target <tool> — normalized absolute directory the tool's cleanup
+# acts on; fails (no output) when the tool cannot tell.
+native_tool_target() {
+    local tool="${1:-}" target_dir="" pip_bin
+    case "$tool" in
+        npm)   target_dir="$(npm config get cache </dev/null 2>/dev/null)" ;;
+        yarn)  target_dir="$(yarn cache dir </dev/null 2>/dev/null)" ;;
+        pnpm)  target_dir="$(pnpm store path </dev/null 2>/dev/null)" ;;
+        pip)   pip_bin="$(native_pip_bin)" || return 1
+               target_dir="$("$pip_bin" cache dir </dev/null 2>/dev/null)" ;;
+        brew)  target_dir="$(brew --cache </dev/null 2>/dev/null)" ;;
+        gem)   target_dir="$(gem env gemdir </dev/null 2>/dev/null)" ;;
+        xcrun) target_dir="${HOME}/Library/Developer/CoreSimulator/Devices" ;;
+        *)     return 1 ;;
+    esac
+    target_dir="$(printf '%s\n' "$target_dir" | head -n 1)"
+    [[ "$target_dir" == /* ]] || return 1
+    normalize_path "$target_dir"
+}
+
+# native_target_allowed <tool> <target> — the cleanup of npm/yarn/pnpm/pip/brew
+# empties the directory its tool names, and NPM_CONFIG_CACHE, PIP_CACHE_DIR, an
+# .npmrc or a pnpm store-dir can name any directory. validate_cache_path alone
+# is too broad here (it admits the whole brew prefix and /var/folders), so the
+# target must also be the tool's own folder under HOME: its dot-directory, or a
+# child (never the root) of ~/Library/Caches or ~/.cache.
+# gem cleanup only uninstalls old versions; simctl's target is fixed.
+native_target_allowed() {
+    local tool="${1:-}" target="${2:-}" home
+    case "$tool" in
+        gem|xcrun) [[ -n "$target" ]]; return ;;
+        npm|yarn|pnpm|pip|brew) ;;
+        *) return 1 ;;
+    esac
+    home="$(normalize_path "$HOME" 2>/dev/null)" || return 1
+    case "${tool}:${target}" in
+        npm:"$home/.npm"|npm:"$home/.npm/"*) ;;
+        yarn:"$home/.yarn"|yarn:"$home/.yarn/"*) ;;
+        pnpm:"$home/.pnpm-store"|pnpm:"$home/.pnpm-store/"*) ;;
+        pnpm:"$home/Library/pnpm/"?*|pnpm:"$home/.local/share/pnpm/"?*) ;;
+        *:"$home/Library/Caches/"?*|*:"$home/.cache/"?*) ;;
+        *) return 1 ;;
+    esac
+    command -v validate_cache_path >/dev/null 2>&1 || return 1
+    validate_cache_path "$target"
+}
+
 record_native_command_event() {
     local command="$1"
     local status="${2:-ok}"

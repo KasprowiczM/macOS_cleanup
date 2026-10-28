@@ -134,21 +134,15 @@ docker() {
     case "$1 ${2:-}" in
         "info ") return 0 ;;
         "system df")
-            cat <<'DOCKERDF'
-TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
-Images          2         0         20MB      10MB (50%)
-Containers      1         0         4MB       4MB (100%)
-Local Volumes   3         0         90MB      90MB (100%)
-Build Cache     1         0         8MB       8MB
-DOCKERDF
-            ;;
+            printf '%s\n' 'Images|10MB (50%)' 'Containers|4MB (100%)' 'Local Volumes|90MB (100%)' 'Build Cache|8MB' ;;
         *) return 1 ;;
     esac
 }
 analyze_dev_environment
 unset -f docker
 assert_array_var_contains_exact "FOUND_DEV_ITEMS" "docker_prune:__docker__"
-expected_docker_bytes=$(( (10 + 4 + 8) * 1024 * 1024 ))
+# Docker prints decimal SI units (P1-5).
+expected_docker_bytes=$(( (10 + 4 + 8) * 1000 * 1000 ))
 assert_eq "$(catbytes_get "docker")" "$expected_docker_bytes" "Docker estimate should exclude Local Volumes"
 
 begin_test "analyze_trash discovers top-level items in ~/.Trash"

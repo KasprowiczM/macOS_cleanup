@@ -763,7 +763,7 @@ clean_dev_caches() {
                     if command -v brew &>/dev/null; then
                         local _brew_path _bb _ba _bfreed
                         _brew_path="$path"
-                        [[ "$_brew_path" == "__brew__" ]] && _brew_path="$(brew --cache 2>/dev/null || echo "")"
+                        if [[ "$_brew_path" == "__brew__" ]]; then _brew_path="$(native_tool_target brew)" || _brew_path=""; fi
                         _bb=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _bb="$(path_size_bytes "$_brew_path")"
                         if brew cleanup --prune=all 2>/dev/null; then
                             _ba=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _ba="$(path_size_bytes "$_brew_path")"
