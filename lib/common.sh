@@ -101,33 +101,51 @@ headline_total_label() {
     fi
 }
 
-# Cached path size calculation to optimize filesystem du traversal
-SIZE_CACHE_KEYS=()
-SIZE_CACHE_VALS=()
+# Phase 2: per-path size memo. Analyzers measure every candidate with du, and
+# the planner and the prompts used to measure the same paths again. When
+# SIZE_MEMO_FILE is set (cleanup_all.sh sets it per run), path_size_bytes
+# appends each successful measurement as "<bytes>\t<path>". It is a file, not
+# a variable, because most measurements run inside $(...) subshells.
+# Only plan estimates and prompt sizes read it (path_size_bytes_memo);
+# safe_remove and native-command before/after accounting measure live.
+# Never inherited: the exit handler removes this file.
+SIZE_MEMO_FILE=""
 
-get_path_size_cached() {
-    local path="${1:-}"
-    [[ -z "$path" || ! -e "$path" ]] && { echo "0"; return 0; }
+size_memo_record() {
+    local path="$1" bytes="$2"
+    [[ -n "$SIZE_MEMO_FILE" ]] || return 0
+    case "$path" in
+        ''|*$'\n'*) return 0 ;;
+    esac
+    { printf '%s\t%s\n' "$bytes" "$path" >> "$SIZE_MEMO_FILE"; } 2>/dev/null || true
+}
 
-    local norm
-    norm="$(normalize_path "$path" || echo "$path")"
+# path_size_bytes_memo <path> — the last recorded size of <path> this run, else
+# a live measurement. A path that no longer exists is 0.
+path_size_bytes_memo() {
+    local path="$1" hit=""
+    if [[ ! -e "$path" ]]; then
+        echo 0
+        return 0
+    fi
+    case "$path" in
+        *$'\n'*) ;;
+        *)
+            if [[ -n "$SIZE_MEMO_FILE" && -f "$SIZE_MEMO_FILE" ]]; then
+                hit="$(P="$path" awk -F'\t' 'substr($0, index($0, "\t") + 1) == ENVIRON["P"] { b = $1 } END { if (b != "") print b }' "$SIZE_MEMO_FILE" 2>/dev/null)" || hit=""
+            fi
+            ;;
+    esac
+    case "$hit" in
+        ''|*[!0-9]*) path_size_bytes "$path"; return $? ;;
+    esac
+    echo "$hit"
+}
 
-    local i
-    for (( i=0; i<${#SIZE_CACHE_KEYS[@]}; i++ )); do
-        if [[ "${SIZE_CACHE_KEYS[i]}" == "$norm" ]]; then
-            echo "${SIZE_CACHE_VALS[i]}"
-            return 0
-        fi
-    done
-
+path_size_human_memo() {
     local bytes
-    bytes="$(du -sk "$norm" 2>/dev/null | awk '{print $1 * 1024}')"
-    bytes="${bytes:-0}"
-
-    SIZE_CACHE_KEYS+=("$norm")
-    SIZE_CACHE_VALS+=("$bytes")
-
-    echo "$bytes"
+    bytes=$(path_size_bytes_memo "$1")
+    bytes_to_human "$bytes"
 }
 
 # ---------------------------------------------------------------------------
@@ -163,7 +181,7 @@ _rotate_artifact_file() {
     path_is_within "$candidate" "$root" || return 1
     base="${candidate##*/}"
     case "$base" in
-        cleanup_*.log|unreadable_*.txt|report_*.md|plan_*.json|journal_*.jsonl) ;;
+        cleanup_*.log|unreadable_*.txt|size_memo_*.tsv|report_*.md|plan_*.json|journal_*.jsonl) ;;
         *) return 1 ;;
     esac
     rm -f "$candidate"
@@ -244,7 +262,7 @@ rotate_old_artifacts() {
             if _rotate_artifact_file "$candidate" "$logs_dir"; then
                 removed=$((removed + 1))
             fi
-        done < <(find "$logs_dir" -type f \( -name "cleanup_*.log" -o -name "unreadable_*.txt" \) -mtime +"$max_days" 2>/dev/null)
+        done < <(find "$logs_dir" -type f \( -name "cleanup_*.log" -o -name "unreadable_*.txt" -o -name "size_memo_*.tsv" \) -mtime +"$max_days" 2>/dev/null)
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
@@ -390,6 +408,7 @@ path_size_bytes() {
         if [[ -n "$kb" ]]; then
             # Partly readable: keep what du could count; it is a lower bound.
             analysis_record_unreadable "partial" "$path"
+            size_memo_record "$path" "$(( kb * 1024 ))"
             echo $(( kb * 1024 ))
             return 0
         fi
@@ -404,6 +423,7 @@ path_size_bytes() {
         echo 0
         return 1
     fi
+    size_memo_record "$path" "$(( kb * 1024 ))"
     echo $(( kb * 1024 ))
     return 0
 }

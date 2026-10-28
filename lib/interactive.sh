@@ -219,7 +219,7 @@ confirm_category() {
             [[ -z "$p" ]] && continue
             if [[ -e "$p" ]]; then
                 local sz
-                sz=$(path_size_human "$p")
+                sz=$(path_size_human_memo "$p")
                 echo -e "${C_BOLD}${C_BLUE}│${C_RESET}    ${C_DIM}${p}${C_RESET}  ${C_YELLOW}(${sz})${C_RESET}"
             fi
         done
@@ -303,7 +303,7 @@ confirm_ios_backups() {
     while IFS= read -r bk; do
         [[ -z "$bk" ]] && continue
         local bk_size
-        bk_size=$(path_size_human "$bk")
+        bk_size=$(path_size_human_memo "$bk")
         echo -e "    ${C_DIM}• $(basename "$bk")${C_RESET}  ${C_YELLOW}(${bk_size})${C_RESET}"
     done <<< "$backups_list"
     echo

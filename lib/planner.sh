@@ -22,6 +22,7 @@ APPLY_PLAN_SNAPSHOT=""
 remove_plan_temp_files() {
     [[ -n "${PLAN_TMP_OUTPUT:-}" ]] && rm -f "$PLAN_TMP_OUTPUT" 2>/dev/null
     [[ -n "${APPLY_PLAN_SNAPSHOT:-}" ]] && rm -f "$APPLY_PLAN_SNAPSHOT" 2>/dev/null
+    [[ -n "${SIZE_MEMO_FILE:-}" ]] && rm -f "$SIZE_MEMO_FILE" 2>/dev/null
     return 0
 }
 
@@ -82,7 +83,7 @@ plan_add_operation() {
 plan_add_path() {
     local category="$1" risk="$2" path="$3" description="$4" recommendation="$5"
     local bytes
-    bytes="$(path_size_bytes "$path")"
+    bytes="$(path_size_bytes_memo "$path")"
     plan_add_operation "$(plan_next_id)" "$category" "$risk" "remove_path" "$path" "" "$bytes" "$description" "$recommendation" "true" ""
 }
 
@@ -252,7 +253,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_SYSTEM_CACHES[@]} > 0 )); then
         for path in "${FOUND_SYSTEM_CACHES[@]}"; do
-            plan_add_report_only "system" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "system" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes_memo "$path")" \
                 "System cache /Library/Caches." \
                 "Not executed from plan; use interactive mode after review."
         done
@@ -260,7 +261,7 @@ build_cleanup_plan_from_analysis() {
 
     if (( ${#FOUND_APP_LEFTOVERS[@]} > 0 )); then
         for path in "${FOUND_APP_LEFTOVERS[@]}"; do
-            plan_add_report_only "app-leftovers" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "app-leftovers" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes_memo "$path")" \
                 "Heuristic app leftover." \
                 "Remove manually after confirming app is uninstalled."
         done
@@ -277,7 +278,7 @@ build_cleanup_plan_from_analysis() {
                         "Xcode will rebuild projects on next compilation."
                     ;;
                 xcode_archives)
-                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes_memo "$path")" \
                         "Xcode Archives may be required for app distribution or symbolication." \
                         "Review in Xcode Organizer before deletion."
                     ;;
@@ -323,12 +324,12 @@ build_cleanup_plan_from_analysis() {
                         "Builds will re-download dependencies."
                     ;;
                 maven_cache)
-                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes_memo "$path")" \
                         "Maven repository may contain locally built artifacts." \
                         "Do not delete automatically; review manually."
                     ;;
                 android_avd)
-                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes "$path")" \
+                    plan_add_report_only "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "$path" "$(path_size_bytes_memo "$path")" \
                         "Android AVD may contain emulator local state." \
                         "Remove via Android Studio Device Manager after review."
                     ;;
@@ -381,7 +382,7 @@ build_cleanup_plan_from_analysis() {
         for item in "${FOUND_MAIL_ITEMS[@]}"; do
             key="${item%%:*}"
             path="${item#*:}"
-            plan_add_report_only "mail" "DANGEROUS" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "mail" "DANGEROUS" "$path" "$(path_size_bytes_memo "$path")" \
                 "Apple Mail: ${key}. Mail data is critical user content." \
                 "Manage attachments via Mail.app or Finder."
         done
@@ -391,7 +392,7 @@ build_cleanup_plan_from_analysis() {
         for item in "${FOUND_BROWSER_CACHE_ITEMS[@]}"; do
             label="${item%%:*}"
             path="${item#*:}"
-            plan_add_report_only "browsers" "REVIEW" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "browsers" "REVIEW" "$path" "$(path_size_bytes_memo "$path")" \
                 "${label}: browser cache." \
                 "Prefer clearing cache via browser UI."
         done
@@ -401,7 +402,7 @@ build_cleanup_plan_from_analysis() {
         for item in "${FOUND_BROWSER_DATA_ITEMS[@]}"; do
             label="${item%%:*}"
             path="${item#*:}"
-            plan_add_report_only "browsers" "DANGEROUS" "$path" "$(path_size_bytes "$path")" \
+            plan_add_report_only "browsers" "DANGEROUS" "$path" "$(path_size_bytes_memo "$path")" \
                 "${label}: profile, cookies, passwords, history, or sessions." \
                 "Never delete automatically; use browser privacy settings."
         done

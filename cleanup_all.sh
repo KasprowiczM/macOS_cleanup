@@ -482,6 +482,10 @@ preflight_checks() {
     # Create log and report directories
     mkdir -p "$LOGS_DIR" "$REPORTS_DIR"
 
+    # Phase 2: analyzer sizes are reused by the plan and the prompts.
+    # Removed on exit by remove_plan_temp_files.
+    SIZE_MEMO_FILE="${LOGS_DIR}/size_memo_${RUN_TIMESTAMP}.tsv"
+
     # Artifact retention is --prune-artifacts only. Read-only modes that
     # reach preflight (dry-run, plan, --list-quarantine) must not delete
     # aged logs or journals.
@@ -714,7 +718,7 @@ run_auto_safe_phase() {
                 auto_app_cache_count=$(( auto_app_cache_count + 1 ))
             else
                 review_app_cache_count=$(( review_app_cache_count + 1 ))
-                review_app_cache_bytes=$(( review_app_cache_bytes + $(path_size_bytes "$path") ))
+                review_app_cache_bytes=$(( review_app_cache_bytes + $(path_size_bytes_memo "$path") ))
             fi
         done
 

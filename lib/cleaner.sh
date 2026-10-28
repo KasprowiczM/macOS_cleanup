@@ -70,7 +70,7 @@ processable_total_bytes() {
         return 0
     fi
     for p in "${PROCESSABLE_PATHS[@]}"; do
-        total=$(( total + $(path_size_bytes "$p") ))
+        total=$(( total + $(path_size_bytes_memo "$p") ))
     done
     echo "$total"
 }
@@ -171,7 +171,7 @@ clean_app_specific_caches() {
         for entry in "${safe_entries[@]}"; do
             path="${entry#*:}"
             safe_paths+=("$path")
-            safe_bytes=$(( safe_bytes + $(path_size_bytes "$path") ))
+            safe_bytes=$(( safe_bytes + $(path_size_bytes_memo "$path") ))
         done
         safe_h=$(bytes_to_human "$safe_bytes")
         paths_str=$(printf '%s|' "${safe_paths[@]}")
@@ -208,7 +208,7 @@ clean_app_specific_caches() {
             label="${entry%%:*}"
             path="${entry#*:}"
             review_paths+=("$path")
-            review_bytes=$(( review_bytes + $(path_size_bytes "$path") ))
+            review_bytes=$(( review_bytes + $(path_size_bytes_memo "$path") ))
         done
         review_h=$(bytes_to_human "$review_bytes")
         paths_str=$(printf '%s|' "${review_paths[@]}")
@@ -223,7 +223,7 @@ clean_app_specific_caches() {
                 local desc rec item_sz
                 desc="$(app_cache_description "$label")"
                 rec="$(app_cache_recommendation "$label")"
-                item_sz="$(path_size_human "$path")"
+                item_sz="$(path_size_human_memo "$path")"
                 echo -e "    ${C_YELLOW}• ${label}${C_RESET} (${item_sz})"
                 echo -e "      ${C_DIM}Path: ${path}${C_RESET}"
                 echo -e "      ${C_DIM}${desc}${C_RESET}"
@@ -477,7 +477,7 @@ clean_xcode_derived_data() {
     fi
 
     local size_h
-    size_h=$(path_size_human "$FOUND_DERIVED_DATA")
+    size_h=$(path_size_human_memo "$FOUND_DERIVED_DATA")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local cat_risk
@@ -609,7 +609,7 @@ clean_dev_review_only_items() {
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         key="${item%%:*}"
         path="${item#*:}"
-        total_h=$(path_size_human "$path")
+        total_h=$(path_size_human_memo "$path")
 
         case "$key" in
             xcode_archives)
@@ -629,11 +629,11 @@ clean_dev_review_only_items() {
 _clean_dev_native_or_fallback() {
     local cmd="$1" check_cmd="$2" tool_label="$3" _item_label="$4" ok_msg="$5" path="$6"
     local size_h
-    size_h=$(path_size_human "$path")
+    size_h=$(path_size_human_memo "$path")
 
     if is_dry_run; then
         print_dry "Would run: ${cmd}  (${size_h})"
-        record_native_command_event "$cmd" "planned" "$(path_size_bytes "$path")" "dry-run"
+        record_native_command_event "$cmd" "planned" "$(path_size_bytes_memo "$path")" "dry-run"
     else
         if command -v "$check_cmd" &>/dev/null; then
             print_cleaned "$(t "cleaning_cmd"): ${tool_label} (${cmd})"
@@ -684,7 +684,7 @@ clean_dev_caches() {
     for item in "${cleanable_items[@]}"; do
         path="${item#*:}"
         [[ "$path" != "__brew__" ]] && item_paths+=("$path")
-        total_bytes=$(( total_bytes + $(path_size_bytes "$path") ))
+        total_bytes=$(( total_bytes + $(path_size_bytes_memo "$path") ))
     done
     total_h=$(bytes_to_human "$total_bytes")
     paths_str=$(printf '%s|' "${item_paths[@]}")
@@ -769,7 +769,7 @@ clean_dev_caches() {
                     if [[ "$path" == "__brew__" ]]; then
                         print_dry "Would run: brew cleanup --prune=all  ($(bytes_to_human "$(catbytes_get "brew-stale")"))"
                     else
-                        print_dry "Would run: brew cleanup --prune=all  ($(path_size_human "$path"))"
+                        print_dry "Would run: brew cleanup --prune=all  ($(path_size_human_memo "$path"))"
                     fi
                     record_native_command_event "brew cleanup --prune=all" "planned" "$(catbytes_get "brew-stale")" "dry-run"
                 else
@@ -797,7 +797,7 @@ clean_dev_caches() {
                 ;;
             pip_cache)
                 if is_dry_run; then
-                    print_dry "Would run: pip cache purge  ($(path_size_human "$path"))"
+                    print_dry "Would run: pip cache purge  ($(path_size_human_memo "$path"))"
                     record_native_command_event "pip cache purge" "planned" "$(catbytes_get "pip")" "dry-run"
                 else
                     print_cleaned "$(t "cleaning_cmd"): pip cache (pip cache purge)"
@@ -1021,7 +1021,7 @@ clean_ios_backups() {
             device_name=$(defaults read "$info_plist" "Device Name" 2>/dev/null || echo "$(t "unknown_device")")
 
         local bk_size
-        bk_size=$(path_size_human "$backup_dir")
+        bk_size=$(path_size_human_memo "$backup_dir")
         echo
         if ask_yes_no "Remove backup: '${device_name}' (${bk_size})?" "no"; then
             safe_remove "$backup_dir"
