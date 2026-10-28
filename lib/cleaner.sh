@@ -468,6 +468,14 @@ clean_app_leftovers() {
 clean_xcode_derived_data() {
     [[ -z "${FOUND_DERIVED_DATA:-}" ]] && return
 
+    # Phase 3: removing DerivedData under a running build breaks that build.
+    if cache_owner_running xcode_derived; then
+        print_skip "Xcode is running; DerivedData is left alone: ${FOUND_DERIVED_DATA}"
+        record_skipped_item "Xcode DerivedData in use (Xcode or xcodebuild running)"
+        mark_category_outcome "xcode-derived" in-use
+        return 0
+    fi
+
     local size_h
     size_h=$(path_size_human "$FOUND_DERIVED_DATA")
 
@@ -656,7 +664,7 @@ clean_dev_caches() {
     [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
 
     local -a cleanable_items=()
-    local item key path
+    local item key path _ledger
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         key="${item%%:*}"
         path="${item#*:}"
@@ -738,7 +746,13 @@ clean_dev_caches() {
                 # No vendor command owns ~/.npm/_npx — npm cache clean skips it
                 # entirely. It is a plain re-downloadable cache, so it goes
                 # through safe_remove (quarantine by default, restorable).
-                safe_remove "$path"
+                if cache_owner_running npx_cache; then
+                    print_skip "In use, not removed (npx_cache): ${path}"
+                    record_skipped_item "Cache in use by a running tool (npx_cache): ${path}"
+                    mark_category_outcome "npx" in-use
+                else
+                    safe_remove "$path"
+                fi
                 ;;
             yarn_cache)
                 _clean_dev_native_or_fallback \
@@ -815,6 +829,13 @@ clean_dev_caches() {
                     "Ruby gems" "Ruby gems cleanup complete." "$path"
                 ;;
             *)
+                # Phase 3: never pull a cache out from under a running build.
+                if cache_owner_running "$key"; then
+                    print_skip "In use, not removed (${key}): ${path}"
+                    record_skipped_item "Cache in use by a running tool (${key}): ${path}"
+                    _ledger="$(cache_ledger_key "$key")" && mark_category_outcome "$_ledger" in-use
+                    continue
+                fi
                 [[ -d "$path" || -f "$path" ]] && safe_remove "$path"
                 ;;
         esac

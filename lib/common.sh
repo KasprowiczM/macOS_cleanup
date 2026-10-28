@@ -1178,6 +1178,64 @@ cleanup_journal_event() {
 # config that moved the cache after the plan was written.
 # ---------------------------------------------------------------------------
 
+# Phase 3: _proc_running <pgrep-args...> — true when a matching process runs,
+# or when pgrep cannot tell (rc >= 2): unknown counts as running.
+_proc_running() {
+    local rc=0
+    pgrep "$@" >/dev/null 2>&1 || rc=$?
+    (( rc != 1 ))
+}
+
+# cache_owner_running <dev-item-key> — true while a tool that writes this
+# cache is running. Removing a cache under a live build breaks that build.
+# Patterns follow what macOS actually shows: npm renames itself "npm exec …",
+# so live npx users are found by their ~/.npm/_npx/ command line; pnpm and
+# composer usually run as node/php scripts.
+cache_owner_running() {
+    case "${1:-}" in
+        cargo_cache)      _proc_running -x cargo || _proc_running -x rustc ;;
+        gradle_cache)     _proc_running -f org.gradle ;;
+        cocoapods_cache)  _proc_running -f bin/pod ;;
+        swift_pm_cache)   _proc_running -x swift-build || _proc_running -x swift-package \
+                              || _proc_running -x xcodebuild || _proc_running -x Xcode ;;
+        bundler_cache)    _proc_running -f bin/bundle ;;
+        composer_cache)   _proc_running -x composer || _proc_running -f bin/composer || _proc_running -f composer.phar ;;
+        npx_cache)        _proc_running -f '\.npm/_npx/' || _proc_running -f 'npm exec' || _proc_running -x npx ;;
+        pnpm_stale_store) _proc_running -x pnpm || _proc_running -f '(^|/)pnpm(\.c?js)?( |$)' ;;
+        xcode_derived)    _proc_running -x Xcode || _proc_running -x xcodebuild ;;
+        *) return 1 ;;
+    esac
+}
+
+# cache_owner_key_for_path <normalized-path> — the dev-item key of a cache
+# path, so plan apply can run the same in-use check as the cleaners.
+cache_owner_key_for_path() {
+    case "${1:-}" in
+        */.npm/_npx|*/.npm/_npx/*)                                  echo npx_cache ;;
+        */Library/Developer/Xcode/DerivedData|*/Library/Developer/Xcode/DerivedData/*) echo xcode_derived ;;
+        */.gradle|*/.gradle/*)                                      echo gradle_cache ;;
+        */.cargo|*/.cargo/*)                                        echo cargo_cache ;;
+        */Library/Caches/CocoaPods|*/Library/Caches/CocoaPods/*)    echo cocoapods_cache ;;
+        */org.swift.swiftpm|*/org.swift.swiftpm/*)                  echo swift_pm_cache ;;
+        */.bundle|*/.bundle/*)                                      echo bundler_cache ;;
+        */Library/Caches/composer|*/Library/Caches/composer/*|*/.composer|*/.composer/*) echo composer_cache ;;
+        */pnpm/store|*/pnpm/store/*|*/.pnpm-store|*/.pnpm-store/*)  echo pnpm_stale_store ;;
+        *) return 1 ;;
+    esac
+}
+
+# cache_ledger_key <dev-item-key> — the CATEGORY_REGISTRY key for outcomes.
+cache_ledger_key() {
+    case "${1:-}" in
+        npx_cache) echo npx ;;            gradle_cache) echo gradle ;;
+        cargo_cache) echo cargo ;;        cocoapods_cache) echo cocoapods ;;
+        swift_pm_cache) echo swift-pm ;;  bundler_cache) echo bundler ;;
+        composer_cache) echo composer ;;  pnpm_stale_store) echo pnpm-stale ;;
+        xcode_derived) echo xcode-derived ;;
+        *) return 1 ;;
+    esac
+}
+
 # native_tool_for_command <command> — the tool an allowlisted command uses.
 native_tool_for_command() {
     case "${1:-}" in
@@ -1298,6 +1356,7 @@ CLEANUP_CATEGORY_OUTCOMES=""
 #   partial:         the paths under HOME were processed, the rest need --permanent
 #   backup-running:  Time Machine was backing up, so no snapshot was deleted
 #   kept-newest:     the only local snapshot is the newest one, which is kept
+#   in-use:          the tool that writes this cache was running
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
     [[ -n "$key" && -n "$outcome" ]] || return 0

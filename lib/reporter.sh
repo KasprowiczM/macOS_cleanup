@@ -113,6 +113,7 @@ EOF
             skipped) status_str="Skipped by you";      action_str="Still on disk — re-run to process" ;;
             needs-permanent) status_str="Not processed";  action_str="Outside HOME: quarantine mode skips it — needs --permanent" ;;
             backup-running) status_str="Not processed"; action_str="Time Machine was backing up — re-run later" ;;
+            in-use)  status_str="Not processed";  action_str="In use by a running tool — close it and re-run" ;;
             kept-newest) status_str="Kept";           action_str="Only the newest local snapshot exists; it is kept" ;;
             partial) status_str="Partly processed"; action_str="Items under HOME done; the rest is outside HOME — needs --permanent" ;;
         esac

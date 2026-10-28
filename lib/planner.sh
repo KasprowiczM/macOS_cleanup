@@ -791,7 +791,7 @@ PLANPARSE
 
     local id_b64 risk action path_b64 command_b64 bytes category_b64
     local id path command category
-    local explicit_risk
+    local explicit_risk owner_key
 
     while IFS=$'\x1f' read -u3 -r id_b64 risk action path_b64 command_b64 bytes category_b64; do
         id="$(base64_decode_string "$id_b64")"
@@ -834,6 +834,13 @@ PLANPARSE
                     if _plan_path_blocked_or_escalated "$path" "$risk"; then
                         print_warn "Plan ${id}: risk escalated (${risk}->${explicit_risk:-protected}) or path protected — skipping."
                         cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "risk escalated since plan: ${risk}->${explicit_risk:-protected}" "$category"
+                        continue
+                    fi
+                    # Phase 3: same in-use check as the interactive cleaners.
+                    owner_key="$(cache_owner_key_for_path "$path")" || owner_key=""
+                    if [[ -n "$owner_key" ]] && cache_owner_running "$owner_key"; then
+                        print_skip "Plan ${id}: in use by a running tool (${owner_key}) — skipping."
+                        cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "in use: ${owner_key}" "$category"
                         continue
                     fi
                     if ! safe_remove "$path"; then
