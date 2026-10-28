@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3).
+
+### Fixed
+
+- **P0-1: an explicit `--dry-run` is authoritative.** Flag order no longer matters. `--dry-run` combined with `--interactive` or `--auto-safe` runs analysis only. With `apply --from-plan` it previews. With `--purge-quarantine … --apply` it previews the purge. With `--restore` or `--prune-artifacts` it is refused with exit 2, since those modes have no preview. Before this fix, `--dry-run --purge-quarantine all --apply` deleted permanently. A new `is_dry_run` check also stops `safe_remove`, `direct_remove`, artifact pruning, restore, purge, and cleaner/planner native commands.
+- **P0-2: the protected-path guard is case-insensitive.** On case-insensitive APFS, `~/Library/mail`, `~/documents`, or `~/.SSH` no longer pass as unprotected. Repeated slashes collapse correctly on bash 3.2. A path that cannot be normalized (`/`, `//`, `/.`) counts as protected. `normalize_path` no longer returns success with an empty path.
+- **P0-3: runtime config fails closed.** `REMOVE_MODE` must be exactly `quarantine` or `permanent`; before, a typo meant permanent deletion. `QUARANTINE_ROOT` must be an absolute `…/quarantine` path with no `.` or `..` segments; before, `QUARANTINE_ROOT=$HOME` plus a purge removed every directory under HOME. Both values are checked at startup (exit 2), and again inside `safe_remove` and `purge_quarantine`.
+
+### Added
+
+- NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, and `tests/test_runtime_config_validation.sh`.
+
 ## [3.0.6] — 2026-09-07
 
 Safety release for the 2026-09-06 ultra-review (H1–H10 and MEDIUM). Analyze, list, plan, and dry-run stay non-destructive; apply and restore fail closed; installer and protected-path docs match the tree.
