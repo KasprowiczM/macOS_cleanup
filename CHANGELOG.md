@@ -39,6 +39,7 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 
 ### Changed
 
+- **P2: the exit-code table matches the code.** `docs/agents/security.md` listed a security-violation exit 99 that is never emitted, and it omitted 3 (unsupported macOS) and 130 (interrupted).
 - **P2: historical prompts and reviews moved to `docs/history/`.** 22 dated prompts, reviews, release notes and progress logs left the repository root. `docs/history/README.md` says they are kept for reference only.
 
 ### Added

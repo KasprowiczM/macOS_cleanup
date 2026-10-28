@@ -105,9 +105,12 @@ Browser guidelines:
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error |
-| 2 | Bad CLI argument |
-| 99 | Security violation |
+| 1 | General error, a failed or refused operation, or another run holds the cleanup lock |
+| 2 | Bad CLI argument, invalid configuration (`REMOVE_MODE`, `QUARANTINE_ROOT`), or a plan, manifest or purge target that fails verification |
+| 3 | Unsupported macOS version (older than 10.15) |
+| 130 | Interrupted (SIGINT/SIGTERM) |
+
+There is no separate "security violation" code: a blocked target is skipped and journalled (`plan_apply_blocked`, `skipped_*`), and fail-closed checks exit 1 or 2.
 
 ## Secrets and .env
 
