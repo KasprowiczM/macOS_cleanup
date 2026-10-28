@@ -164,6 +164,43 @@ is_dry_run() {
     [[ "${DRY_RUN:-0}" == "1" || "${EXPLICIT_DRY_RUN:-0}" == "1" ]]
 }
 
+# P0-3: REMOVE_MODE must be exactly quarantine|permanent. A typo must never
+# fall through to permanent deletion.
+validate_remove_mode() {
+    case "${REMOVE_MODE:-}" in
+        quarantine|permanent) return 0 ;;
+    esac
+    print_error "Invalid REMOVE_MODE '${REMOVE_MODE:-}': expected quarantine or permanent."
+    return 1
+}
+
+# P0-3: QUARANTINE_ROOT must be an absolute ".../quarantine" path without . or
+# .. segments. Purge removes the root's immediate children, so a root such as
+# $HOME would turn a purge into rm -rf of every home directory.
+validate_quarantine_root() {
+    local root="${QUARANTINE_ROOT:-}"
+
+    case "$root" in
+        /*) ;;
+        *)
+            print_error "Invalid QUARANTINE_ROOT '${root}': must be an absolute path."
+            return 1
+            ;;
+    esac
+    case "${root}/" in
+        */./*|*/../*)
+            print_error "Invalid QUARANTINE_ROOT '${root}': must not contain . or .. segments."
+            return 1
+            ;;
+    esac
+    root="${root%/}"
+    if [[ "${root##*/}" != "quarantine" ]]; then
+        print_error "Invalid QUARANTINE_ROOT '${QUARANTINE_ROOT}': last component must be 'quarantine'."
+        return 1
+    fi
+    return 0
+}
+
 # Prune run artifacts older than $1 days (default 30).
 #
 # Call only from the explicit --prune-artifacts CLI path. Read-only modes
@@ -1714,6 +1751,9 @@ purge_quarantine() {
     local retention_days="${3:-$QUARANTINE_RETENTION_DAYS}"
     local run_dir failures=0
 
+    # P0-3: never purge children of a root that is not a quarantine directory.
+    validate_quarantine_root || return 2
+
     if [[ -z "$requested" ]]; then
         print_error "Missing quarantine purge selector."
         return 2
@@ -1796,7 +1836,14 @@ safe_remove() {
         TOTAL_WOULD_FREE_BYTES=$(( TOTAL_WOULD_FREE_BYTES + size ))
         cleanup_journal_event "would_remove" "$normalized_target" "" "$size" "planned" ""
     else
-        if [[ "${REMOVE_MODE:-permanent}" == "quarantine" ]]; then
+        # P0-3: fail closed on an unknown/unset mode instead of deleting.
+        if ! validate_remove_mode; then
+            record_skipped_item "Invalid REMOVE_MODE (fail-closed): ${normalized_target}"
+            cleanup_journal_event "remove_mode_invalid" "$normalized_target" "" "$size" "blocked" "fail-closed (P0-3)"
+            return 1
+        fi
+
+        if [[ "$REMOVE_MODE" == "quarantine" ]]; then
             if is_user_space_path "$normalized_target"; then
                 if quarantine_remove "$normalized_target" "$size"; then
                     return 0

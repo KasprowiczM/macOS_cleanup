@@ -849,6 +849,10 @@ main() {
 
     enforce_explicit_dry_run
 
+    # P0-3: fail closed on misconfiguration before any mode runs.
+    validate_remove_mode || exit 2
+    validate_quarantine_root || exit 2
+
     preflight_checks
 
     if [[ "$MODE" == "prune-artifacts" ]]; then
