@@ -259,9 +259,8 @@ parse_args() {
                 shift
                 ;;
             --dry-run)
-                if [[ "$MODE" != "apply-plan" ]]; then
-                    MODE="dry-run"
-                fi
+                # Leave MODE alone: enforce_explicit_dry_run maps it to its
+                # preview form after parsing, so flag order cannot matter.
                 DRY_RUN=1
                 EXPLICIT_DRY_RUN=1
                 shift
@@ -803,6 +802,41 @@ run_apply_plan_phase() {
 }
 
 # ---------------------------------------------------------------------------
+# enforce_explicit_dry_run — P0-1: an explicit --dry-run (also analyze/plan) is
+# a hard no-delete request whatever the flag order. Mutating modes are mapped to
+# their preview form; modes without one are refused.
+# ---------------------------------------------------------------------------
+enforce_explicit_dry_run() {
+    if (( EXPLICIT_DRY_RUN != 1 )); then
+        # Purge/prune only mutate when explicitly requested; is_dry_run must
+        # not block them then.
+        case "$MODE" in
+            purge-quarantine) (( APPLY_PURGE == 1 )) && DRY_RUN=0 ;;
+            prune-artifacts)  DRY_RUN=0 ;;
+        esac
+        return 0
+    fi
+
+    DRY_RUN=1
+    case "$MODE" in
+        interactive|auto-safe)
+            print_warn "--dry-run overrides --${MODE}: analysis only, nothing is removed."
+            MODE="dry-run"
+            ;;
+        purge-quarantine)
+            if (( APPLY_PURGE == 1 )); then
+                print_warn "--dry-run overrides --apply: purge preview only, nothing is removed."
+            fi
+            APPLY_PURGE=0
+            ;;
+        restore|prune-artifacts)
+            print_error "--dry-run cannot be combined with --${MODE}: it has no preview form."
+            exit 2
+            ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------
 # main — entry point
 # ---------------------------------------------------------------------------
 main() {
@@ -812,6 +846,8 @@ main() {
     if (( SHOW_HELP )); then    show_help;    exit 0; fi
     if (( SHOW_VERSION )); then show_version; exit 0; fi
     if (( SHOW_EXPLAIN )); then explain_categories; exit 0; fi
+
+    enforce_explicit_dry_run
 
     preflight_checks
 

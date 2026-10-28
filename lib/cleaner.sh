@@ -501,7 +501,7 @@ clean_xcode_simulators() {
     fi
 
     print_section "Cleaning: iOS Simulators"
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: xcrun simctl delete unavailable"
         record_native_command_event "xcrun simctl delete unavailable" "planned" "$(catbytes_get "simulators")" "dry-run"
     else
@@ -549,7 +549,7 @@ _clean_dev_native_or_fallback() {
     local size_h
     size_h=$(path_size_human "$path")
 
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: ${cmd}  (${size_h})"
         record_native_command_event "$cmd" "planned" "$(path_size_bytes "$path")" "dry-run"
     else
@@ -677,7 +677,7 @@ clean_dev_caches() {
                     "pnpm store" "$(t "pnpm_store_trimmed")" "$path"
                 ;;
             brew_cache|brew_cleanup)
-                if [[ "$DRY_RUN" == "1" ]]; then
+                if is_dry_run; then
                     if [[ "$path" == "__brew__" ]]; then
                         print_dry "Would run: brew cleanup --prune=all  ($(bytes_to_human "$(catbytes_get "brew-stale")"))"
                     else
@@ -708,7 +708,7 @@ clean_dev_caches() {
                 fi
                 ;;
             pip_cache)
-                if [[ "$DRY_RUN" == "1" ]]; then
+                if is_dry_run; then
                     print_dry "Would run: pip cache purge  ($(path_size_human "$path"))"
                     record_native_command_event "pip cache purge" "planned" "$(catbytes_get "pip")" "dry-run"
                 else
@@ -775,7 +775,7 @@ clean_docker() {
     fi
 
     print_section "Cleaning: Docker (system prune)"
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: docker system prune -f"
         record_native_command_event "docker system prune -f" "planned" "$(catbytes_get "docker")" "dry-run"
     else
@@ -825,7 +825,7 @@ clean_time_machine_snapshots() {
             continue
         fi
 
-        if [[ "$DRY_RUN" == "1" ]]; then
+        if is_dry_run; then
             print_dry "Would run: tmutil deletelocalsnapshots $snap_date"
             record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "planned" 0 "dry-run"
         else

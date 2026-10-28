@@ -423,7 +423,7 @@ execute_plan_native_command() {
         before="$(path_size_bytes "$path")"
     fi
 
-    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: ${command}"
         record_native_command_event "$command" "planned" "$bytes" "plan dry-run"
         return 0

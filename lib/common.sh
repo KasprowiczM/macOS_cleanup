@@ -158,6 +158,12 @@ _rotate_artifact_file() {
     [[ ! -e "$candidate" ]]
 }
 
+# P0-1: true when this run must not mutate anything. An explicit --dry-run
+# (EXPLICIT_DRY_RUN=1) wins even if a later code path reset DRY_RUN=0.
+is_dry_run() {
+    [[ "${DRY_RUN:-0}" == "1" || "${EXPLICIT_DRY_RUN:-0}" == "1" ]]
+}
+
 # Prune run artifacts older than $1 days (default 30).
 #
 # Call only from the explicit --prune-artifacts CLI path. Read-only modes
@@ -171,6 +177,12 @@ rotate_old_artifacts() {
     local reports_dir="${REPORTS_DIR:-}"
     local removed=0
     local candidate
+
+    # P0-1: never prune during a dry run.
+    if is_dry_run; then
+        echo 0
+        return 0
+    fi
 
     case "$max_days" in
         ''|*[!0-9]*) return 0 ;;
@@ -1397,6 +1409,14 @@ direct_remove() {
     local sudo_required="${3:-0}"
     local action="${4:-deleted}"
 
+    # P0-1: last line of defense — no removal while any dry-run is in effect.
+    if is_dry_run; then
+        print_warn "Dry run: refusing to remove ${target}"
+        record_skipped_item "Dry-run removal refused: ${target}"
+        cleanup_journal_event "${action}_blocked" "$target" "" "$size" "blocked" "dry-run (P0-1)"
+        return 1
+    fi
+
     # P0-1b: privileged deletion is disabled
     if [[ "$sudo_required" == "1" ]]; then
         print_warn "Privileged deletion disabled (P0-1b): ${target}"
@@ -1458,6 +1478,12 @@ resolve_restore_manifest() {
 restore_quarantine_manifest() {
     local requested="$1"
     local manifest
+
+    # P0-1: restore moves files; it has no preview form.
+    if is_dry_run; then
+        print_error "Restore refused: a dry run is in effect."
+        return 2
+    fi
 
     manifest="$(resolve_restore_manifest "$requested" 2>/dev/null || true)"
     if [[ -z "$manifest" ]]; then
@@ -1670,6 +1696,8 @@ purge_one_quarantine_run() {
     fi
 
     size="$(path_size_bytes "$normalized")"
+    # P0-1: a dry run downgrades --apply to a preview.
+    is_dry_run && apply=0
     if [[ "$apply" != "1" ]]; then
         print_dry "Would purge quarantine run: ${normalized}  ($(bytes_to_human "$size"))"
         TOTAL_WOULD_FREE_BYTES=$(( TOTAL_WOULD_FREE_BYTES + size ))
@@ -1732,8 +1760,10 @@ purge_quarantine() {
 
 safe_remove() {
     local target="$1"
-    local dry="${DRY_RUN:-0}"
+    local dry=0
     local normalized_target
+
+    is_dry_run && dry=1
 
     normalized_target="$(normalize_path "$target")" || normalized_target=""
     if [[ -z "$normalized_target" ]]; then
