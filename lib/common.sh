@@ -341,15 +341,16 @@ normalize_path() {
     local top=0 is_abs=0 i seg
 
     path="$(_path_expand_home_and_vars "$input")"
+
+    # P0-2: collapse consecutive slashes with tr. The global parameter-
+    # expansion form ${path//\/\//\/} mis-handles on bash 3.2 (it can leave a
+    # literal backslash), which let "//"-separated protected paths bypass the
+    # guard. tr -s is deterministic across bash 3.2 and 5.
+    path="$(printf '%s' "$path" | tr -s '/')"
+    # Root ("/", "//") strips to empty and fails; callers fall back to the raw
+    # path, which the broad-root guards then protect.
     path="${path%/}"
     [[ -z "$path" ]] && return 1
-
-    # Collapse consecutive slashes
-    while :; do
-        local collapsed="${path//\/\//\/}"
-        [[ "$collapsed" == "$path" ]] && break
-        path="$collapsed"
-    done
 
 
 
@@ -369,7 +370,11 @@ normalize_path() {
             base="$path"
         fi
         dir="$(cd -P "$dir" 2>/dev/null && pwd -P)"
-        if [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
+        if [[ "$base" == ".." ]]; then
+            # A trailing ".." is never a symlink leaf; resolve it so
+            # "~/Library/Caches/.." matches as ~/Library.
+            norm="$(cd -P "$path" 2>/dev/null && pwd -P)"
+        elif [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
             if [[ "$dir" == "/" ]]; then
                 norm="/$base"
             else
@@ -378,6 +383,9 @@ normalize_path() {
         else
             norm="$dir"
         fi
+        # Fail closed: "/." resolves to an empty dir; never report success
+        # with an empty path.
+        [[ -z "$norm" ]] && return 1
         echo "$norm"
         return 0
     fi
@@ -434,76 +442,92 @@ normalize_path() {
 }
 
 # Returns 0 (true) if the given path matches any entry in NEVER_TOUCH_PATHS.
+#
+# P0-2: all pattern matching runs under `shopt -s nocasematch` inside a
+# subshell so the guard is case-insensitive. macOS APFS is case-insensitive by
+# default, so "$HOME/Library/mail" is the same object as "$HOME/Library/Mail";
+# a case-sensitive compare let a case variant bypass the guard. Scoping
+# nocasematch to a subshell keeps it out of the rest of the script and adds no
+# per-entry forks (preserving the PF3 pre-normalized array). Case folding can
+# only ever protect MORE paths, never fewer — over-protection is the safe
+# direction for a deletion guard.
 is_protected_path() {
     local candidate="$1"
     local normalized_candidate
 
-    normalized_candidate="$(normalize_path "$candidate" || echo "$candidate")"
+    # Fail closed: a path that cannot be normalized ("", "/", "//", "/.") is
+    # treated as protected.
+    normalized_candidate="$(normalize_path "$candidate")" || return 0
+    [[ -n "$normalized_candidate" ]] || return 0
 
-    # Fail closed for broad roots. Cleaners should pass leaf candidates, never
-    # whole user/system roots.
-    case "$normalized_candidate" in
-        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
-            return 0 ;;
-        /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
-            return 0 ;;
-        "$HOME"|"$HOME/Library"|"$HOME/Library/Caches"|"$HOME/.Trash"|"$HOME/Library/Application Support")
-            return 0 ;;
-        "$HOME/Library/Preferences"|"$HOME/Library/Preferences/"*)
-            return 0 ;;
-        "$HOME/Library/Containers"|"$HOME/Library/Containers/"*)
-            return 0 ;;
-        "$HOME/Library/Group Containers"|"$HOME/Library/Group Containers/"*)
-            return 0 ;;
-        "$HOME/Library/Saved Application State"|"$HOME/Library/Saved Application State/"*)
-            return 0 ;;
-    esac
+    (
+        shopt -s nocasematch
 
-    # /System/* and other users are never touched.
-    # /Library is protected by default, with targeted cache/log leaf cleanup.
-    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
-          "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
-        return 0
-    fi
-    if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
-        if [[ "$normalized_candidate" != "$HOME/"* ]]; then
-            return 0
-        fi
-    fi
-    if [[ "$normalized_candidate" == "/Library" || "$normalized_candidate" == "/Library/"* ]]; then
+        # Fail closed for broad roots. Cleaners should pass leaf candidates,
+        # never whole user/system roots.
         case "$normalized_candidate" in
-            /Library/Caches/*|/Library/Logs/*)
-                :
-                ;;
-            *)
-                return 0
-                ;;
+            /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
+                exit 0 ;;
+            /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
+                exit 0 ;;
+            "$HOME"|"$HOME/Library"|"$HOME/Library/Caches"|"$HOME/.Trash"|"$HOME/Library/Application Support")
+                exit 0 ;;
+            "$HOME/Library/Preferences"|"$HOME/Library/Preferences/"*)
+                exit 0 ;;
+            "$HOME/Library/Containers"|"$HOME/Library/Containers/"*)
+                exit 0 ;;
+            "$HOME/Library/Group Containers"|"$HOME/Library/Group Containers/"*)
+                exit 0 ;;
+            "$HOME/Library/Saved Application State"|"$HOME/Library/Saved Application State/"*)
+                exit 0 ;;
         esac
-    fi
 
-    # PF3: use pre-normalized array when available (after preflight);
-    # fall back to per-call normalization for callers that skip preflight.
-    if (( ${#_NEVER_TOUCH_NORMALIZED[@]} > 0 )); then
-        local normalized_protected
-        for normalized_protected in "${_NEVER_TOUCH_NORMALIZED[@]}"; do
-            if [[ "$normalized_candidate" == "$normalized_protected" || \
-                  "$normalized_candidate" == "$normalized_protected"/* || \
-                  "$normalized_protected" == "$normalized_candidate"/* ]]; then
-                return 0  # protected
+        # /System/* and other users are never touched.
+        # /Library is protected by default, with targeted cache/log leaf cleanup.
+        if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
+              "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
+            exit 0
+        fi
+        if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
+            if [[ "$normalized_candidate" != "$HOME/"* ]]; then
+                exit 0
             fi
-        done
-    elif (( ${#NEVER_TOUCH_PATHS[@]} > 0 )); then
-        for protected in "${NEVER_TOUCH_PATHS[@]}"; do
+        fi
+        if [[ "$normalized_candidate" == "/Library" || "$normalized_candidate" == "/Library/"* ]]; then
+            case "$normalized_candidate" in
+                /Library/Caches/*|/Library/Logs/*)
+                    :
+                    ;;
+                *)
+                    exit 0
+                    ;;
+            esac
+        fi
+
+        # PF3: use pre-normalized array when available (after preflight);
+        # fall back to per-call normalization for callers that skip preflight.
+        if (( ${#_NEVER_TOUCH_NORMALIZED[@]} > 0 )); then
             local normalized_protected
-            normalized_protected="$(normalize_path "$protected" || echo "$protected")"
-            if [[ "$normalized_candidate" == "$normalized_protected" || \
-                  "$normalized_candidate" == "$normalized_protected"/* || \
-                  "$normalized_protected" == "$normalized_candidate"/* ]]; then
-                return 0  # protected
-            fi
-        done
-    fi
-    return 1  # not protected
+            for normalized_protected in "${_NEVER_TOUCH_NORMALIZED[@]}"; do
+                if [[ "$normalized_candidate" == "$normalized_protected" || \
+                      "$normalized_candidate" == "$normalized_protected"/* || \
+                      "$normalized_protected" == "$normalized_candidate"/* ]]; then
+                    exit 0  # protected
+                fi
+            done
+        elif (( ${#NEVER_TOUCH_PATHS[@]} > 0 )); then
+            local protected normalized_protected
+            for protected in "${NEVER_TOUCH_PATHS[@]}"; do
+                normalized_protected="$(normalize_path "$protected" || echo "$protected")"
+                if [[ "$normalized_candidate" == "$normalized_protected" || \
+                      "$normalized_candidate" == "$normalized_protected"/* || \
+                      "$normalized_protected" == "$normalized_candidate"/* ]]; then
+                    exit 0  # protected
+                fi
+            done
+        fi
+        exit 1  # not protected
+    )
 }
 
 path_contains_protected_descendant() {
@@ -1162,9 +1186,19 @@ path_is_within() {
     [[ "$normalized_candidate" == "$normalized_root" || "$normalized_candidate" == "$normalized_root/"* ]]
 }
 
+# Deny-side check (safe_remove skips quarantine data), so it ignores case like
+# is_protected_path. path_is_within stays case-sensitive: it is also an
+# allowlist (artifact rotation, restore source).
 is_quarantine_path() {
     [[ -n "${QUARANTINE_ROOT:-}" ]] || return 1
-    path_is_within "$1" "$QUARANTINE_ROOT"
+    local candidate root
+    candidate="$(normalize_path "$1" || echo "$1")"
+    root="$(normalize_path "$QUARANTINE_ROOT" || echo "$QUARANTINE_ROOT")"
+    [[ -n "$candidate" && -n "$root" ]] || return 1
+    (
+        shopt -s nocasematch
+        [[ "$candidate" == "$root" || "$candidate" == "$root/"* ]]
+    )
 }
 
 # Exclusive apply/restore/purge lock via mkdir(2). Not TOCTOU-proof.
