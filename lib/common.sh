@@ -1246,6 +1246,8 @@ CLEANUP_CATEGORY_OUTCOMES=""
 # mark_category_outcome <category-key> <cleaned|skipped|report-only|needs-permanent|partial>
 #   needs-permanent: quarantine mode cannot move these paths (outside HOME)
 #   partial:         the paths under HOME were processed, the rest need --permanent
+#   backup-running:  Time Machine was backing up, so no snapshot was deleted
+#   kept-newest:     the only local snapshot is the newest one, which is kept
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
     [[ -n "$key" && -n "$outcome" ]] || return 0

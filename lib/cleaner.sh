@@ -871,12 +871,60 @@ clean_docker() {
 # ---------------------------------------------------------------------------
 # clean_time_machine_snapshots
 # ---------------------------------------------------------------------------
+# Phase 3: tm_snapshot_date <name> — YYYY-MM-DD-HHMMSS from a snapshot name.
+tm_snapshot_date() {
+    printf '%s\n' "${1:-}" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | head -1
+}
+
+# Phase 3: tm_backup_running — true unless `tmutil status` positively reports
+# `Running = 0;`. An unreadable status counts as running: snapshots are never
+# deleted under a backup in progress.
+tm_backup_running() {
+    local status
+    status="$(tmutil status 2>/dev/null)" || return 0
+    if printf '%s\n' "$status" | grep -Eq '^[[:space:]]*Running = 0;'; then
+        return 1
+    fi
+    return 0
+}
+
 clean_time_machine_snapshots() {
     [[ ${#FOUND_TM_SNAPSHOTS[@]} -eq 0 ]] && return
 
-    local count=${#FOUND_TM_SNAPSHOTS[@]}
+    # Phase 3: the newest local snapshot is always kept as the most recent
+    # local restore point, and nothing is deleted while Time Machine is
+    # backing up. (The pre-update com.apple.os.update-* snapshot is never
+    # listed: the analyzer keeps com.apple.TimeMachine.* only.)
+    local snap snap_d newest_date=""
+    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+        snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
+        [[ -n "$snap_d" && "$snap_d" > "$newest_date" ]] && newest_date="$snap_d"
+    done
+    # One entry per date: deletelocalsnapshots works by date.
+    local -a deletable=()
+    local seen_dates=" "
+    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+        snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
+        [[ -n "$snap_d" && "$snap_d" != "$newest_date" ]] || continue
+        case "$seen_dates" in *" ${snap_d} "*) continue ;; esac
+        seen_dates="${seen_dates}${snap_d} "
+        deletable+=("$snap")
+    done
+    if (( ${#deletable[@]} == 0 )); then
+        print_info "Local Time Machine snapshots: only the newest exists; it is kept."
+        mark_category_outcome "time-machine" kept-newest
+        return 0
+    fi
+    if tm_backup_running; then
+        print_warn "Time Machine is backing up (or its status is unknown); local snapshots are left alone."
+        record_skipped_item "Local Time Machine snapshots: backup in progress or status unknown"
+        mark_category_outcome "time-machine" backup-running
+        return 0
+    fi
+
+    local count=${#deletable[@]}
     local snapshots_str
-    snapshots_str=$(printf '%s\n' "${FOUND_TM_SNAPSHOTS[@]}")
+    snapshots_str=$(printf '%s\n' "${deletable[@]}")
 
     if ! confirm_time_machine_snapshots "$snapshots_str" "${count} snapshots"; then
         print_skip "$(t "skipped_category"): local Time Machine snapshots"
@@ -884,11 +932,18 @@ clean_time_machine_snapshots() {
         mark_category_outcome "time-machine" skipped
         return
     fi
+    # The prompt can wait for minutes; a backup may have started meanwhile.
+    if tm_backup_running; then
+        print_warn "Time Machine started backing up; local snapshots are left alone."
+        record_skipped_item "Local Time Machine snapshots: backup started during confirmation"
+        mark_category_outcome "time-machine" backup-running
+        return 0
+    fi
     mark_category_outcome "time-machine" cleaned
 
-    print_section "Cleaning: local Time Machine snapshots"
+    print_section "Cleaning: local Time Machine snapshots (newest kept: ${newest_date})"
 
-    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+    for snap in "${deletable[@]}"; do
         [[ -z "$snap" ]] && continue
         # Extract full datetime from snapshot name: com.apple.TimeMachine.2026-04-17-131903.local
         local snap_date=""
