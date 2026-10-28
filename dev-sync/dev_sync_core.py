@@ -9,6 +9,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Sequence
@@ -101,6 +102,7 @@ DEFAULT_INCLUDE_ALWAYS = [
 
 HARD_EXCLUDE_PATTERNS = [
     ".git/",
+    ".git",
     MANIFEST_FILENAME,
     CLEANUP_PLAN_GLOB,
     f"{LOG_DIRNAME}/",
@@ -120,6 +122,7 @@ HARD_EXCLUDE_PATTERNS = [
     ".claude/settings.local.json",
     ".gemini/settings.local.json",
 ]
+HARD_EXCLUDE_PATTERNS_FOLDED = [pattern.casefold() for pattern in HARD_EXCLUDE_PATTERNS]
 
 
 class DevSyncError(RuntimeError):
@@ -350,7 +353,9 @@ def should_keep_path(
     rel = normalize_relpath(relpath)
     if not rel:
         return False
-    if matches_any(rel, HARD_EXCLUDE_PATTERNS, is_dir=is_dir):
+    # P1-3: APFS is case-insensitive, so ".GIT/hooks" is ".git/hooks". The
+    # hard-exclude deny list therefore ignores case.
+    if matches_any(rel.casefold(), HARD_EXCLUDE_PATTERNS_FOLDED, is_dir=is_dir):
         return False
     if matches_any(rel, include_always, is_dir=is_dir):
         return True
@@ -365,8 +370,15 @@ def should_include_candidate(relative_path: str, config: DevSyncConfig) -> bool:
     )
 
 
+def fold_relpath(relpath: str) -> str:
+    """APFS identity key: case-insensitive and Unicode-normalization-insensitive."""
+    return unicodedata.normalize("NFD", unicodedata.normalize("NFD", relpath).casefold())
+
+
 def approved_overlay_relpaths(provider_files: Iterable[str], tracked: Iterable[str]) -> list[str]:
-    tracked_set = {normalize_relpath(item) for item in tracked if normalize_relpath(item)}
+    # P1-3: compare APFS-folded; "readme.MD" or an NFD "Café" overwrites the
+    # tracked file on APFS.
+    tracked_set = {fold_relpath(normalize_relpath(item)) for item in tracked if normalize_relpath(item)}
     approved: list[str] = []
     seen: set[str] = set()
     for raw in provider_files:
@@ -374,11 +386,12 @@ def approved_overlay_relpaths(provider_files: Iterable[str], tracked: Iterable[s
         if not rel:
             continue
         rel = safe_relpath(rel)
-        if rel in seen or rel in tracked_set:
+        folded = fold_relpath(rel)
+        if folded in seen or folded in tracked_set:
             continue
-        if any(tracked_rel == rel or tracked_rel.startswith(rel + "/") for tracked_rel in tracked_set):
+        if any(tracked_rel.startswith(folded + "/") for tracked_rel in tracked_set):
             continue
-        seen.add(rel)
+        seen.add(folded)
         approved.append(rel)
     return sorted(approved)
 
@@ -925,11 +938,14 @@ class RCloneProvider(CloudProvider):
         approved = sorted({safe_relpath(relpath) for relpath in (files or [])})
         if not approved:
             return [], "rclone"
+        validate_no_newline_paths(approved)
+        validate_transfer_names(approved)
+        validate_no_symlink_dest_ancestors(dest_root, approved)
         remote_root = self._remote_root()
         if dry_run:
             return approved, "rclone"
         run_command(
-            ["rclone", "copy", remote_root, str(dest_root), "--checksum", "--files-from", "-"],
+            ["rclone", "copy", remote_root, str(dest_root), "--checksum", "--files-from-raw", "-"],
             cwd=dest_root,
             input_text="".join(f"{relpath}\n" for relpath in approved),
         )
@@ -949,6 +965,19 @@ def validate_no_newline_paths(paths: Iterable[str]) -> None:
     bad = [path for path in paths if "\n" in path or "\r" in path]
     if bad:
         raise DevSyncError("Paths containing newlines are unsupported: " + ", ".join(sorted(bad)))
+
+
+def validate_transfer_names(relpaths: Iterable[str]) -> None:
+    """Reject names a transfer list could reinterpret (P1-3).
+
+    Leading/trailing whitespace or control characters in a segment would let
+    the approved name and the transferred name differ (rclone `--files-from`
+    strips whitespace, so " README.md" copied the tracked README.md).
+    """
+    for rel in relpaths:
+        for part in rel.split("/"):
+            if part != part.strip() or any(ord(ch) < 32 or ord(ch) == 127 for ch in part):
+                raise DevSyncError(f"Refusing transfer name with whitespace or control characters: {rel!r}")
 
 
 def validate_no_symlink_dest_ancestors(dest_base: Path, relpaths: Iterable[str]) -> None:
@@ -1204,6 +1233,9 @@ def import_overlay(
             source = Path(f"{config.rclone_remote}:{config.rclone_remote_path}/{config.project_name}")
             tracked = tracked_files(repo_root)
             remote_files = provider.list_remote_files() if isinstance(provider, RCloneProvider) else []
+            # P1-3: the remote listing is untrusted; apply the same candidate
+            # filter (hard excludes included) as the local-provider path.
+            remote_files = [rel for rel in remote_files if should_include_candidate(rel, config)]
             files_to_copy = approved_overlay_relpaths(remote_files, tracked)
             skipped_tracked = sorted(set(remote_files) - set(files_to_copy))
             if skipped_tracked:

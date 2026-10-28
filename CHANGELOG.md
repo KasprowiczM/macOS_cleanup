@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-6.
+Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-3 and P1-6.
 
 ### Fixed
 
@@ -17,10 +17,14 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 - **P0-2 (remainder): policy rule lookup sees case variants.** A hand-edited plan with `$HOME/.NPM` no longer skips the REVIEW escalation for the `~/.npm` `ask` rule. Matching is asymmetric: a case-insensitive match can only raise risk, and a SAFE rule lowers a REVIEW default only on an exact-case match.
 - **P1-6: unset `USER` no longer fails open.** Under launchd, cron or `env -i`, `set -u` made path expansion abort, and callers fell back to raw paths (a `~/.npm` policy rule was stored unexpanded and never matched). `$USER` tokens now fall back to `id -un`, and expansion fails when neither source resolves.
 
+### Security
+
+- **P1-3: dev-sync rclone import applies the hard-exclude list.** The remote listing is untrusted. A forged remote could previously deliver `.git/hooks/*` (code execution on the next Git command), `.git/config`, `.ssh/`, `secrets/`, `*.pem` and dependency folders. The listing now passes through the same candidate filter as the local provider. Hard excludes and the tracked-file guard ignore case, so `.GIT/hooks` and `readme.MD` (which overwrote `README.md` on APFS) are rejected. The tracked-file guard also ignores Unicode normalization: an NFD `Café.txt` no longer overwrites a tracked NFC `Café.txt`. A bare `.git` gitfile is hard-excluded. The rclone import refuses to write through a symlinked destination ancestor, matching the local provider. It passes names with `--files-from-raw` and rejects names with leading or trailing whitespace or control characters; `--files-from` stripped whitespace, so an approved " README.md" copied over the tracked `README.md`. Export and prune use the same deny list, so case variants such as `id.PEM` are no longer exported and are pruned from the provider mirror.
+
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
-- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, and `tests/test_user_unset.sh`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
 
 ## [3.0.6] — 2026-09-07
 

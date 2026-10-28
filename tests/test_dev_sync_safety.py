@@ -22,6 +22,7 @@ from dev_sync_core import (  # noqa: E402
     DevSyncError,
     RCloneProvider,
     RunOptions,
+    approved_overlay_relpaths,
     copy_relpaths,
     import_overlay,
     read_manifest,
@@ -347,6 +348,116 @@ class DevSyncRcloneSafetyTests(unittest.TestCase):
                     else:
                         payload = ""
                 self.assertIn("private.env", str(payload))
+
+
+class DevSyncRcloneImportFilterTests(unittest.TestCase):
+    """P1-3: a forged rclone remote must not bypass the hard-exclude list."""
+
+    REMOTE_FILES = [
+        ".env.local",
+        ".git/config",
+        ".git/hooks/pre-commit",
+        ".GIT/hooks/post-checkout",
+        ".ssh/id_rsa",
+        "secrets/prod.txt",
+        "SECRETS/prod.txt",
+        "server.pem",
+        "server.PEM",
+        "node_modules/pkg/index.js",
+        "readme.MD",
+    ]
+
+    def _rclone_import(self, repo: Path) -> object:
+        config = DevSyncConfig(
+            project_name="sample",
+            provider="rclone",
+            rclone_remote="dummy",
+            rclone_remote_path="backup",
+        )
+        with patch.object(RCloneProvider, "validate", return_value=[]), patch.object(
+            RCloneProvider, "is_available", return_value=True
+        ), patch.object(RCloneProvider, "list_remote_files", return_value=list(self.REMOTE_FILES)):
+            return import_overlay(repo, config, dry_run=True)
+
+    def test_rclone_import_applies_hard_excludes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            _init_git_repo(repo, {"README.md": "tracked\n"})
+            result = self._rclone_import(repo)
+            self.assertEqual(result.imported_files, [".env.local"])
+
+    def test_case_variant_of_tracked_file_is_not_imported(self) -> None:
+        self.assertEqual(approved_overlay_relpaths(["readme.MD", "SRC/x.txt"], ["README.md", "src/x.txt"]), [])
+        self.assertEqual(approved_overlay_relpaths(["Src"], ["src/x.txt"]), [])
+
+    def test_unicode_normalization_variant_of_tracked_file_is_not_imported(self) -> None:
+        import unicodedata
+
+        nfc = unicodedata.normalize("NFC", "Café.txt")
+        nfd = unicodedata.normalize("NFD", "Café.txt")
+        self.assertEqual(approved_overlay_relpaths([nfd], [nfc]), [])
+        self.assertEqual(approved_overlay_relpaths([nfc], [nfd]), [])
+
+    def test_git_leaf_file_is_hard_excluded(self) -> None:
+        config = DevSyncConfig(project_name="sample", provider="local", provider_path="/nonexistent")
+        for rel in (".git", "sub/.git", "sub/.GIT"):
+            self.assertFalse(should_include_candidate(rel, config), rel)
+
+    def test_rclone_sync_from_refuses_symlinked_destination_ancestor(self) -> None:
+        config = DevSyncConfig(
+            project_name="sample",
+            provider="rclone",
+            rclone_remote="dummy",
+            rclone_remote_path="backup",
+        )
+        provider = RCloneProvider(config)
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "repo"
+            outside = Path(tmp) / "outside"
+            dest.mkdir()
+            outside.mkdir()
+            (dest / "link").symlink_to(outside)
+            with patch("dev_sync_core.run_command") as fake_run:
+                with self.assertRaises(DevSyncError):
+                    provider.sync_from(dest, dry_run=False, files=["link/x.env"])
+                fake_run.assert_not_called()
+
+    def _rclone_provider(self) -> RCloneProvider:
+        return RCloneProvider(
+            DevSyncConfig(
+                project_name="sample",
+                provider="rclone",
+                rclone_remote="dummy",
+                rclone_remote_path="backup",
+            )
+        )
+
+    def test_rclone_sync_from_passes_names_raw(self) -> None:
+        # `--files-from` strips whitespace, so " README.md" would copy the
+        # tracked README.md; `--files-from-raw` keeps the approved name.
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("dev_sync_core.run_command") as fake_run:
+                self._rclone_provider().sync_from(Path(tmp), dry_run=False, files=["private.env"])
+            argv = fake_run.call_args.args[0]
+            self.assertIn("--files-from-raw", argv)
+            self.assertNotIn("--files-from", argv)
+
+    def test_rclone_sync_from_rejects_whitespace_or_control_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for rel in (" README.md", "README.md ", "a/ b.env", "x\t.env", "#hash.env"):
+                with patch("dev_sync_core.run_command") as fake_run:
+                    if rel.startswith("#"):
+                        self._rclone_provider().sync_from(Path(tmp), dry_run=False, files=[rel])
+                        self.assertIn("--files-from-raw", fake_run.call_args.args[0])
+                        continue
+                    with self.assertRaises(DevSyncError, msg=repr(rel)):
+                        self._rclone_provider().sync_from(Path(tmp), dry_run=False, files=[rel])
+                    fake_run.assert_not_called()
+
+    def test_hard_excludes_ignore_case(self) -> None:
+        config = DevSyncConfig(project_name="sample", provider="local", provider_path="/nonexistent")
+        for rel in (".GIT/hooks/pre-commit", "SECRETS/a.txt", ".SSH/id_rsa", "id.PEM", "cert.Key"):
+            self.assertFalse(should_include_candidate(rel, config), rel)
 
 
 class DevSyncVerifyFullTests(unittest.TestCase):

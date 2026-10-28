@@ -120,6 +120,7 @@ Browser guidelines:
 - `dev-sync/` is used only for the private restoration overlay: ignored local files, `.dev_sync_config.json` configuration, and optional local `.env` / `.dev.vars`.
 - The overlay is not GitHub. Tracked source must still be committed and pushed via Git.
 - Default dev-sync exclusions block `logs/`, `reports/`, `graphify-out/`, caches, dependency folders, `secrets/`, `.ssh/`, keys/certificates, and machine-local agent settings.
+- Hard excludes (`.git/`, `.ssh/`, `secrets/`, key material) ignore case and apply to every import source, including an rclone remote listing. Overlay files whose case-folded path matches a tracked file are never imported.
 - `dev-sync-prune-excluded.sh` and `dev-sync-purge-quarantine.sh` operate strictly inside the configured provider mirror. This is a controlled exception to `safe_remove()`: it uses `safe_relpath()` / `resolve_under()` and the plan -> quarantine -> verify -> purge workflow, not broad deletion in the repo.
 - Do not use `rm`, `truncate`, `xattr`, `chflags`, or placeholder edits in `~/Library/CloudStorage`; for Proton offload use `dev-sync-proton-status.sh --full`, and then Finder/Proton Drive "Remove Download".
 - Never delete the destination before a verified copy.
