@@ -93,6 +93,25 @@ chmod 755 "${PART}/locked"
 assert_true "[ -f '${PART}/open/f' ]" "the readable part was not deleted"
 assert_true "[ -f '${PART}/locked/f' ]" "the locked part is intact"
 
+begin_test "the permanent-mode skip does not depend on the unreadable list being writable"
+PART2="${HOME}/Library/Caches/com.example.nolog"
+mkdir -p "${PART2}/open" "${PART2}/locked"
+printf 'o' > "${PART2}/open/f"; printf 'l' > "${PART2}/locked/f"
+chmod 000 "${PART2}/locked"
+rm -f "$(analysis_unreadable_file)"; chmod 555 "$LOGS_DIR"
+( REMOVE_MODE=permanent; DRY_RUN=0; safe_remove "$PART2" >/dev/null 2>&1 )
+chmod 755 "$LOGS_DIR" "${PART2}/locked"
+assert_true "[ -f '${PART2}/open/f' ]" "readable part kept even though the record could not be written"
+
+begin_test "an unmeasurable size does not abort safe_remove under errexit"
+GONE="${HOME}/Library/Caches/com.example.sizeless"; mkdir -p "$GONE"; printf 'x' > "$GONE/f"
+( set -e
+  path_size_bytes() { echo 0; return 1; }
+  REMOVE_MODE=quarantine; DRY_RUN=1
+  safe_remove "$GONE" >/dev/null 2>&1
+  echo reached > "${SANDBOX}/reached" )
+assert_true "[ -f '${SANDBOX}/reached' ]" "safe_remove completes when the size is unknown"
+
 begin_test "unreadable_*.txt files are rotated with the logs"
 OLD_UR="${LOGS_DIR}/unreadable_2000-01-01_000000_1.txt"
 printf 'partial\t/x\n' > "$OLD_UR"; touch -t 200001010000 "$OLD_UR"

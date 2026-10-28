@@ -553,7 +553,7 @@ execute_plan_native_command() {
     local after=0
 
     if [[ -n "$path" && -e "$path" ]]; then
-        before="$(path_size_bytes "$path")"
+        before="$(path_size_bytes "$path")" || before=0
     fi
 
     local _cmd_rc=0 tool bin target want
@@ -799,6 +799,14 @@ PLANPARSE
         command="$(base64_decode_string "$command_b64")"
         category="$(base64_decode_string "$category_b64")"
         case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
+
+        # Holistic review: these commands remove installed versions or devices,
+        # so apply enforces REVIEW even when a hand-edited plan says SAFE.
+        if [[ "$action" == "native_command" && "$risk" == "SAFE" ]]; then
+            case "$command" in
+                "brew cleanup --prune=all"|"gem cleanup"|"xcrun simctl delete unavailable") risk="REVIEW" ;;
+            esac
+        fi
 
         case "$risk" in
             DANGEROUS)

@@ -372,13 +372,14 @@ assert_true "journal_has_event 'plan_apply_blocked'" "SF1b: plan_apply_blocked j
 begin_test "NC1: native_command in DRY_RUN=1 records planned event, does not run"
 reset_apply_state
 DRY_RUN=1
-NC1_CACHE="${SANDBOX}/nc1-gem-cache"
+NC1_CACHE="${HOME}/.npm"
 mkdir -p "$NC1_CACHE"
-# P1-4: dry-run previews only bound ops, so gem must name the plan's target.
+# P1-4: dry-run previews only bound ops, so npm must name the plan's target.
+# (npm, not gem: gem cleanup is REVIEW at apply even if a plan says SAFE.)
 NC1_BIN="${SANDBOX}/nc1_bin"
 mkdir -p "$NC1_BIN"
-printf '#!/bin/sh\n[ "$1 $2" = "env gemdir" ] && echo "%s"\nexit 0\n' "$NC1_CACHE" > "${NC1_BIN}/gem"
-chmod +x "${NC1_BIN}/gem"
+printf '#!/bin/sh\n[ "$*" = "config get cache" ] && echo "%s"\nexit 0\n' "$NC1_CACHE" > "${NC1_BIN}/npm"
+chmod +x "${NC1_BIN}/npm"
 _OLD_PATH_NC1="$PATH"
 PATH="${NC1_BIN}:${PATH}"
 NC1_PLAN="${SANDBOX}/nc1.json"
@@ -386,10 +387,10 @@ write_plan "$NC1_PLAN" "[
   {
     \"id\": \"op-nc1\", \"category\": \"dev\",
     \"risk\": \"SAFE\", \"action\": \"native_command\",
-    \"path\": \"${NC1_CACHE}\", \"command\": \"gem cleanup\",
+    \"path\": \"${NC1_CACHE}\", \"command\": \"npm cache clean --force\",
     \"estimated_bytes\": 0, \"size\": 0,
-    \"description\": \"gem cleanup dry\", \"recommendation\": \"test\",
-    \"rollback\": false, \"tool\": \"gem\"
+    \"description\": \"npm cache clean dry\", \"recommendation\": \"test\",
+    \"rollback\": false, \"tool\": \"npm\"
   }
 ]"
 apply_plan_file "$NC1_PLAN" > /dev/null 2>&1

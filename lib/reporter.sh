@@ -78,9 +78,11 @@ EOF
 |:---------|:-----|:-------|:-------------------|
 EOF
 
-    # One pass over the registry, split into what the headline total counts and
-    # what it deliberately does not, so the itemised rows reconcile with the
-    # "Total potentially freeable" line instead of silently omitting categories.
+    # One pass over the registry, split into counted and report-only categories
+    # so no sized category is silently omitted. The rows show what was found
+    # per category; the total below is the plan's executable sum (P1-1), so it
+    # leaves out work this mode will not do (Homebrew counted once, /tmp in
+    # quarantine mode, Docker) and the rows need not add up to it.
     local entry key label klass bytes size_cell status_str action_str recorded_outcome
     local -a report_only_rows=()
 

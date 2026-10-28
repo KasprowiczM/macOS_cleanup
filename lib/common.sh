@@ -362,7 +362,9 @@ analysis_path_partial() {
     local file
     file="$(analysis_unreadable_file)"
     [[ -f "$file" ]] || return 1
-    cut -f2- "$file" 2>/dev/null | grep -qFx -- "$1"
+    # awk reads the whole file: no early-exit pipe that pipefail could turn
+    # into a false "not partial".
+    P="$1" awk -F'\t' 'substr($0, index($0, "\t") + 1) == ENVIRON["P"] { f = 1 } END { exit !f }' "$file"
 }
 
 # Return the disk usage of a path in bytes.
@@ -1876,6 +1878,12 @@ restore_quarantine_manifest() {
             continue
         fi
 
+        # Already restored by an earlier run: not a failure of this one.
+        if [[ ! -e "$source_norm" && ! -L "$source_norm" ]] && [[ -e "$target_norm" || -L "$target_norm" ]]; then
+            print_skip "Already restored: ${target_norm}"
+            continue
+        fi
+
         if [[ ! -e "$source_norm" && ! -L "$source_norm" ]]; then
             print_warn "Quarantine file does not exist: ${source_norm}"
             record_skipped_item "Quarantine file does not exist: ${source_norm}"
@@ -2103,12 +2111,16 @@ safe_remove() {
     fi
 
     local size
-    size=$(path_size_bytes "$normalized_target")
+    # An unmeasurable size must not abort the run under errexit.
+    size=$(path_size_bytes "$normalized_target") || size=0
 
     # Phase 3: rm -rf on a tree with an unreadable part deletes what it can
     # and stops at the rest, leaving it half-deleted. Quarantine (a rename on
     # the same volume) is unaffected; permanent removal skips such a tree.
-    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]] && analysis_path_partial "$normalized_target"; then
+    # The readability is probed here directly (du exits non-zero), so the
+    # skip does not depend on the unreadable list having been written.
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" && -d "$normalized_target" ]] \
+        && ! du -sk "$normalized_target" >/dev/null 2>&1; then
         print_skip "Not fully readable, not deleted permanently: ${normalized_target}"
         record_skipped_item "Not fully readable (macOS privacy or permissions), skipped in permanent mode: ${normalized_target}"
         cleanup_journal_event "skipped_unreadable" "$normalized_target" "" "$size" "skipped" "partly unreadable; permanent removal would half-delete it"

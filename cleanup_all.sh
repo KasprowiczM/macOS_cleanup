@@ -113,6 +113,9 @@ RETENTION_DAYS="$QUARANTINE_RETENTION_DAYS"
 SHOW_HELP=0
 SHOW_VERSION=0
 JSON_OUTPUT=0
+# Set by apply/restore/purge so _on_exit can report a run that fails early.
+REPORT_PENDING_MODE=""
+SUMMARY_PENDING=0
 # When --json is active this fd points to the original stdout so the
 # JSON summary reaches the caller even though fd 1 is redirected to stderr.
 JSON_OUTPUT_FD=1
@@ -191,6 +194,19 @@ build_active_categories() {
 _on_exit() {
     local exit_code=$?
     release_cleanup_lock
+    # A failing apply, restore or purge exits before main prints its summary;
+    # still write the report, the summary and the --json object.
+    if (( exit_code != 0 )) && (( ${SUMMARY_PENDING:-0} == 1 )); then
+        SUMMARY_PENDING=0
+        set +e
+        if [[ -n "${REPORT_PENDING_MODE:-}" ]]; then
+            generate_report "$REPORT_PENDING_MODE" >/dev/null 2>&1
+        fi
+        print_summary_report "$MODE" 2>/dev/null
+        if (( JSON_OUTPUT )); then
+            emit_json_summary "$MODE" 2>/dev/null 1>&"${JSON_OUTPUT_FD}"
+        fi
+    fi
     if type remove_plan_temp_files >/dev/null 2>&1; then
         remove_plan_temp_files
     fi
@@ -755,12 +771,14 @@ run_restore_phase() {
 
     require_cleanup_lock
 
+    REPORT_PENDING_MODE="restore"; SUMMARY_PENDING=1
     if [[ -z "$RESTORE_TARGET" ]]; then
         print_error "$(t "cli_no_manifest")"
         exit 2
     fi
 
     restore_quarantine_manifest "$RESTORE_TARGET"
+    REPORT_PENDING_MODE=""
     generate_report "restore"
     # P2: a restore that left rows behind is not a success.
     if (( RESTORE_INCOMPLETE == 1 )); then
@@ -791,7 +809,10 @@ run_purge_quarantine_phase() {
         warn_if_no_fresh_backup "purge quarantine" || true
     fi
 
+    SUMMARY_PENDING=1
+    (( APPLY_PURGE == 1 )) && REPORT_PENDING_MODE="purge-quarantine"
     purge_quarantine "$PURGE_TARGET" "$APPLY_PURGE" "$RETENTION_DAYS"
+    REPORT_PENDING_MODE=""
     if (( APPLY_PURGE == 1 )); then
         generate_report "purge-quarantine"
     fi
@@ -802,6 +823,7 @@ run_apply_plan_phase() {
 
     require_cleanup_lock
 
+    REPORT_PENDING_MODE="apply-plan"; SUMMARY_PENDING=1
     if [[ -z "$PLAN_FROM_FILE" ]]; then
         print_error "$(t "cli_apply_requires_plan")"
         exit 2
@@ -809,6 +831,7 @@ run_apply_plan_phase() {
 
     warn_if_no_fresh_backup "apply plan" || true
     apply_plan_file "$PLAN_FROM_FILE"
+    REPORT_PENDING_MODE=""
     generate_report "apply-plan"
 }
 
@@ -974,6 +997,7 @@ main() {
 
     print_summary_report "$MODE"
 
+    SUMMARY_PENDING=0
     # --json: emit machine-readable summary to original stdout (fd JSON_OUTPUT_FD).
     if (( JSON_OUTPUT )); then
         emit_json_summary "$MODE" >&${JSON_OUTPUT_FD}

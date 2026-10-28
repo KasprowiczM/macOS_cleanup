@@ -167,6 +167,16 @@ assert_false "grep -q '\"planned\"' '$CLEANUP_JOURNAL_FILE'" "dry-run does not r
 DRY_RUN=0
 
 # ---------------------------------------------------------------------------
+begin_test "apply enforces REVIEW for gem/brew/simctl even if a plan says SAFE"
+reset_apply
+mkdir -p "$HOME/.gem/ruby"
+stub_tool gem "$HOME/.gem/ruby"
+write_plan "$PLAN" "[$(native_op op-1 SAFE "gem cleanup" "$HOME/.gem/ruby")]"
+apply_plan_file "$PLAN" >/dev/null 2>&1
+assert_false "grep -q '^gem cleanup' '$RECORDER'" "a SAFE-labelled gem cleanup is not run without --include-review"
+assert_true "grep -q 'review not included' '$CLEANUP_JOURNAL_FILE'" "it is treated as REVIEW"
+
+# ---------------------------------------------------------------------------
 begin_test "a simctl op no longer rejects the whole plan"
 reset_apply
 stub_tool npm "$NPM_CACHE"

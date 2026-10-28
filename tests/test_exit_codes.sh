@@ -52,6 +52,28 @@ assert_eq "$RESTORE_INCOMPLETE" "1" "the conflict marks the restore incomplete"
 begin_test "the restore phase exits non-zero when the restore was incomplete"
 assert_true "sed -n '/^run_restore_phase() {/,/^}/p' '$PROJ_DIR/cleanup_all.sh' | grep -q 'RESTORE_INCOMPLETE'" "run_restore_phase checks RESTORE_INCOMPLETE"
 
+begin_test "re-running a completed restore is not reported as incomplete"
+rm -f "$TARGET"                               # resolve the conflict
+RESTORE_INCOMPLETE=0
+restore_quarantine_manifest "$CLEANUP_RESTORE_MANIFEST" >/dev/null 2>&1
+assert_true "[ -f '$TARGET' ]" "fixture: the file is restored"
+RESTORE_INCOMPLETE=0
+restore_quarantine_manifest "$CLEANUP_RESTORE_MANIFEST" >/dev/null 2>&1
+assert_eq "$RESTORE_INCOMPLETE" "0" "already-restored rows do not make a re-run incomplete"
+
+begin_test "a failed apply still writes its report and its --json summary"
+E2E_HOME="${SANDBOX}/e2e_home"; mkdir -p "$E2E_HOME"
+BAD_PLAN="${SANDBOX}/bad_plan.json"
+printf '{"schema_version":"1.0","checksum":"0000","summary":{},"operations":[]}\n' > "$BAD_PLAN"
+# shellcheck disable=SC2034  # read inside the assert_true eval string
+E2E_OUT="$(env -i HOME="$E2E_HOME" USER="$USER" PATH="$PATH" TMPDIR="${TMPDIR:-/tmp}" \
+    LOGS_DIR="${SANDBOX}/e2e_logs" REPORTS_DIR="${SANDBOX}/e2e_reports" \
+    QUARANTINE_ROOT="${E2E_HOME}/q/quarantine" PYTHONDONTWRITEBYTECODE=1 \
+    /bin/bash "${PROJ_DIR}/cleanup_all.sh" apply --from-plan "$BAD_PLAN" --non-interactive --json </dev/null 2>/dev/null)"; e2e_rc=$?
+assert_neq "$e2e_rc" "0" "the failed apply exits non-zero"
+assert_true "ls '${SANDBOX}/e2e_reports'/report_*.md >/dev/null 2>&1" "a report was written"
+assert_true "printf '%s' \"\$E2E_OUT\" | python3 -c 'import json,sys; json.load(sys.stdin)'" "a JSON summary was emitted"
+
 begin_test "purge returns 1 for any number of failures, never the count"
 mkdir -p "$QUARANTINE_ROOT/2026-01-01_000000_1/items" "$QUARANTINE_ROOT/2026-01-02_000000_2/items"
 purge_one_quarantine_run() { return 1; }
