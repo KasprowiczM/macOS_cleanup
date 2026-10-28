@@ -33,6 +33,9 @@ The `macOS_cleanup` script **never touches** the following locations under any c
 - `~/Music/Music/Music Library.musiclibrary`
 - `~/Music/Music Library.musiclibrary`
 - `~/Movies`
+- `~/Library/Messages`
+- `~/Library/Calendars`
+- `~/Library/Application Support/AddressBook`
 - `~/Library/Mobile Documents`
 - `~/Library/CloudStorage`
 - `~/Dropbox`
@@ -57,6 +60,7 @@ The `macOS_cleanup` script **never touches** the following locations under any c
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`

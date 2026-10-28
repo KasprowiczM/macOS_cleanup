@@ -134,21 +134,15 @@ docker() {
     case "$1 ${2:-}" in
         "info ") return 0 ;;
         "system df")
-            cat <<'DOCKERDF'
-TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
-Images          2         0         20MB      10MB (50%)
-Containers      1         0         4MB       4MB (100%)
-Local Volumes   3         0         90MB      90MB (100%)
-Build Cache     1         0         8MB       8MB
-DOCKERDF
-            ;;
+            printf '%s\n' 'Images|10MB (50%)' 'Containers|4MB (100%)' 'Local Volumes|90MB (100%)' 'Build Cache|8MB' ;;
         *) return 1 ;;
     esac
 }
 analyze_dev_environment
 unset -f docker
 assert_array_var_contains_exact "FOUND_DEV_ITEMS" "docker_prune:__docker__"
-expected_docker_bytes=$(( (10 + 4 + 8) * 1024 * 1024 ))
+# Docker prints decimal SI units (P1-5).
+expected_docker_bytes=$(( (10 + 4 + 8) * 1000 * 1000 ))
 assert_eq "$(catbytes_get "docker")" "$expected_docker_bytes" "Docker estimate should exclude Local Volumes"
 
 begin_test "analyze_trash discovers top-level items in ~/.Trash"
@@ -217,8 +211,12 @@ _failing_analyzer_stub() { return 1; }
 _run_analyzer _failing_analyzer_stub >/dev/null 2>&1
 assert_eq "${ANALYSIS_PARTIAL:-0}" "1" "analyzer failure must set ANALYSIS_PARTIAL=1"
 
-begin_test "app_bundle_exists cross-checks FOUND_INSTALLED_APPS"
-FOUND_INSTALLED_APPS=("$SANDBOX/CustomApps/TestFakeApp.app")
+begin_test "app_bundle_exists finds an app in the indexed application folders"
+# Phase 2: the bundle-id index replaced the per-app FOUND_INSTALLED_APPS
+# plist loop; it walks the same folders (APP_BUNDLE_SEARCH_DIRS).
+APP_BUNDLE_SEARCH_DIRS=("$SANDBOX/CustomApps")
+APP_BUNDLE_ID_CACHE_LOADED=0
+APP_BUNDLE_ID_CACHE=""
 mkdir -p "$SANDBOX/CustomApps/TestFakeApp.app/Contents"
 cat << 'PLIST' > "$SANDBOX/CustomApps/TestFakeApp.app/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
@@ -230,6 +228,6 @@ cat << 'PLIST' > "$SANDBOX/CustomApps/TestFakeApp.app/Contents/Info.plist"
 </dict>
 </plist>
 PLIST
-assert_true "app_bundle_exists 'com.fakeapp.uniquebundleid12345'" "app_bundle_exists should return 0 for installed app bundle in FOUND_INSTALLED_APPS"
+assert_true "app_bundle_exists 'com.fakeapp.uniquebundleid12345'" "app_bundle_exists should return 0 for an app in an indexed folder"
 
 print_test_summary

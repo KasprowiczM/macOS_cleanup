@@ -378,12 +378,48 @@ analyze_disk_overview() {
     fi
 
     # --- Largest directories in home (PF2: skip for --category X) ---
+    # Phase 2: this walk alone took ~102 s of a ~322 s full scan. It is
+    # informational only, so it is bounded (HOME_TOP_DIRS_TIMEOUT, default
+    # 20 s), stays on the home volume (-x) and skips iCloud Drive and
+    # CloudStorage, whose dataless files must not be enumerated or fetched.
     if _is_full_scan; then
         print_info "$(t "disk_home_top10")"
-        du -sh "$HOME"/*/ 2>/dev/null | sort -rh 2>/dev/null | head -10 | \
-            while IFS= read -r line; do
-                echo "    $line"
-            done || true
+        local home_top="" home_line home_dir home_left home_rc home_cut=0
+        local home_limit="${HOME_TOP_DIRS_TIMEOUT:-20}"
+        case "$home_limit" in ''|*[!0-9]*) home_limit=20 ;; esac
+        (( home_limit >= 1 )) || home_limit=20
+        # One du per directory under a shared deadline: du block-buffers its
+        # output, so a single timed-out du over every directory printed nothing.
+        # Each directory gets at most a quarter of the budget, so one huge
+        # tree cannot starve the rest; it is listed as not measured instead.
+        local home_deadline=$(( $(date +%s) + home_limit )) home_cap=$(( home_limit / 4 ))
+        local home_slow=""
+        (( home_cap >= 1 )) || home_cap=1
+        for home_dir in "$HOME"/*/; do
+            [[ -d "$home_dir" ]] || continue
+            home_left=$(( home_deadline - $(date +%s) ))
+            if (( home_left < 1 )); then home_cut=1; break; fi
+            (( home_left > home_cap )) && home_left=$home_cap
+            home_rc=0
+            home_line="$(optional_command_with_timeout "$home_left" \
+                du -x -sh -I 'Mobile Documents' -I CloudStorage "$home_dir" 2>/dev/null)" || home_rc=$?
+            if (( home_rc == 124 )); then
+                home_cut=1
+                home_slow+="    >${home_left}s	${home_dir}"$'\n'
+                continue
+            fi
+            [[ -n "$home_line" ]] && home_top+="${home_line}"$'\n'
+        done
+        if [[ -n "$home_top" ]]; then
+            printf '%s' "$home_top" | sort -rh 2>/dev/null | head -10 | \
+                while IFS= read -r line; do
+                    echo "    $line"
+                done || true
+        fi
+        [[ -n "$home_slow" ]] && printf '%s' "$home_slow"
+        if (( home_cut == 1 )); then
+            print_info "    $(t "disk_home_top10_partial" "$home_limit")"
+        fi
         echo
     fi
 }
@@ -673,6 +709,11 @@ analyze_logs() {
         if [[ "$dir" == "$normalized_home"* || "$dir" == /Library* ]]; then
             while IFS= read -r -d '' f; do
                 is_protected_path "$f" && continue
+                # P2: a file another category already owns is not listed twice
+                # (app caches claim ~/Library/Logs/JetBrains; DiagnosticReports
+                # has its own analyzer).
+                case "$f" in */DiagnosticReports/*) continue ;; esac
+                is_path_claimed "$f" && continue
                 local bytes
                 bytes=$(path_size_bytes "$f")
                 if (( target_is_user_log == 1 )); then
@@ -805,10 +846,11 @@ analyze_tmp() {
 analyze_app_leftovers() {
     print_section "$(t "leftovers_section")"
 
+    # Phase 2: Containers and Group Containers are protected (is_protected_path
+    # skips every child) and walking them can raise macOS "access data from
+    # other apps" prompts, so they are not scanned at all.
     local search_dirs=(
         "$HOME/Library/Application Support"
-        "$HOME/Library/Containers"
-        "$HOME/Library/Group Containers"
     )
 
     local total=0
@@ -834,8 +876,9 @@ analyze_app_leftovers() {
 
             # Check reverse-DNS bundle ID pattern
             if [[ "$basename" =~ ^[a-zA-Z]{2,}\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+ ]]; then
+                # Phase 2: the cheap protection check before the bundle lookup.
+                is_protected_path "$item" && continue
                 if ! app_bundle_exists "$basename" 2>/dev/null; then
-                    is_protected_path "$item" && continue
                     local bytes
                     bytes=$(path_size_bytes "$item")
                     local b="${bytes:-0}"
@@ -935,7 +978,7 @@ analyze_dev_environment() {
     # reachable — just honestly labelled.
     if command -v npm &>/dev/null; then
         local npm_cache_dir npm_cacache npm_npx
-        npm_cache_dir=$(npm config get cache 2>/dev/null || echo "$HOME/.npm")
+        npm_cache_dir=$(native_tool_target npm) || npm_cache_dir="$HOME/.npm"
         if [[ -d "$npm_cache_dir" ]]; then
             if validate_cache_path "$npm_cache_dir"; then
                 npm_cacache="${npm_cache_dir}/_cacache"
@@ -968,7 +1011,7 @@ analyze_dev_environment() {
     # --- yarn cache ---
     if command -v yarn &>/dev/null; then
         local yarn_cache
-        yarn_cache=$(yarn cache dir 2>/dev/null || echo "")
+        yarn_cache=$(native_tool_target yarn) || yarn_cache=""
         if [[ -n "$yarn_cache" && -d "$yarn_cache" ]]; then
             if validate_cache_path "$yarn_cache"; then
                 local yarn_size
@@ -988,7 +1031,7 @@ analyze_dev_environment() {
     # --- pnpm cache ---
     if command -v pnpm &>/dev/null; then
         local pnpm_cache
-        pnpm_cache=$(pnpm store path 2>/dev/null || echo "")
+        pnpm_cache=$(native_tool_target pnpm) || pnpm_cache=""
         if [[ -n "$pnpm_cache" && -d "$pnpm_cache" ]]; then
             if validate_cache_path "$pnpm_cache"; then
                 local pnpm_size
@@ -1034,7 +1077,9 @@ analyze_dev_environment() {
 
     # --- pip cache ---
     if command -v pip3 &>/dev/null || command -v pip &>/dev/null; then
-        local pip_cache="$HOME/Library/Caches/pip"
+        # P1-4: ask pip (PIP_CACHE_DIR / pip.conf), as plan apply does.
+        local pip_cache
+        pip_cache=$(native_tool_target pip) || pip_cache="$HOME/Library/Caches/pip"
         if [[ -d "$pip_cache" ]]; then
             if validate_cache_path "$pip_cache"; then
                 local pip_size
@@ -1055,7 +1100,7 @@ analyze_dev_environment() {
     if command -v brew &>/dev/null; then
         local brew_cache
         local brew_cache_found=0
-        brew_cache=$(brew --cache 2>/dev/null || echo "$HOME/Library/Caches/Homebrew")
+        brew_cache=$(native_tool_target brew) || brew_cache="$HOME/Library/Caches/Homebrew"
         if [[ -d "$brew_cache" ]]; then
             if validate_cache_path "$brew_cache"; then
                 local brew_size
@@ -1203,27 +1248,24 @@ analyze_dev_environment() {
     # --- Docker ---
     if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
         local docker_output=""
-        docker_output=$(docker system df 2>/dev/null) || docker_output=""
+        # CN2 (P1-5): ask for TYPE|RECLAIMABLE directly. Splitting the table on
+        # whitespace shifted the two-word "Build Cache" row one column, so its
+        # SIZE was read as RECLAIMABLE. Docker prints decimal SI units.
+        docker_output=$(docker system df --format '{{.Type}}|{{.Reclaimable}}' 2>/dev/null) || docker_output=""
         if [[ -n "$docker_output" ]]; then
-            # CN2: Use awk to robustly extract RECLAIMABLE bytes from
-            # variable-column docker system df output.
             local docker_reclaim=0
             local rb
-            rb=$(echo "$docker_output" | awk '
-                NR==1 {
-                    # Find RECLAIMABLE column index from header
-                    for(i=1;i<=NF;i++) {
-                        if($i=="RECLAIMABLE") { rc=i; break }
-                    }
-                    next
-                }
-                rc && !/^Local Volumes/ && !/^Volumes/ && $rc ~ /^[0-9]/ {
-                    val=$rc
-                    gsub(/\(.*\)/,"",val)   # strip (XX%)
-                    if (val ~ /GB$/)      { sub(/GB$/,"",val); total += val * 1073741824 }
-                    else if (val ~ /MB$/) { sub(/MB$/,"",val); total += val * 1048576 }
-                    else if (val ~ /[kK]B$/) { sub(/[kK]B$/,"",val); total += val * 1024 }
-                    else if (val ~ /B$/)  { sub(/B$/,"",val);  total += val }
+            rb=$(printf '%s\n' "$docker_output" | awk -F'|' '
+                $1 == "Local Volumes" || $1 == "Volumes" { next }
+                {
+                    val=$2
+                    sub(/[[:space:]]*\(.*$/, "", val)   # strip " (XX%)"
+                    gsub(/[[:space:]]/, "", val)
+                    if (val ~ /^[0-9.]+TB$/)      { sub(/TB$/,"",val); total += val * 1000000000000 }
+                    else if (val ~ /^[0-9.]+GB$/) { sub(/GB$/,"",val); total += val * 1000000000 }
+                    else if (val ~ /^[0-9.]+MB$/) { sub(/MB$/,"",val); total += val * 1000000 }
+                    else if (val ~ /^[0-9.]+[kK]B$/) { sub(/[kK]B$/,"",val); total += val * 1000 }
+                    else if (val ~ /^[0-9.]+B$/)  { sub(/B$/,"",val);  total += val }
                 }
                 END { printf "%d", total }
             ') || rb=0

@@ -50,7 +50,7 @@ The `is_protected_path()` function automatically blocks:
 `app-leftovers` is a report-only category: heuristics might point to data of an active app, so the script does not delete these paths automatically.
 `--yes` in non-interactive mode does not approve `MEDIUM`/`HIGH` categories, Time Machine, or iOS backups.
 
-Apply re-checks `is_protected_path` and the current policy for every target, including native commands. Malformed plans fail before the first mutation.
+Apply re-checks `is_protected_path` and the current policy for every target, including native commands. A native command is also bound to its tool's target: apply re-resolves it through `native_tool_target` (the same table the analyzer and planner use) and refuses the op when the plan's path differs. Docker has no host target, so plans report it and only the interactive mode runs it. Malformed plans fail before the first mutation. Apply checks and parses one private snapshot of the plan file, and plans are written to a temp file and renamed into place. Every mutating mode (apply, restore, purge, interactive, auto-safe) holds `${QUARANTINE_ROOT}/.apply.lock`; a lock whose recorded holder is no longer running (or a pid-less lock older than 10 minutes) is recovered under a separate recovery mutex, and a run releases the lock only while it still records its own pid.
 
 ## Artifact retention
 
@@ -105,9 +105,12 @@ Browser guidelines:
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error |
-| 2 | Bad CLI argument |
-| 99 | Security violation |
+| 1 | General error, a failed or refused operation, or another run holds the cleanup lock |
+| 2 | Bad CLI argument, invalid configuration (`REMOVE_MODE`, `QUARANTINE_ROOT`), or a plan, manifest or purge target that fails verification |
+| 3 | Unsupported macOS version (older than 10.15) |
+| 130 | Interrupted (SIGINT/SIGTERM) |
+
+There is no separate "security violation" code: a blocked target is skipped and journalled (`plan_apply_blocked`, `skipped_*`), and fail-closed checks exit 1 or 2.
 
 ## Secrets and .env
 
@@ -120,6 +123,7 @@ Browser guidelines:
 - `dev-sync/` is used only for the private restoration overlay: ignored local files, `.dev_sync_config.json` configuration, and optional local `.env` / `.dev.vars`.
 - The overlay is not GitHub. Tracked source must still be committed and pushed via Git.
 - Default dev-sync exclusions block `logs/`, `reports/`, `graphify-out/`, caches, dependency folders, `secrets/`, `.ssh/`, keys/certificates, and machine-local agent settings.
+- Hard excludes (`.git/`, `.ssh/`, `secrets/`, key material) ignore case and apply to every import source, including an rclone remote listing. Overlay files whose case-folded path matches a tracked file are never imported.
 - `dev-sync-prune-excluded.sh` and `dev-sync-purge-quarantine.sh` operate strictly inside the configured provider mirror. This is a controlled exception to `safe_remove()`: it uses `safe_relpath()` / `resolve_under()` and the plan -> quarantine -> verify -> purge workflow, not broad deletion in the repo.
 - Do not use `rm`, `truncate`, `xattr`, `chflags`, or placeholder edits in `~/Library/CloudStorage`; for Proton offload use `dev-sync-proton-status.sh --full`, and then Finder/Proton Drive "Remove Download".
 - Never delete the destination before a verified copy.

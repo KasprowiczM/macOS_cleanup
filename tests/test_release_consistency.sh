@@ -18,6 +18,15 @@ assert_neq "$release_tag" "" "RELEASE_TAG must be set"
 assert_eq "$script_version" "${release_tag#v}" \
     "SCRIPT_VERSION (${script_version}) must equal RELEASE_TAG without leading v (${release_tag})"
 
+begin_test "P2: README footers and the cleanup_all.sh header carry SCRIPT_VERSION"
+for readme in "${PROJ_DIR}"/README.md "${PROJ_DIR}"/README.*.md; do
+    footer_version="$(grep -E '^[^|]*`macOS_cleanup` \|' "$readme" | sed -E 's/.*\| [^|]*: ?([0-9]+\.[0-9]+\.[0-9]+) \|.*/\1/' | head -n 1)"
+    assert_eq "$footer_version" "$script_version" "$(basename "$readme") footer version"
+done
+header_version="$(sed -n 's/^# Version: \([0-9.]*\).*/\1/p' "${PROJ_DIR}/cleanup_all.sh" | head -n 1)"
+assert_eq "$header_version" "$script_version" "cleanup_all.sh header version"
+assert_false "grep -q 'SCRIPT_VERSION:-[0-9]' '${PROJ_DIR}/lib/planner.sh'" "no hard-coded version fallback in planner.sh"
+
 begin_test "SHA256SUMS verifies from repo root"
 sums_out="$(mktemp -t macos_cleanup_sha256sums.XXXXXX)"
 set +e

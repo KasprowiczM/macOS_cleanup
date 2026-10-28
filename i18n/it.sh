@@ -34,11 +34,11 @@ i18n_get_it() {
         skipped_category) echo "Ignorato" ;;
 
         # Consequences
-        consequence_safe_quarantine) echo "I file verranno spostati in sicurezza in quarantena. Ripristino con --restore." ;;
+        consequence_safe_quarantine) echo "I file verranno spostati in sicurezza in quarantena. Ripristino con --restore. Lo spazio non viene liberato fino a --purge-quarantine." ;;
         consequence_safe_permanent) echo "I file verranno eliminati. Le applicazioni li ricreeranno se necessario." ;;
-        consequence_review_quarantine) echo "Avviso (RISCHIO REVIEW): File in quarantena. Alcune app potrebbero richiedere il re-download." ;;
+        consequence_review_quarantine) echo "Avviso (RISCHIO REVIEW): File in quarantena. Alcune app potrebbero richiedere il re-download. Lo spazio non viene liberato fino a --purge-quarantine." ;;
         consequence_review_permanent) echo "Avviso (RISCHIO REVIEW): File eliminati definitivamente senza quarantena." ;;
-        consequence_dangerous_quarantine) echo "ATTENZIONE (RISCHIO DANGEROUS): Alto rischio di perdita dati. Richiede backup aggiornato." ;;
+        consequence_dangerous_quarantine) echo "ATTENZIONE (RISCHIO DANGEROUS): Alto rischio di perdita dati. Richiede backup aggiornato. Lo spazio non viene liberato fino a --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "ATTENZIONE (RISCHIO DANGEROUS): Eliminazione irreversibile di dati critici di sistema o utente." ;;
         consequence_native_irreversible) echo "Questo esegue un comando nativo dello strumento. È irreversibile e non viene messo in quarantena." ;;
         dangerous_blocked) echo "Non soggetto a pulizia automatica o interattiva." ;;
@@ -160,6 +160,7 @@ i18n_get_it() {
         disk_volumes_header) echo "Volumi (/ radice):" ;;
         disk_util_err) echo "(Impossibile leggere da diskutil)" ;;
         disk_home_top10) echo "Cartelle più grandi nella home (top 10):" ;;
+        disk_home_top10_partial) echo "Interrotto dopo $2 s; l'elenco potrebbe essere incompleto (limite: HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Elementi più grandi nel cestino:" ;;
         user_caches_section) echo "Cache Utente (~/Library/Caches)" ;;
         user_caches_ok) echo "Nessun elemento significativo nella cache utente." ;;
@@ -222,6 +223,9 @@ i18n_get_it() {
         cli_deletion_dest) echo "Eliminazione: quarantena utente" ;;
         cli_scanning) echo "Scansione del sistema..." ;;
         cli_total_freeable) echo "Totale potenzialmente liberabile" ;;
+        cli_report_only_total) echo "Solo report (misurato, mai rimosso da questo strumento)" ;;
+        total_quarantine_label) echo "Totale da elaborare (i file in quarantena liberano spazio solo dopo --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Fuori dalla cartella home: la modalità quarantena non sposta questi file. Usa --permanent per rimuoverli." ;;
         cli_interactive_flow_1) echo "Esamineremo ogni categoria chiedendo conferma." ;;
         cli_interactive_flow_2) echo "La risposta predefinita è sempre NO." ;;
         cli_auto_safe_flow_1) echo "Spostamento delle cache sicure in quarantena." ;;

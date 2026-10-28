@@ -47,7 +47,7 @@ bash cleanup_all.sh --dry-run
   FINAL SESSION SUMMARY
   ────────────────────────────────────────────────
   Mode:                       Analysis (dry-run) — nothing deleted
-  Potentially freeable:       25.76 GB
+  To process (quarantined files free space only after --purge-quarantine):   25.76 GB
   Report File:                reports/report_2026-08-07_235500.txt
   Journal File:               reports/journal_2026-08-07_235500.jsonl
   ────────────────────────────────────────────────

@@ -128,12 +128,13 @@ _is_within_allowed_cache_root() {
         /var/folders|/var/folders/*|/private/var/folders|/private/var/folders/*) return 0 ;;
     esac
 
-    # Quarantine sandbox roots for test harnesses
-    if [[ -n "${QUARANTINE_ROOT:-}" && "$norm" == "${QUARANTINE_ROOT}"* ]]; then
-        return 0
-    fi
-    if [[ -n "${SANDBOX:-}" && "$norm" == "${SANDBOX}"* ]]; then
-        return 0
+    # The quarantine root (validated at startup, P0-3), matched as a directory.
+    # There is no environment escape hatch: an unanchored "$SANDBOX"* prefix
+    # used to admit any path under a stray SANDBOX=/ as a cache root.
+    if [[ -n "${QUARANTINE_ROOT:-}" ]]; then
+        case "$norm" in
+            "$QUARANTINE_ROOT"|"$QUARANTINE_ROOT"/*) return 0 ;;
+        esac
     fi
 
     return 1

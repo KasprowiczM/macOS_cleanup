@@ -35,9 +35,9 @@ i18n_get_pl() {
         # Consequences
         consequence_safe_quarantine) echo "Pliki zostaną bezpiecznie przeniesione do kwarantanny. Możesz je odzyskać poleceniem --restore. Miejsce nie jest zwalniane do momentu --purge-quarantine." ;;
         consequence_safe_permanent) echo "Pliki zostaną usunięte. Aplikacje odtworzą je w razie potrzeby. Brak możliwości odzyskania tym narzędziem." ;;
-        consequence_review_quarantine) echo "Ostrzeżenie (RYZYKO REVIEW): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania lub indeksowania." ;;
+        consequence_review_quarantine) echo "Ostrzeżenie (RYZYKO REVIEW): Pliki trafią do kwarantanny. Niektóre aplikacje mogą wymagać ponownego pobrania lub indeksowania. Miejsce nie jest zwalniane do momentu --purge-quarantine." ;;
         consequence_review_permanent) echo "Ostrzeżenie (RYZYKO REVIEW): Pliki zostaną trwale usunięte z dysku bez kwarantanny." ;;
-        consequence_dangerous_quarantine) echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej." ;;
+        consequence_dangerous_quarantine) echo "UWAGA (RYZYKO DANGEROUS): Wysokie ryzyko uszkodzenia danych. Kwarantanna wymaga aktualnej kopii zapasowej. Miejsce nie jest zwalniane do momentu --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "UWAGA (RYZYKO DANGEROUS): Nieodwracalne usunięcie kluczowych danych systemowych lub użytkownika." ;;
         consequence_native_irreversible) echo "To uruchamia natywną komendę narzędzia. Operacja jest nieodwracalna i nie trafia do kwarantanny." ;;
         dangerous_blocked) echo "Nie podlega automatycznemu ani interaktywnemu czyszczeniu." ;;
@@ -159,6 +159,7 @@ i18n_get_pl() {
         disk_volumes_header) echo "Wolumeny (/ główny):" ;;
         disk_util_err) echo "(Nie można odczytać z diskutil)" ;;
         disk_home_top10) echo "Największe katalogi w katalogu domowym (top 10):" ;;
+        disk_home_top10_partial) echo "Przerwano po $2 s; lista może być niepełna (limit ustawia HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Największe elementy w koszu:" ;;
         user_caches_section) echo "Cache użytkownika (~/Library/Caches)" ;;
         user_caches_ok) echo "Brak istotnych elementów w cache użytkownika." ;;
@@ -222,6 +223,9 @@ i18n_get_pl() {
         cli_deletion_dest) echo "Usuwanie: kwarantanna użytkownika" ;;
         cli_scanning) echo "Skanuję system... (bez usuwania czegokolwiek)" ;;
         cli_total_freeable) echo "Łącznie potencjalnie do zwolnienia" ;;
+        cli_report_only_total) echo "Tylko raport (zmierzone, nigdy nie usuwane przez to narzędzie)" ;;
+        total_quarantine_label) echo "Łącznie do przetworzenia (pliki w kwarantannie zwolnią miejsce dopiero po --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Poza katalogiem domowym: tryb kwarantanny nie przenosi tych plików. Użyj --permanent, aby je usunąć." ;;
         cli_interactive_flow_1) echo "Przejdę przez każdą kategorię i poproszę o potwierdzenie." ;;
         cli_interactive_flow_2) echo "Domyślna odpowiedź to zawsze NIE — możesz bezpiecznie nacisnąć Enter." ;;
         cli_auto_safe_flow_1) echo "Przenoszę jawnie bezpieczne cache aplikacji do kwarantanny; tmp wymaga --permanent." ;;

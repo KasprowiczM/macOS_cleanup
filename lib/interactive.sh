@@ -342,7 +342,7 @@ show_dry_run_summary() {
     done
 
     echo -e "${C_DIM}  ────────────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}$(t "dryrun_summary_total"): ${C_YELLOW}${total_size}${C_RESET}"
+    echo -e "  ${C_BOLD}$(headline_total_label "dryrun_summary_total"): ${C_YELLOW}${total_size}${C_RESET}"
     echo
 }
 
@@ -355,7 +355,7 @@ ask_proceed_to_interactive() {
     echo -e "${C_BOLD}${C_GREEN}  $(t "proceed_interactive_title")${C_RESET}"
     echo -e "${C_BOLD}${C_GREEN}══════════════════════════════════════════════════════════${C_RESET}"
     echo
-    echo -e "  $(t "proceed_interactive_found"): ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    echo -e "  $(headline_total_label "proceed_interactive_found"): ${C_YELLOW}${C_BOLD}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
     echo
     echo -e "  ${C_DIM}$(t "proceed_interactive_note_1")${C_RESET}"
     echo -e "  ${C_DIM}$(t "proceed_interactive_note_2")${C_RESET}"

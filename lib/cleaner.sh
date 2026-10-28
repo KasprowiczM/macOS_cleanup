@@ -44,6 +44,38 @@ category_max_risk() {
 }
 
 # ---------------------------------------------------------------------------
+# P1-2: processable_paths <path>... → PROCESSABLE_PATHS
+# The paths safe_remove will act on in this REMOVE_MODE. Quarantine mode only
+# moves paths under HOME, so /tmp, /Library/Logs and system DiagnosticReports
+# used to get a consent prompt and a "cleaned" outcome while every item was
+# skipped. Filtering only narrows what reaches safe_remove.
+# ---------------------------------------------------------------------------
+processable_paths() {
+    PROCESSABLE_PATHS=()
+    local p
+    for p in "$@"; do
+        if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]] || is_user_space_path "$p"; then
+            PROCESSABLE_PATHS+=("$p")
+        fi
+    done
+}
+
+# processable_total_bytes <found-count> <ledger-bytes> — the ledger total when
+# nothing was filtered out, else the size of PROCESSABLE_PATHS (non-empty).
+# Callers pass catbytes_get "<key>" literally so test_report_parity sees the key.
+processable_total_bytes() {
+    local found="$1" ledger="$2" total=0 p
+    if (( ${#PROCESSABLE_PATHS[@]} == found )); then
+        echo "$ledger"
+        return 0
+    fi
+    for p in "${PROCESSABLE_PATHS[@]}"; do
+        total=$(( total + $(path_size_bytes "$p") ))
+    done
+    echo "$total"
+}
+
+# ---------------------------------------------------------------------------
 # clean_trash — ~/.Trash
 # Simplest and safest cleanup — always offer first
 # ---------------------------------------------------------------------------
@@ -245,15 +277,6 @@ clean_logs() {
     local total_count=$(( ${#FOUND_APP_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
     [[ $total_count -eq 0 ]] && return
 
-    # The ledger has no "logs" key — analyze_logs() writes "user-logs" and
-    # "system-logs". catbytes_get returns 0 for an unknown key, so this
-    # prompt offered every log cleanup as "0 B" no matter how much was
-    # actually queued.
-    local total_bytes
-    total_bytes=$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))
-    local total_h
-    total_h=$(bytes_to_human "$total_bytes")
-
     # bash 3.2 + set -u: "${empty_array[@]}" is an *unbound variable* error, not
     # an empty expansion. The guard above only checks the SUM, so a machine with
     # user logs but no old system logs (or vice versa) aborted the whole run
@@ -267,6 +290,26 @@ clean_logs() {
         all_logs+=("${FOUND_SYSTEM_LOGS[@]}")
     fi
     (( ${#all_logs[@]} > 0 )) || return
+
+    # P1-2: the quarantine mode never moves the system logs (outside HOME).
+    local system_deferred=0
+    processable_paths "${all_logs[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#all_logs[@]} )); then
+        system_deferred=1
+        print_skip "Log files outside HOME: $(t "clean_needs_permanent")"
+        mark_category_outcome "system-logs" needs-permanent
+    fi
+    (( ${#PROCESSABLE_PATHS[@]} > 0 )) || return 0
+    all_logs=("${PROCESSABLE_PATHS[@]}")
+
+    # The ledger has no "logs" key — analyze_logs() writes "user-logs" and
+    # "system-logs". catbytes_get returns 0 for an unknown key, so this
+    # prompt offered every log cleanup as "0 B" no matter how much was
+    # actually queued.
+    local total_bytes
+    total_bytes="$(processable_total_bytes "$total_count" "$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))")"
+    local total_h
+    total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
@@ -282,11 +325,11 @@ clean_logs() {
             --safe-if    "$(t "clean_logs_safe_if")" \
             --risk       "$cat_risk" || {
                 mark_category_outcome "user-logs" skipped
-                mark_category_outcome "system-logs" skipped
+                (( system_deferred )) || mark_category_outcome "system-logs" skipped
                 return 0
             }
             mark_category_outcome "user-logs" cleaned
-            mark_category_outcome "system-logs" cleaned
+            (( system_deferred )) || mark_category_outcome "system-logs" cleaned
     fi
 
     print_section "Cleaning: logs"
@@ -301,15 +344,26 @@ clean_logs() {
 clean_diagnostic_reports() {
     [[ ${#FOUND_DIAGNOSTIC_REPORTS[@]} -eq 0 ]] && return
 
+    # P1-2: /Library/Logs/DiagnosticReports is outside HOME.
+    processable_paths "${FOUND_DIAGNOSTIC_REPORTS[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#FOUND_DIAGNOSTIC_REPORTS[@]} )); then
+        print_skip "Diagnostic reports outside HOME: $(t "clean_needs_permanent")"
+    fi
+    if (( ${#PROCESSABLE_PATHS[@]} == 0 )); then
+        mark_category_outcome "diagnostic-reports" needs-permanent
+        return 0
+    fi
+    local -a reports=("${PROCESSABLE_PATHS[@]}")
+
     local total_bytes
-    total_bytes=$(catbytes_get "diagnostic-reports")
+    total_bytes="$(processable_total_bytes "${#FOUND_DIAGNOSTIC_REPORTS[@]}" "$(catbytes_get "diagnostic-reports")")"
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
-        paths_str=$(printf '%s|' "${FOUND_DIAGNOSTIC_REPORTS[@]}")
-        cat_risk="$(category_max_risk "${FOUND_DIAGNOSTIC_REPORTS[@]}")"
+        paths_str=$(printf '%s|' "${reports[@]}")
+        cat_risk="$(category_max_risk "${reports[@]}")"
 
         confirm_category \
             --title      "Diagnostic Reports / Crash Logs" \
@@ -319,11 +373,15 @@ clean_diagnostic_reports() {
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_crash_logs_safe_if")" \
             --risk       "$cat_risk" || { mark_category_outcome "diagnostic-reports" skipped; return 0; }
-            mark_category_outcome "diagnostic-reports" cleaned
+            if (( ${#reports[@]} < ${#FOUND_DIAGNOSTIC_REPORTS[@]} )); then
+                mark_category_outcome "diagnostic-reports" partial
+            else
+                mark_category_outcome "diagnostic-reports" cleaned
+            fi
     fi
 
     print_section "Cleaning: diagnostic reports"
-    for f in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
+    for f in "${reports[@]}"; do
         safe_remove "$f"
     done
 }
@@ -334,15 +392,27 @@ clean_diagnostic_reports() {
 clean_tmp() {
     [[ ${#FOUND_TMP_FILES[@]} -eq 0 ]] && return
 
+    # P1-2: /tmp is outside HOME, so the quarantine mode never moves it.
+    processable_paths "${FOUND_TMP_FILES[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} == 0 )); then
+        print_skip "Temporary files (/tmp): $(t "clean_needs_permanent")"
+        mark_category_outcome "tmp" needs-permanent
+        return 0
+    fi
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#FOUND_TMP_FILES[@]} )); then
+        print_skip "Temporary files outside HOME: $(t "clean_needs_permanent")"
+    fi
+    local -a tmp_files=("${PROCESSABLE_PATHS[@]}")
+
     local total_bytes
-    total_bytes=$(catbytes_get "tmp")
+    total_bytes="$(processable_total_bytes "${#FOUND_TMP_FILES[@]}" "$(catbytes_get "tmp")")"
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
-        paths_str=$(printf '%s|' "${FOUND_TMP_FILES[@]}")
-        cat_risk="$(category_max_risk "${FOUND_TMP_FILES[@]}")"
+        paths_str=$(printf '%s|' "${tmp_files[@]}")
+        cat_risk="$(category_max_risk "${tmp_files[@]}")"
 
         confirm_category \
             --title      "Temporary files (/tmp)" \
@@ -352,11 +422,15 @@ clean_tmp() {
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_tmp_safe_if")" \
             --risk       "$cat_risk" || { mark_category_outcome "tmp" skipped; return 0; }
-            mark_category_outcome "tmp" cleaned
+            if (( ${#tmp_files[@]} < ${#FOUND_TMP_FILES[@]} )); then
+                mark_category_outcome "tmp" partial
+            else
+                mark_category_outcome "tmp" cleaned
+            fi
     fi
 
     print_section "Cleaning: temporary files (/tmp)"
-    for f in "${FOUND_TMP_FILES[@]}"; do
+    for f in "${tmp_files[@]}"; do
         safe_remove "$f"
     done
 }
@@ -393,6 +467,14 @@ clean_app_leftovers() {
 
 clean_xcode_derived_data() {
     [[ -z "${FOUND_DERIVED_DATA:-}" ]] && return
+
+    # Phase 3: removing DerivedData under a running build breaks that build.
+    if cache_owner_running xcode_derived; then
+        print_skip "Xcode is running; DerivedData is left alone: ${FOUND_DERIVED_DATA}"
+        record_skipped_item "Xcode DerivedData in use (Xcode or xcodebuild running)"
+        mark_category_outcome "xcode-derived" in-use
+        return 0
+    fi
 
     local size_h
     size_h=$(path_size_human "$FOUND_DERIVED_DATA")
@@ -501,7 +583,7 @@ clean_xcode_simulators() {
     fi
 
     print_section "Cleaning: iOS Simulators"
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: xcrun simctl delete unavailable"
         record_native_command_event "xcrun simctl delete unavailable" "planned" "$(catbytes_get "simulators")" "dry-run"
     else
@@ -549,7 +631,7 @@ _clean_dev_native_or_fallback() {
     local size_h
     size_h=$(path_size_human "$path")
 
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: ${cmd}  (${size_h})"
         record_native_command_event "$cmd" "planned" "$(path_size_bytes "$path")" "dry-run"
     else
@@ -582,7 +664,7 @@ clean_dev_caches() {
     [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
 
     local -a cleanable_items=()
-    local item key path
+    local item key path _ledger
     for item in "${FOUND_DEV_ITEMS[@]}"; do
         key="${item%%:*}"
         path="${item#*:}"
@@ -664,7 +746,13 @@ clean_dev_caches() {
                 # No vendor command owns ~/.npm/_npx — npm cache clean skips it
                 # entirely. It is a plain re-downloadable cache, so it goes
                 # through safe_remove (quarantine by default, restorable).
-                safe_remove "$path"
+                if cache_owner_running npx_cache; then
+                    print_skip "In use, not removed (npx_cache): ${path}"
+                    record_skipped_item "Cache in use by a running tool (npx_cache): ${path}"
+                    mark_category_outcome "npx" in-use
+                else
+                    safe_remove "$path"
+                fi
                 ;;
             yarn_cache)
                 _clean_dev_native_or_fallback \
@@ -677,7 +765,7 @@ clean_dev_caches() {
                     "pnpm store" "$(t "pnpm_store_trimmed")" "$path"
                 ;;
             brew_cache|brew_cleanup)
-                if [[ "$DRY_RUN" == "1" ]]; then
+                if is_dry_run; then
                     if [[ "$path" == "__brew__" ]]; then
                         print_dry "Would run: brew cleanup --prune=all  ($(bytes_to_human "$(catbytes_get "brew-stale")"))"
                     else
@@ -689,7 +777,7 @@ clean_dev_caches() {
                     if command -v brew &>/dev/null; then
                         local _brew_path _bb _ba _bfreed
                         _brew_path="$path"
-                        [[ "$_brew_path" == "__brew__" ]] && _brew_path="$(brew --cache 2>/dev/null || echo "")"
+                        if [[ "$_brew_path" == "__brew__" ]]; then _brew_path="$(native_tool_target brew)" || _brew_path=""; fi
                         _bb=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _bb="$(path_size_bytes "$_brew_path")"
                         if brew cleanup --prune=all 2>/dev/null; then
                             _ba=0; [[ -n "$_brew_path" && -e "$_brew_path" ]] && _ba="$(path_size_bytes "$_brew_path")"
@@ -708,7 +796,7 @@ clean_dev_caches() {
                 fi
                 ;;
             pip_cache)
-                if [[ "$DRY_RUN" == "1" ]]; then
+                if is_dry_run; then
                     print_dry "Would run: pip cache purge  ($(path_size_human "$path"))"
                     record_native_command_event "pip cache purge" "planned" "$(catbytes_get "pip")" "dry-run"
                 else
@@ -741,6 +829,13 @@ clean_dev_caches() {
                     "Ruby gems" "Ruby gems cleanup complete." "$path"
                 ;;
             *)
+                # Phase 3: never pull a cache out from under a running build.
+                if cache_owner_running "$key"; then
+                    print_skip "In use, not removed (${key}): ${path}"
+                    record_skipped_item "Cache in use by a running tool (${key}): ${path}"
+                    _ledger="$(cache_ledger_key "$key")" && mark_category_outcome "$_ledger" in-use
+                    continue
+                fi
                 [[ -d "$path" || -f "$path" ]] && safe_remove "$path"
                 ;;
         esac
@@ -775,7 +870,7 @@ clean_docker() {
     fi
 
     print_section "Cleaning: Docker (system prune)"
-    if [[ "$DRY_RUN" == "1" ]]; then
+    if is_dry_run; then
         print_dry "Would run: docker system prune -f"
         record_native_command_event "docker system prune -f" "planned" "$(catbytes_get "docker")" "dry-run"
     else
@@ -797,12 +892,60 @@ clean_docker() {
 # ---------------------------------------------------------------------------
 # clean_time_machine_snapshots
 # ---------------------------------------------------------------------------
+# Phase 3: tm_snapshot_date <name> — YYYY-MM-DD-HHMMSS from a snapshot name.
+tm_snapshot_date() {
+    printf '%s\n' "${1:-}" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | head -1
+}
+
+# Phase 3: tm_backup_running — true unless `tmutil status` positively reports
+# `Running = 0;`. An unreadable status counts as running: snapshots are never
+# deleted under a backup in progress.
+tm_backup_running() {
+    local status
+    status="$(tmutil status 2>/dev/null)" || return 0
+    if printf '%s\n' "$status" | grep -Eq '^[[:space:]]*Running = 0;'; then
+        return 1
+    fi
+    return 0
+}
+
 clean_time_machine_snapshots() {
     [[ ${#FOUND_TM_SNAPSHOTS[@]} -eq 0 ]] && return
 
-    local count=${#FOUND_TM_SNAPSHOTS[@]}
+    # Phase 3: the newest local snapshot is always kept as the most recent
+    # local restore point, and nothing is deleted while Time Machine is
+    # backing up. (The pre-update com.apple.os.update-* snapshot is never
+    # listed: the analyzer keeps com.apple.TimeMachine.* only.)
+    local snap snap_d newest_date=""
+    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+        snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
+        [[ -n "$snap_d" && "$snap_d" > "$newest_date" ]] && newest_date="$snap_d"
+    done
+    # One entry per date: deletelocalsnapshots works by date.
+    local -a deletable=()
+    local seen_dates=" "
+    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+        snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
+        [[ -n "$snap_d" && "$snap_d" != "$newest_date" ]] || continue
+        case "$seen_dates" in *" ${snap_d} "*) continue ;; esac
+        seen_dates="${seen_dates}${snap_d} "
+        deletable+=("$snap")
+    done
+    if (( ${#deletable[@]} == 0 )); then
+        print_info "Local Time Machine snapshots: only the newest exists; it is kept."
+        mark_category_outcome "time-machine" kept-newest
+        return 0
+    fi
+    if tm_backup_running; then
+        print_warn "Time Machine is backing up (or its status is unknown); local snapshots are left alone."
+        record_skipped_item "Local Time Machine snapshots: backup in progress or status unknown"
+        mark_category_outcome "time-machine" backup-running
+        return 0
+    fi
+
+    local count=${#deletable[@]}
     local snapshots_str
-    snapshots_str=$(printf '%s\n' "${FOUND_TM_SNAPSHOTS[@]}")
+    snapshots_str=$(printf '%s\n' "${deletable[@]}")
 
     if ! confirm_time_machine_snapshots "$snapshots_str" "${count} snapshots"; then
         print_skip "$(t "skipped_category"): local Time Machine snapshots"
@@ -810,11 +953,18 @@ clean_time_machine_snapshots() {
         mark_category_outcome "time-machine" skipped
         return
     fi
+    # The prompt can wait for minutes; a backup may have started meanwhile.
+    if tm_backup_running; then
+        print_warn "Time Machine started backing up; local snapshots are left alone."
+        record_skipped_item "Local Time Machine snapshots: backup started during confirmation"
+        mark_category_outcome "time-machine" backup-running
+        return 0
+    fi
     mark_category_outcome "time-machine" cleaned
 
-    print_section "Cleaning: local Time Machine snapshots"
+    print_section "Cleaning: local Time Machine snapshots (newest kept: ${newest_date})"
 
-    for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
+    for snap in "${deletable[@]}"; do
         [[ -z "$snap" ]] && continue
         # Extract full datetime from snapshot name: com.apple.TimeMachine.2026-04-17-131903.local
         local snap_date=""
@@ -825,7 +975,7 @@ clean_time_machine_snapshots() {
             continue
         fi
 
-        if [[ "$DRY_RUN" == "1" ]]; then
+        if is_dry_run; then
             print_dry "Would run: tmutil deletelocalsnapshots $snap_date"
             record_native_command_event "tmutil deletelocalsnapshots ${snap_date}" "planned" 0 "dry-run"
         else

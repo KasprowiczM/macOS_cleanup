@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # cleanup_all.sh — Professional macOS System Cleaner
-# Version: 3.0.0
+# Version: 3.0.6
 #
 # SYNOPSIS
 #   bash cleanup_all.sh [OPTIONS]
@@ -113,6 +113,9 @@ RETENTION_DAYS="$QUARANTINE_RETENTION_DAYS"
 SHOW_HELP=0
 SHOW_VERSION=0
 JSON_OUTPUT=0
+# Set by apply/restore/purge so _on_exit can report a run that fails early.
+REPORT_PENDING_MODE=""
+SUMMARY_PENDING=0
 # When --json is active this fd points to the original stdout so the
 # JSON summary reaches the caller even though fd 1 is redirected to stderr.
 JSON_OUTPUT_FD=1
@@ -191,6 +194,22 @@ build_active_categories() {
 _on_exit() {
     local exit_code=$?
     release_cleanup_lock
+    # A failing apply, restore or purge exits before main prints its summary;
+    # still write the report, the summary and the --json object.
+    if (( exit_code != 0 )) && (( ${SUMMARY_PENDING:-0} == 1 )); then
+        SUMMARY_PENDING=0
+        set +e
+        if [[ -n "${REPORT_PENDING_MODE:-}" ]]; then
+            generate_report "$REPORT_PENDING_MODE" >/dev/null 2>&1
+        fi
+        print_summary_report "$MODE" 2>/dev/null
+        if (( JSON_OUTPUT )); then
+            emit_json_summary "$MODE" 2>/dev/null 1>&"${JSON_OUTPUT_FD}"
+        fi
+    fi
+    if type remove_plan_temp_files >/dev/null 2>&1; then
+        remove_plan_temp_files
+    fi
     cleanup_sudo_keepalive
     if (( exit_code == 0 )); then
         log_info "Script completed successfully (exit 0)."
@@ -259,9 +278,8 @@ parse_args() {
                 shift
                 ;;
             --dry-run)
-                if [[ "$MODE" != "apply-plan" ]]; then
-                    MODE="dry-run"
-                fi
+                # Leave MODE alone: enforce_explicit_dry_run maps it to its
+                # preview form after parsing, so flag order cannot matter.
                 DRY_RUN=1
                 EXPLICIT_DRY_RUN=1
                 shift
@@ -579,18 +597,15 @@ run_dry_run_phase() {
 
     run_full_analysis "${ACTIVE_CATEGORIES[@]}"
 
+    # P1-1: the headline is the plan's executable sum, not the ledger total.
+    # The ledger counted Homebrew twice (cache + brew-stale) and included
+    # /tmp and /Library/Logs work that the quarantine mode always skips.
+    build_cleanup_plan_from_analysis
+    plan_record_headline_totals
+
     # Print category summary
     echo
     print_section "$(t "cli_summary_analysis")"
-    # Accumulate grand_total first (avoid subshell from piping to sort)
-    local grand_total=0
-    for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
-        local bytes; bytes=$(catbytes_get "$key")
-        (( bytes == 0 )) && continue
-        # time-machine stores a snapshot count, not a byte size
-        [[ "$key" == "time-machine" ]] && continue
-        grand_total=$(( grand_total + bytes ))
-    done
     # Render sorted (size first so -h sort works on whole lines)
     for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
         local bytes; bytes=$(catbytes_get "$key")
@@ -602,10 +617,11 @@ run_dry_run_phase() {
         fi
     done | sort -rh
     echo -e "  ${C_DIM}──────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}$(t "cli_total_freeable"): ${C_YELLOW}$(bytes_to_human "$grand_total")${C_RESET}"
-    TOTAL_WOULD_FREE_BYTES=$grand_total
+    echo -e "  ${C_BOLD}$(headline_total_label): ${C_YELLOW}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    if (( TOTAL_INFORMATIONAL_BYTES > 0 )); then
+        echo -e "  ${C_DIM}$(t "cli_report_only_total"): $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")${C_RESET}"
+    fi
 
-    build_cleanup_plan_from_analysis
     generate_plan_json "$PLAN_FILE"
 
     # Plan mode writes its final report after the JSON plan is available.
@@ -620,6 +636,21 @@ run_plan_phase() {
 }
 
 # ---------------------------------------------------------------------------
+# require_cleanup_lock — every mutating mode holds ${QUARANTINE_ROOT}/.apply.lock,
+# or exits 1. P1-7: interactive and auto-safe used to run unlocked, so a
+# concurrent `--purge-quarantine latest` could delete the run they were filling.
+# ---------------------------------------------------------------------------
+require_cleanup_lock() {
+    if ! acquire_cleanup_lock; then
+        print_error "Another cleanup run (apply, restore, purge, interactive or auto-safe) holds ${QUARANTINE_ROOT}/.apply.lock"
+        exit 1
+    fi
+    # set +e: under errexit `(exit "$rc")` with rc != 0 would end the trap
+    # before _on_exit (temp files, sudo keepalive) ever ran.
+    trap 'rc=$?; release_cleanup_lock; set +e; (exit "$rc"); _on_exit' EXIT
+}
+
+# ---------------------------------------------------------------------------
 # run_interactive_phase — clean category by category with confirmations
 # ---------------------------------------------------------------------------
 run_interactive_phase() {
@@ -628,6 +659,7 @@ run_interactive_phase() {
     echo -e "  ${C_DIM}$(t "cli_interact_desc2")${C_RESET}"
     echo
 
+    require_cleanup_lock
     DRY_RUN=0
 
     run_cleanup "${ACTIVE_CATEGORIES[@]}"
@@ -648,6 +680,7 @@ run_auto_safe_phase() {
     echo -e "  ${C_DIM}$(t "cli_auto_safe_desc2")${C_RESET}"
     echo
 
+    require_cleanup_lock
     DRY_RUN=0
 
     # Run only safe-rated cleanups.
@@ -736,19 +769,22 @@ run_auto_safe_phase() {
 run_restore_phase() {
     print_header "$(t "mode_restore")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
+    REPORT_PENDING_MODE="restore"; SUMMARY_PENDING=1
     if [[ -z "$RESTORE_TARGET" ]]; then
         print_error "$(t "cli_no_manifest")"
         exit 2
     fi
 
     restore_quarantine_manifest "$RESTORE_TARGET"
+    REPORT_PENDING_MODE=""
     generate_report "restore"
+    # P2: a restore that left rows behind is not a success.
+    if (( RESTORE_INCOMPLETE == 1 )); then
+        print_warn "Restore incomplete: some entries were not restored (see the report)."
+        exit 1
+    fi
 }
 
 run_list_quarantine_phase() {
@@ -760,11 +796,7 @@ run_list_quarantine_phase() {
 run_purge_quarantine_phase() {
     print_header "$(t "mode_purge")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
     if [[ -z "$PURGE_TARGET" ]]; then
         print_error "$(t "cli_no_purge_target")"
@@ -777,7 +809,10 @@ run_purge_quarantine_phase() {
         warn_if_no_fresh_backup "purge quarantine" || true
     fi
 
+    SUMMARY_PENDING=1
+    (( APPLY_PURGE == 1 )) && REPORT_PENDING_MODE="purge-quarantine"
     purge_quarantine "$PURGE_TARGET" "$APPLY_PURGE" "$RETENTION_DAYS"
+    REPORT_PENDING_MODE=""
     if (( APPLY_PURGE == 1 )); then
         generate_report "purge-quarantine"
     fi
@@ -786,12 +821,9 @@ run_purge_quarantine_phase() {
 run_apply_plan_phase() {
     print_header "$(t "mode_apply")"
 
-    if ! acquire_cleanup_lock; then
-        print_error "Another apply, restore, or purge holds ${QUARANTINE_ROOT}/.apply.lock"
-        exit 1
-    fi
-    trap 'rc=$?; release_cleanup_lock; (exit "$rc"); _on_exit' EXIT
+    require_cleanup_lock
 
+    REPORT_PENDING_MODE="apply-plan"; SUMMARY_PENDING=1
     if [[ -z "$PLAN_FROM_FILE" ]]; then
         print_error "$(t "cli_apply_requires_plan")"
         exit 2
@@ -799,7 +831,43 @@ run_apply_plan_phase() {
 
     warn_if_no_fresh_backup "apply plan" || true
     apply_plan_file "$PLAN_FROM_FILE"
+    REPORT_PENDING_MODE=""
     generate_report "apply-plan"
+}
+
+# ---------------------------------------------------------------------------
+# enforce_explicit_dry_run — P0-1: an explicit --dry-run (also analyze/plan) is
+# a hard no-delete request whatever the flag order. Mutating modes are mapped to
+# their preview form; modes without one are refused.
+# ---------------------------------------------------------------------------
+enforce_explicit_dry_run() {
+    if (( EXPLICIT_DRY_RUN != 1 )); then
+        # Purge/prune only mutate when explicitly requested; is_dry_run must
+        # not block them then.
+        case "$MODE" in
+            purge-quarantine) (( APPLY_PURGE == 1 )) && DRY_RUN=0 ;;
+            prune-artifacts)  DRY_RUN=0 ;;
+        esac
+        return 0
+    fi
+
+    DRY_RUN=1
+    case "$MODE" in
+        interactive|auto-safe)
+            print_warn "--dry-run overrides --${MODE}: analysis only, nothing is removed."
+            MODE="dry-run"
+            ;;
+        purge-quarantine)
+            if (( APPLY_PURGE == 1 )); then
+                print_warn "--dry-run overrides --apply: purge preview only, nothing is removed."
+            fi
+            APPLY_PURGE=0
+            ;;
+        restore|prune-artifacts)
+            print_error "--dry-run cannot be combined with --${MODE}: it has no preview form."
+            exit 2
+            ;;
+    esac
 }
 
 # ---------------------------------------------------------------------------
@@ -812,6 +880,12 @@ main() {
     if (( SHOW_HELP )); then    show_help;    exit 0; fi
     if (( SHOW_VERSION )); then show_version; exit 0; fi
     if (( SHOW_EXPLAIN )); then explain_categories; exit 0; fi
+
+    enforce_explicit_dry_run
+
+    # P0-3: fail closed on misconfiguration before any mode runs.
+    validate_remove_mode || exit 2
+    validate_quarantine_root || exit 2
 
     preflight_checks
 
@@ -923,6 +997,7 @@ main() {
 
     print_summary_report "$MODE"
 
+    SUMMARY_PENDING=0
     # --json: emit machine-readable summary to original stdout (fd JSON_OUTPUT_FD).
     if (( JSON_OUTPUT )); then
         emit_json_summary "$MODE" >&${JSON_OUTPUT_FD}

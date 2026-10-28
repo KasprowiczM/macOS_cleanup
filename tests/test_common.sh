@@ -268,7 +268,7 @@ assert_true  "is_protected_path '$HOME/Documents'"  "fallback: Documents still p
 # ---------------------------------------------------------------------------
 # PF4: verify app bundle ID caching and detection
 # ---------------------------------------------------------------------------
-begin_test "PF4: app_bundle_exists uses mdfind fast path"
+begin_test "PF4: app_bundle_exists falls back to mdfind for apps outside the index"
 APP_BUNDLE_SEARCH_DIRS=("${SANDBOX}/Applications")
 APP_BUNDLE_ID_CACHE_LOADED=0
 APP_BUNDLE_ID_CACHE=""
@@ -284,7 +284,8 @@ mdfind() {
     esac
 }
 assert_true "app_bundle_exists 'com.example.fastpath'" "Bundle should be found via mdfind"
-assert_eq "$APP_BUNDLE_ID_CACHE_LOADED" "0" "mdfind path should not load fallback cache"
+# Phase 2: the index is loaded once and checked first; mdfind only on a miss.
+assert_eq "$APP_BUNDLE_ID_CACHE_LOADED" "1" "the bundle-id index is loaded once and consulted first"
 unset -f mdfind
 
 begin_test "PF4: app_bundle_exists works via sandboxed plist fallback"

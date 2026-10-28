@@ -89,6 +89,18 @@ t() {
     echo "$humanized"
 }
 
+# P1-2: headline_total_label [permanent-key] — quarantined files free nothing
+# until --purge-quarantine, so the quarantine-mode total must not be called
+# "freeable" (it also covers native commands, which free space at once).
+# The permanent mode keeps its own wording (default cli_total_freeable).
+headline_total_label() {
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+        t "${1:-cli_total_freeable}"
+    else
+        t "total_quarantine_label"
+    fi
+}
+
 # Cached path size calculation to optimize filesystem du traversal
 SIZE_CACHE_KEYS=()
 SIZE_CACHE_VALS=()
@@ -151,11 +163,54 @@ _rotate_artifact_file() {
     path_is_within "$candidate" "$root" || return 1
     base="${candidate##*/}"
     case "$base" in
-        cleanup_*.log|report_*.md|plan_*.json|journal_*.jsonl) ;;
+        cleanup_*.log|unreadable_*.txt|report_*.md|plan_*.json|journal_*.jsonl) ;;
         *) return 1 ;;
     esac
     rm -f "$candidate"
     [[ ! -e "$candidate" ]]
+}
+
+# P0-1: true when this run must not mutate anything. An explicit --dry-run
+# (EXPLICIT_DRY_RUN=1) wins even if a later code path reset DRY_RUN=0.
+is_dry_run() {
+    [[ "${DRY_RUN:-0}" == "1" || "${EXPLICIT_DRY_RUN:-0}" == "1" ]]
+}
+
+# P0-3: REMOVE_MODE must be exactly quarantine|permanent. A typo must never
+# fall through to permanent deletion.
+validate_remove_mode() {
+    case "${REMOVE_MODE:-}" in
+        quarantine|permanent) return 0 ;;
+    esac
+    print_error "Invalid REMOVE_MODE '${REMOVE_MODE:-}': expected quarantine or permanent."
+    return 1
+}
+
+# P0-3: QUARANTINE_ROOT must be an absolute ".../quarantine" path without . or
+# .. segments. Purge removes the root's immediate children, so a root such as
+# $HOME would turn a purge into rm -rf of every home directory.
+validate_quarantine_root() {
+    local root="${QUARANTINE_ROOT:-}"
+
+    case "$root" in
+        /*) ;;
+        *)
+            print_error "Invalid QUARANTINE_ROOT '${root}': must be an absolute path."
+            return 1
+            ;;
+    esac
+    case "${root}/" in
+        */./*|*/../*)
+            print_error "Invalid QUARANTINE_ROOT '${root}': must not contain . or .. segments."
+            return 1
+            ;;
+    esac
+    root="${root%/}"
+    if [[ "${root##*/}" != "quarantine" ]]; then
+        print_error "Invalid QUARANTINE_ROOT '${QUARANTINE_ROOT}': last component must be 'quarantine'."
+        return 1
+    fi
+    return 0
 }
 
 # Prune run artifacts older than $1 days (default 30).
@@ -172,6 +227,12 @@ rotate_old_artifacts() {
     local removed=0
     local candidate
 
+    # P0-1: never prune during a dry run.
+    if is_dry_run; then
+        echo 0
+        return 0
+    fi
+
     case "$max_days" in
         ''|*[!0-9]*) return 0 ;;
     esac
@@ -183,7 +244,7 @@ rotate_old_artifacts() {
             if _rotate_artifact_file "$candidate" "$logs_dir"; then
                 removed=$((removed + 1))
             fi
-        done < <(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null)
+        done < <(find "$logs_dir" -type f \( -name "cleanup_*.log" -o -name "unreadable_*.txt" \) -mtime +"$max_days" 2>/dev/null)
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
@@ -269,10 +330,49 @@ bytes_to_human() {
     fi
 }
 
+# Phase 3: unreadable is not empty. macOS can deny access to other apps'
+# folders silently; du then exits non-zero and used to make this function
+# report 0 bytes. Every location that could not be fully read is recorded in
+# a run-scoped file (written from command substitutions too), and the
+# summaries report the analysis as partial.
+analysis_unreadable_file() {
+    printf '%s/unreadable_%s.txt' "${LOGS_DIR:-${TMPDIR:-/tmp}}" "${RUN_TIMESTAMP:-run}"
+}
+
+analysis_record_unreadable() {
+    local kind="$1" path="$2" file
+    file="$(analysis_unreadable_file)"
+    { printf '%s\t%s\n' "$kind" "$path" >> "$file"; } 2>/dev/null || true
+}
+
+# analysis_unreadable_count — distinct locations recorded this run.
+analysis_unreadable_count() {
+    local file
+    file="$(analysis_unreadable_file)"
+    if [[ -f "$file" ]]; then
+        cut -f2- "$file" 2>/dev/null | sort -u | grep -c . 2>/dev/null || true
+    else
+        echo 0
+    fi
+}
+
+# analysis_path_partial <path> — true when this run recorded <path> as only
+# partly (or not) readable.
+analysis_path_partial() {
+    local file
+    file="$(analysis_unreadable_file)"
+    [[ -f "$file" ]] || return 1
+    # awk reads the whole file: no early-exit pipe that pipefail could turn
+    # into a false "not partial".
+    P="$1" awk -F'\t' 'substr($0, index($0, "\t") + 1) == ENVIRON["P"] { f = 1 } END { exit !f }' "$file"
+}
+
 # Return the disk usage of a path in bytes.
 # Missing path: echo 0, return 0.
-# Existing path, du succeeds with a numeric KB: echo kb*1024, return 0.
-# Existing path, du fails or yields no numeric: warn, echo 0, return 1.
+# du succeeds with a numeric KB: echo kb*1024, return 0.
+# du fails but reports a numeric KB (partly unreadable): record, echo the
+# readable lower bound, return 0.
+# du fails with no numeric KB: record, warn, echo 0, return 1.
 path_size_bytes() {
     local path="$1"
     if [[ ! -e "$path" ]]; then
@@ -284,9 +384,22 @@ path_size_bytes() {
     du_out=$(du -sk "$path" 2>/dev/null) || du_rc=$?
     kb=$(printf '%s\n' "$du_out" | awk 'NR==1{print $1}')
     case "$kb" in
-        ''|*[!0-9]*) du_rc=1 ;;
+        ''|*[!0-9]*) kb="" ;;
     esac
     if (( du_rc != 0 )); then
+        if [[ -n "$kb" ]]; then
+            # Partly readable: keep what du could count; it is a lower bound.
+            analysis_record_unreadable "partial" "$path"
+            echo $(( kb * 1024 ))
+            return 0
+        fi
+        analysis_record_unreadable "unreadable" "$path"
+        print_warn "Could not measure size of: $path" >&2
+        echo 0
+        return 1
+    fi
+    if [[ -z "$kb" ]]; then
+        analysis_record_unreadable "unreadable" "$path"
         print_warn "Could not measure size of: $path" >&2
         echo 0
         return 1
@@ -315,12 +428,23 @@ declare -a _NEVER_TOUCH_NORMALIZED=()
 
 _path_expand_home_and_vars() {
     local p="$1"
+    local user
 
     p="${p/#\~/$HOME}"
     p="${p//\$HOME/$HOME}"
     p="${p//\$\{HOME\}/$HOME}"
-    p="${p//\$USER/$USER}"
-    p="${p//\$\{USER\}/$USER}"
+    # P1-6: USER is unset under launchd/cron/`env -i`; under `set -u` a bare
+    # $USER aborted expansion and callers fell back to raw paths. Resolve it
+    # only when the path needs it, and fail when it cannot be resolved.
+    case "$p" in
+        *'$USER'*|*'${USER}'*)
+            user="${USER:-}"
+            [[ -n "$user" ]] || user="$(id -un 2>/dev/null || true)"
+            [[ -n "$user" ]] || return 1
+            p="${p//\$USER/$user}"
+            p="${p//\$\{USER\}/$user}"
+            ;;
+    esac
 
     # Trim quotes used in YAML-style values.
     case "$p" in
@@ -340,16 +464,17 @@ normalize_path() {
     local norm=""
     local top=0 is_abs=0 i seg
 
-    path="$(_path_expand_home_and_vars "$input")"
+    path="$(_path_expand_home_and_vars "$input")" || return 1
+
+    # P0-2: collapse consecutive slashes with tr. The global parameter-
+    # expansion form ${path//\/\//\/} mis-handles on bash 3.2 (it can leave a
+    # literal backslash), which let "//"-separated protected paths bypass the
+    # guard. tr -s is deterministic across bash 3.2 and 5.
+    path="$(printf '%s' "$path" | tr -s '/')"
+    # Root ("/", "//") strips to empty and fails; callers fall back to the raw
+    # path, which the broad-root guards then protect.
     path="${path%/}"
     [[ -z "$path" ]] && return 1
-
-    # Collapse consecutive slashes
-    while :; do
-        local collapsed="${path//\/\//\/}"
-        [[ "$collapsed" == "$path" ]] && break
-        path="$collapsed"
-    done
 
 
 
@@ -369,7 +494,11 @@ normalize_path() {
             base="$path"
         fi
         dir="$(cd -P "$dir" 2>/dev/null && pwd -P)"
-        if [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
+        if [[ "$base" == ".." ]]; then
+            # A trailing ".." is never a symlink leaf; resolve it so
+            # "~/Library/Caches/.." matches as ~/Library.
+            norm="$(cd -P "$path" 2>/dev/null && pwd -P)"
+        elif [[ -n "$base" && "$base" != "." && "$base" != "/" ]]; then
             if [[ "$dir" == "/" ]]; then
                 norm="/$base"
             else
@@ -378,6 +507,9 @@ normalize_path() {
         else
             norm="$dir"
         fi
+        # Fail closed: "/." resolves to an empty dir; never report success
+        # with an empty path.
+        [[ -z "$norm" ]] && return 1
         echo "$norm"
         return 0
     fi
@@ -434,76 +566,92 @@ normalize_path() {
 }
 
 # Returns 0 (true) if the given path matches any entry in NEVER_TOUCH_PATHS.
+#
+# P0-2: all pattern matching runs under `shopt -s nocasematch` inside a
+# subshell so the guard is case-insensitive. macOS APFS is case-insensitive by
+# default, so "$HOME/Library/mail" is the same object as "$HOME/Library/Mail";
+# a case-sensitive compare let a case variant bypass the guard. Scoping
+# nocasematch to a subshell keeps it out of the rest of the script and adds no
+# per-entry forks (preserving the PF3 pre-normalized array). Case folding can
+# only ever protect MORE paths, never fewer — over-protection is the safe
+# direction for a deletion guard.
 is_protected_path() {
     local candidate="$1"
     local normalized_candidate
 
-    normalized_candidate="$(normalize_path "$candidate" || echo "$candidate")"
+    # Fail closed: a path that cannot be normalized ("", "/", "//", "/.") is
+    # treated as protected.
+    normalized_candidate="$(normalize_path "$candidate")" || return 0
+    [[ -n "$normalized_candidate" ]] || return 0
 
-    # Fail closed for broad roots. Cleaners should pass leaf candidates, never
-    # whole user/system roots.
-    case "$normalized_candidate" in
-        /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
-            return 0 ;;
-        /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
-            return 0 ;;
-        "$HOME"|"$HOME/Library"|"$HOME/Library/Caches"|"$HOME/.Trash"|"$HOME/Library/Application Support")
-            return 0 ;;
-        "$HOME/Library/Preferences"|"$HOME/Library/Preferences/"*)
-            return 0 ;;
-        "$HOME/Library/Containers"|"$HOME/Library/Containers/"*)
-            return 0 ;;
-        "$HOME/Library/Group Containers"|"$HOME/Library/Group Containers/"*)
-            return 0 ;;
-        "$HOME/Library/Saved Application State"|"$HOME/Library/Saved Application State/"*)
-            return 0 ;;
-    esac
+    (
+        shopt -s nocasematch
 
-    # /System/* and other users are never touched.
-    # /Library is protected by default, with targeted cache/log leaf cleanup.
-    if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
-          "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
-        return 0
-    fi
-    if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
-        if [[ "$normalized_candidate" != "$HOME/"* ]]; then
-            return 0
-        fi
-    fi
-    if [[ "$normalized_candidate" == "/Library" || "$normalized_candidate" == "/Library/"* ]]; then
+        # Fail closed for broad roots. Cleaners should pass leaf candidates,
+        # never whole user/system roots.
         case "$normalized_candidate" in
-            /Library/Caches/*|/Library/Logs/*)
-                :
-                ;;
-            *)
-                return 0
-                ;;
+            /|/bin|/bin/*|/sbin|/sbin/*|/usr|/usr/*|/etc|/etc/*|/private/etc|/private/etc/*|/Applications|/Applications/*|/opt|/opt/*)
+                exit 0 ;;
+            /tmp|/private/tmp|/private|/private/var|/private/var/folders|/var|/var/folders)
+                exit 0 ;;
+            "$HOME"|"$HOME/Library"|"$HOME/Library/Caches"|"$HOME/.Trash"|"$HOME/Library/Application Support")
+                exit 0 ;;
+            "$HOME/Library/Preferences"|"$HOME/Library/Preferences/"*)
+                exit 0 ;;
+            "$HOME/Library/Containers"|"$HOME/Library/Containers/"*)
+                exit 0 ;;
+            "$HOME/Library/Group Containers"|"$HOME/Library/Group Containers/"*)
+                exit 0 ;;
+            "$HOME/Library/Saved Application State"|"$HOME/Library/Saved Application State/"*)
+                exit 0 ;;
         esac
-    fi
 
-    # PF3: use pre-normalized array when available (after preflight);
-    # fall back to per-call normalization for callers that skip preflight.
-    if (( ${#_NEVER_TOUCH_NORMALIZED[@]} > 0 )); then
-        local normalized_protected
-        for normalized_protected in "${_NEVER_TOUCH_NORMALIZED[@]}"; do
-            if [[ "$normalized_candidate" == "$normalized_protected" || \
-                  "$normalized_candidate" == "$normalized_protected"/* || \
-                  "$normalized_protected" == "$normalized_candidate"/* ]]; then
-                return 0  # protected
+        # /System/* and other users are never touched.
+        # /Library is protected by default, with targeted cache/log leaf cleanup.
+        if [[ "$normalized_candidate" == "/System" || "$normalized_candidate" == "/System/"* || \
+              "$normalized_candidate" == "/private/var/System"* || "$normalized_candidate" == "/var/System"* ]]; then
+            exit 0
+        fi
+        if [[ "$normalized_candidate" == "/Users" || "$normalized_candidate" == "/Users/"* ]]; then
+            if [[ "$normalized_candidate" != "$HOME/"* ]]; then
+                exit 0
             fi
-        done
-    elif (( ${#NEVER_TOUCH_PATHS[@]} > 0 )); then
-        for protected in "${NEVER_TOUCH_PATHS[@]}"; do
+        fi
+        if [[ "$normalized_candidate" == "/Library" || "$normalized_candidate" == "/Library/"* ]]; then
+            case "$normalized_candidate" in
+                /Library/Caches/*|/Library/Logs/*)
+                    :
+                    ;;
+                *)
+                    exit 0
+                    ;;
+            esac
+        fi
+
+        # PF3: use pre-normalized array when available (after preflight);
+        # fall back to per-call normalization for callers that skip preflight.
+        if (( ${#_NEVER_TOUCH_NORMALIZED[@]} > 0 )); then
             local normalized_protected
-            normalized_protected="$(normalize_path "$protected" || echo "$protected")"
-            if [[ "$normalized_candidate" == "$normalized_protected" || \
-                  "$normalized_candidate" == "$normalized_protected"/* || \
-                  "$normalized_protected" == "$normalized_candidate"/* ]]; then
-                return 0  # protected
-            fi
-        done
-    fi
-    return 1  # not protected
+            for normalized_protected in "${_NEVER_TOUCH_NORMALIZED[@]}"; do
+                if [[ "$normalized_candidate" == "$normalized_protected" || \
+                      "$normalized_candidate" == "$normalized_protected"/* || \
+                      "$normalized_protected" == "$normalized_candidate"/* ]]; then
+                    exit 0  # protected
+                fi
+            done
+        elif (( ${#NEVER_TOUCH_PATHS[@]} > 0 )); then
+            local protected normalized_protected
+            for protected in "${NEVER_TOUCH_PATHS[@]}"; do
+                normalized_protected="$(normalize_path "$protected" || echo "$protected")"
+                if [[ "$normalized_candidate" == "$normalized_protected" || \
+                      "$normalized_candidate" == "$normalized_protected"/* || \
+                      "$normalized_protected" == "$normalized_candidate"/* ]]; then
+                    exit 0  # protected
+                fi
+            done
+        fi
+        exit 1  # not protected
+    )
 }
 
 path_contains_protected_descendant() {
@@ -849,32 +997,27 @@ except Exception:
 
 app_bundle_exists() {
     local bundle_id="$1"
+    [[ -n "$bundle_id" ]] || return 1
 
-    # Attempt to use mdfind first
+    # Phase 2: the one-time bundle-id index of /Applications, ~/Applications
+    # and /System/Applications answers most lookups without a fork. It covers
+    # the same apps as FOUND_INSTALLED_APPS, whose per-app `defaults read`
+    # loop used to run for every orphan candidate (~60 s per full scan).
+    if (( APP_BUNDLE_ID_CACHE_LOADED == 0 )); then
+        _load_app_bundle_id_cache
+    fi
+    case $'\n'"${APP_BUNDLE_ID_CACHE}"$'\n' in
+        *$'\n'"${bundle_id}"$'\n'*) return 0 ;;
+    esac
+
+    # Apps outside those folders (other volumes, Setapp, ...): ask Spotlight.
     if command -v mdfind >/dev/null 2>&1; then
         local found
         if found="$(mdfind "kMDItemCFBundleIdentifier == \"$bundle_id\"" 2>/dev/null)" && [[ -n "$found" ]]; then
             return 0
         fi
     fi
-
-    # Direct check against FOUND_INSTALLED_APPS if available
-    if [[ -n "${FOUND_INSTALLED_APPS+x}" ]] && (( ${#FOUND_INSTALLED_APPS[@]} > 0 )); then
-        local app plist bid
-        for app in "${FOUND_INSTALLED_APPS[@]}"; do
-            plist="${app}/Contents/Info.plist"
-            [[ -f "$plist" ]] || continue
-            bid="$(get_plist_bundle_id "$plist")"
-            if [[ "$bid" == "$bundle_id" ]]; then
-                return 0
-            fi
-        done
-    fi
-
-    if (( APP_BUNDLE_ID_CACHE_LOADED == 0 )); then
-        _load_app_bundle_id_cache
-    fi
-    printf '%s' "$APP_BUNDLE_ID_CACHE" | grep -Fxq "$bundle_id"
+    return 1
 }
 
 app_name_exists() {
@@ -1028,6 +1171,142 @@ cleanup_journal_event() {
         >> "$journal_file" 2>/dev/null || return 1
 }
 
+# ---------------------------------------------------------------------------
+# P1-4: one tool→target table for native cleanup commands. The analyzer, the
+# planner and plan apply all resolve a command's target here, so a plan op is
+# bound to the directory its tool actually cleans. Before, apply accepted
+# `npm cache clean --force` with ~/Library/Messages as its path, resolved the
+# __brew__ sentinel against the cwd, and never noticed an npmrc/pnpm/pip
+# config that moved the cache after the plan was written.
+# ---------------------------------------------------------------------------
+
+# Phase 3: _proc_running <pgrep-args...> — true when a matching process runs,
+# or when pgrep cannot tell (rc >= 2): unknown counts as running.
+_proc_running() {
+    local rc=0
+    pgrep "$@" >/dev/null 2>&1 || rc=$?
+    (( rc != 1 ))
+}
+
+# cache_owner_running <dev-item-key> — true while a tool that writes this
+# cache is running. Removing a cache under a live build breaks that build.
+# Patterns follow what macOS actually shows: npm renames itself "npm exec …",
+# so live npx users are found by their ~/.npm/_npx/ command line; pnpm and
+# composer usually run as node/php scripts.
+cache_owner_running() {
+    case "${1:-}" in
+        cargo_cache)      _proc_running -x cargo || _proc_running -x rustc ;;
+        gradle_cache)     _proc_running -f org.gradle ;;
+        cocoapods_cache)  _proc_running -f bin/pod ;;
+        swift_pm_cache)   _proc_running -x swift-build || _proc_running -x swift-package \
+                              || _proc_running -x xcodebuild || _proc_running -x Xcode ;;
+        bundler_cache)    _proc_running -f bin/bundle ;;
+        composer_cache)   _proc_running -x composer || _proc_running -f bin/composer || _proc_running -f composer.phar ;;
+        npx_cache)        _proc_running -f '\.npm/_npx/' || _proc_running -f 'npm exec' || _proc_running -x npx ;;
+        pnpm_stale_store) _proc_running -x pnpm || _proc_running -f '(^|/)pnpm(\.c?js)?( |$)' ;;
+        xcode_derived)    _proc_running -x Xcode || _proc_running -x xcodebuild ;;
+        *) return 1 ;;
+    esac
+}
+
+# cache_owner_key_for_path <normalized-path> — the dev-item key of a cache
+# path, so plan apply can run the same in-use check as the cleaners.
+cache_owner_key_for_path() {
+    case "${1:-}" in
+        */.npm/_npx|*/.npm/_npx/*)                                  echo npx_cache ;;
+        */Library/Developer/Xcode/DerivedData|*/Library/Developer/Xcode/DerivedData/*) echo xcode_derived ;;
+        */.gradle|*/.gradle/*)                                      echo gradle_cache ;;
+        */.cargo|*/.cargo/*)                                        echo cargo_cache ;;
+        */Library/Caches/CocoaPods|*/Library/Caches/CocoaPods/*)    echo cocoapods_cache ;;
+        */org.swift.swiftpm|*/org.swift.swiftpm/*)                  echo swift_pm_cache ;;
+        */.bundle|*/.bundle/*)                                      echo bundler_cache ;;
+        */Library/Caches/composer|*/Library/Caches/composer/*|*/.composer|*/.composer/*) echo composer_cache ;;
+        */pnpm/store|*/pnpm/store/*|*/.pnpm-store|*/.pnpm-store/*)  echo pnpm_stale_store ;;
+        *) return 1 ;;
+    esac
+}
+
+# cache_ledger_key <dev-item-key> — the CATEGORY_REGISTRY key for outcomes.
+cache_ledger_key() {
+    case "${1:-}" in
+        npx_cache) echo npx ;;            gradle_cache) echo gradle ;;
+        cargo_cache) echo cargo ;;        cocoapods_cache) echo cocoapods ;;
+        swift_pm_cache) echo swift-pm ;;  bundler_cache) echo bundler ;;
+        composer_cache) echo composer ;;  pnpm_stale_store) echo pnpm-stale ;;
+        xcode_derived) echo xcode-derived ;;
+        *) return 1 ;;
+    esac
+}
+
+# native_tool_for_command <command> — the tool an allowlisted command uses.
+native_tool_for_command() {
+    case "${1:-}" in
+        "npm cache clean --force")         echo npm ;;
+        "yarn cache clean")                echo yarn ;;
+        "pnpm store prune")                echo pnpm ;;
+        "pip cache purge")                 echo pip ;;
+        "brew cleanup --prune=all")        echo brew ;;
+        "gem cleanup")                     echo gem ;;
+        "xcrun simctl delete unavailable") echo xcrun ;;
+        *) return 1 ;;
+    esac
+}
+
+# native_pip_bin — pip3 when present, else pip (the same choice apply makes).
+native_pip_bin() {
+    if command -v pip3 >/dev/null 2>&1; then echo pip3
+    elif command -v pip >/dev/null 2>&1; then echo pip
+    else return 1
+    fi
+}
+
+# native_tool_target <tool> — normalized absolute directory the tool's cleanup
+# acts on; fails (no output) when the tool cannot tell.
+native_tool_target() {
+    local tool="${1:-}" target_dir="" pip_bin
+    case "$tool" in
+        npm)   target_dir="$(npm config get cache </dev/null 2>/dev/null)" ;;
+        yarn)  target_dir="$(yarn cache dir </dev/null 2>/dev/null)" ;;
+        pnpm)  target_dir="$(pnpm store path </dev/null 2>/dev/null)" ;;
+        pip)   pip_bin="$(native_pip_bin)" || return 1
+               target_dir="$("$pip_bin" cache dir </dev/null 2>/dev/null)" ;;
+        brew)  target_dir="$(brew --cache </dev/null 2>/dev/null)" ;;
+        gem)   target_dir="$(gem env gemdir </dev/null 2>/dev/null)" ;;
+        xcrun) target_dir="${HOME}/Library/Developer/CoreSimulator/Devices" ;;
+        *)     return 1 ;;
+    esac
+    target_dir="$(printf '%s\n' "$target_dir" | head -n 1)"
+    [[ "$target_dir" == /* ]] || return 1
+    normalize_path "$target_dir"
+}
+
+# native_target_allowed <tool> <target> — the cleanup of npm/yarn/pnpm/pip/brew
+# empties the directory its tool names, and NPM_CONFIG_CACHE, PIP_CACHE_DIR, an
+# .npmrc or a pnpm store-dir can name any directory. validate_cache_path alone
+# is too broad here (it admits the whole brew prefix and /var/folders), so the
+# target must also be the tool's own folder under HOME: its dot-directory, or a
+# child (never the root) of ~/Library/Caches or ~/.cache.
+# gem cleanup only uninstalls old versions; simctl's target is fixed.
+native_target_allowed() {
+    local tool="${1:-}" target="${2:-}" home
+    case "$tool" in
+        gem|xcrun) [[ -n "$target" ]]; return ;;
+        npm|yarn|pnpm|pip|brew) ;;
+        *) return 1 ;;
+    esac
+    home="$(normalize_path "$HOME" 2>/dev/null)" || return 1
+    case "${tool}:${target}" in
+        npm:"$home/.npm"|npm:"$home/.npm/"*) ;;
+        yarn:"$home/.yarn"|yarn:"$home/.yarn/"*) ;;
+        pnpm:"$home/.pnpm-store"|pnpm:"$home/.pnpm-store/"*) ;;
+        pnpm:"$home/Library/pnpm/"?*|pnpm:"$home/.local/share/pnpm/"?*) ;;
+        *:"$home/Library/Caches/"?*|*:"$home/.cache/"?*) ;;
+        *) return 1 ;;
+    esac
+    command -v validate_cache_path >/dev/null 2>&1 || return 1
+    validate_cache_path "$target"
+}
+
 record_native_command_event() {
     local command="$1"
     local status="${2:-ok}"
@@ -1074,7 +1353,12 @@ record_native_command_freed() {
 # ---------------------------------------------------------------------------
 CLEANUP_CATEGORY_OUTCOMES=""
 
-# mark_category_outcome <category-key> <cleaned|skipped|report-only>
+# mark_category_outcome <category-key> <cleaned|skipped|report-only|needs-permanent|partial>
+#   needs-permanent: quarantine mode cannot move these paths (outside HOME)
+#   partial:         the paths under HOME were processed, the rest need --permanent
+#   backup-running:  Time Machine was backing up, so no snapshot was deleted
+#   kept-newest:     the only local snapshot is the newest one, which is kept
+#   in-use:          the tool that writes this cache was running
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
     [[ -n "$key" && -n "$outcome" ]] || return 0
@@ -1162,13 +1446,65 @@ path_is_within() {
     [[ "$normalized_candidate" == "$normalized_root" || "$normalized_candidate" == "$normalized_root/"* ]]
 }
 
+# Deny-side check (safe_remove skips quarantine data), so it ignores case like
+# is_protected_path. path_is_within stays case-sensitive: it is also an
+# allowlist (artifact rotation, restore source).
 is_quarantine_path() {
     [[ -n "${QUARANTINE_ROOT:-}" ]] || return 1
-    path_is_within "$1" "$QUARANTINE_ROOT"
+    local candidate root
+    candidate="$(normalize_path "$1" || echo "$1")"
+    root="$(normalize_path "$QUARANTINE_ROOT" || echo "$QUARANTINE_ROOT")"
+    [[ -n "$candidate" && -n "$root" ]] || return 1
+    (
+        shopt -s nocasematch
+        [[ "$candidate" == "$root" || "$candidate" == "$root/"* ]]
+    )
 }
 
-# Exclusive apply/restore/purge lock via mkdir(2). Not TOCTOU-proof.
+# Exclusive lock for every mutating mode (apply, restore, purge, interactive,
+# auto-safe) via mkdir(2). Not TOCTOU-proof.
 CLEANUP_LOCK_HELD="${CLEANUP_LOCK_HELD:-0}"
+RESTORE_INCOMPLETE=0
+
+# P1-7: _cleanup_lock_holder_gone <lock_dir> — true when the recorded holder is
+# no longer running. `ps -p` sees other users' processes too (kill -0 fails
+# with EPERM for a live root-owned run); when ps itself does not work, every
+# holder is presumed alive. A lock without a pid may belong to a holder between
+# mkdir and the pid write, so it counts as abandoned only after 10 minutes.
+_cleanup_lock_holder_gone() {
+    local lock_dir="$1" pid
+    pid="$(head -n 1 "${lock_dir}/pid" 2>/dev/null)" || pid=""
+    case "$pid" in
+        ''|*[!0-9]*)
+            [[ -n "$(find "$lock_dir" -maxdepth 0 -mmin +10 2>/dev/null)" ]] ;;
+        *)
+            ps -p "$$" >/dev/null 2>&1 || return 1
+            [[ "$pid" != "$$" ]] && ! ps -p "$pid" >/dev/null 2>&1 ;;
+    esac
+}
+
+# P1-7: _recover_stale_cleanup_lock <lock_dir> — remove a lock whose holder is
+# gone. Only one process recovers at a time (mkdir of "<lock>.recover"), and
+# only a recoverer ever removes another process's lock, so the lock re-checked
+# under that mutex cannot be swapped for a live one before it is removed.
+# A recovery mutex older than 10 minutes was abandoned by a crashed recoverer.
+_recover_stale_cleanup_lock() {
+    local lock_dir="$1" mutex="${1}.recover" rc=1
+    if ! mkdir "$mutex" 2>/dev/null; then
+        [[ -n "$(find "$mutex" -maxdepth 0 -mmin +10 2>/dev/null)" ]] || return 1
+        rmdir "$mutex" 2>/dev/null || return 1
+        mkdir "$mutex" 2>/dev/null || return 1
+    fi
+    if [[ -d "$lock_dir" ]] && _cleanup_lock_holder_gone "$lock_dir"; then
+        rm -f "${lock_dir}/pid" 2>/dev/null || true
+        if rmdir "$lock_dir" 2>/dev/null; then
+            log_warn "Recovered a stale cleanup lock: ${lock_dir}"
+            rc=0
+        fi
+    fi
+    rmdir "$mutex" 2>/dev/null || true
+    return "$rc"
+}
 
 acquire_cleanup_lock() {
     local lock_dir
@@ -1177,25 +1513,36 @@ acquire_cleanup_lock() {
     fi
     mkdir -p "$QUARANTINE_ROOT" 2>/dev/null || return 1
     lock_dir="${QUARANTINE_ROOT}/.apply.lock"
-    if mkdir "$lock_dir" 2>/dev/null; then
-        CLEANUP_LOCK_HELD=1
-        printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null || true
-        return 0
+    if ! mkdir "$lock_dir" 2>/dev/null; then
+        _recover_stale_cleanup_lock "$lock_dir" || return 1
+        mkdir "$lock_dir" 2>/dev/null || return 1
     fi
-    return 1
+    # A lock without a pid would look abandoned to others after 10 minutes.
+    if ! printf '%s\n' "$$" > "${lock_dir}/pid" 2>/dev/null; then
+        rmdir "$lock_dir" 2>/dev/null || true
+        return 1
+    fi
+    CLEANUP_LOCK_HELD=1
+    return 0
 }
 
+# release_cleanup_lock — removes the lock only while it still records this
+# process; a lock recovered and re-taken by another run is left alone.
 release_cleanup_lock() {
-    local lock_dir
+    local lock_dir pid
     if [[ "${CLEANUP_LOCK_HELD:-0}" != "1" ]]; then
         return 0
     fi
-    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
-    if [[ -d "$lock_dir" ]]; then
-        rm -f "${lock_dir}/pid" 2>/dev/null || true
-        rmdir "$lock_dir" 2>/dev/null || true
-    fi
     CLEANUP_LOCK_HELD=0
+    lock_dir="${QUARANTINE_ROOT:-}/.apply.lock"
+    [[ -d "$lock_dir" ]] || return 0
+    pid="$(head -n 1 "${lock_dir}/pid" 2>/dev/null)" || pid=""
+    if [[ "$pid" != "$$" ]]; then
+        log_warn "Cleanup lock now belongs to ${pid:-nobody}; leaving it: ${lock_dir}"
+        return 0
+    fi
+    rm -f "${lock_dir}/pid" 2>/dev/null || true
+    rmdir "$lock_dir" 2>/dev/null || true
     return 0
 }
 
@@ -1363,6 +1710,14 @@ direct_remove() {
     local sudo_required="${3:-0}"
     local action="${4:-deleted}"
 
+    # P0-1: last line of defense — no removal while any dry-run is in effect.
+    if is_dry_run; then
+        print_warn "Dry run: refusing to remove ${target}"
+        record_skipped_item "Dry-run removal refused: ${target}"
+        cleanup_journal_event "${action}_blocked" "$target" "" "$size" "blocked" "dry-run (P0-1)"
+        return 1
+    fi
+
     # P0-1b: privileged deletion is disabled
     if [[ "$sudo_required" == "1" ]]; then
         print_warn "Privileged deletion disabled (P0-1b): ${target}"
@@ -1424,6 +1779,17 @@ resolve_restore_manifest() {
 restore_quarantine_manifest() {
     local requested="$1"
     local manifest
+
+    # P0-1: restore moves files; it has no preview form.
+    if is_dry_run; then
+        print_error "Restore refused: a dry run is in effect."
+        return 2
+    fi
+
+    # P2: a row that is not restored (blocked, conflict, failure) marks the
+    # restore incomplete; run_restore_phase reports it and exits 1.
+    local _skipped_before="${TOTAL_SKIPPED_ITEMS:-0}"
+    RESTORE_INCOMPLETE=0
 
     manifest="$(resolve_restore_manifest "$requested" 2>/dev/null || true)"
     if [[ -z "$manifest" ]]; then
@@ -1512,6 +1878,12 @@ restore_quarantine_manifest() {
             continue
         fi
 
+        # Already restored by an earlier run: not a failure of this one.
+        if [[ ! -e "$source_norm" && ! -L "$source_norm" ]] && [[ -e "$target_norm" || -L "$target_norm" ]]; then
+            print_skip "Already restored: ${target_norm}"
+            continue
+        fi
+
         if [[ ! -e "$source_norm" && ! -L "$source_norm" ]]; then
             print_warn "Quarantine file does not exist: ${source_norm}"
             record_skipped_item "Quarantine file does not exist: ${source_norm}"
@@ -1552,6 +1924,11 @@ restore_quarantine_manifest() {
             cleanup_journal_event "restore_failed" "$target_norm" "$source_norm" "$bytes" "failed" "mv failed"
         fi
     done < "$manifest"
+    if (( ${TOTAL_SKIPPED_ITEMS:-0} > _skipped_before )); then
+        # shellcheck disable=SC2034  # read by run_restore_phase in cleanup_all.sh
+        RESTORE_INCOMPLETE=1
+    fi
+    return 0
 }
 
 latest_quarantine_run_dir() {
@@ -1636,6 +2013,8 @@ purge_one_quarantine_run() {
     fi
 
     size="$(path_size_bytes "$normalized")"
+    # P0-1: a dry run downgrades --apply to a preview.
+    is_dry_run && apply=0
     if [[ "$apply" != "1" ]]; then
         print_dry "Would purge quarantine run: ${normalized}  ($(bytes_to_human "$size"))"
         TOTAL_WOULD_FREE_BYTES=$(( TOTAL_WOULD_FREE_BYTES + size ))
@@ -1652,6 +2031,9 @@ purge_quarantine() {
     local retention_days="${3:-$QUARANTINE_RETENTION_DAYS}"
     local run_dir failures=0
 
+    # P0-3: never purge children of a root that is not a quarantine directory.
+    validate_quarantine_root || return 2
+
     if [[ -z "$requested" ]]; then
         print_error "Missing quarantine purge selector."
         return 2
@@ -1666,7 +2048,8 @@ purge_quarantine() {
             [[ -d "$run_dir" ]] || continue
             purge_one_quarantine_run "$run_dir" "$apply" || failures=$(( failures + 1 ))
         done
-        return "$failures"
+        (( failures == 0 )) || return 1
+        return 0
     fi
 
     if [[ "$requested" == "expired" ]]; then
@@ -1680,7 +2063,8 @@ purge_quarantine() {
                 purge_one_quarantine_run "$run_dir" "$apply" || failures=$(( failures + 1 ))
             fi
         done
-        return "$failures"
+        (( failures == 0 )) || return 1
+        return 0
     fi
 
     run_dir="$(resolve_quarantine_run_dir "$requested" 2>/dev/null || true)"
@@ -1698,8 +2082,10 @@ purge_quarantine() {
 
 safe_remove() {
     local target="$1"
-    local dry="${DRY_RUN:-0}"
+    local dry=0
     local normalized_target
+
+    is_dry_run && dry=1
 
     normalized_target="$(normalize_path "$target")" || normalized_target=""
     if [[ -z "$normalized_target" ]]; then
@@ -1725,14 +2111,35 @@ safe_remove() {
     fi
 
     local size
-    size=$(path_size_bytes "$normalized_target")
+    # An unmeasurable size must not abort the run under errexit.
+    size=$(path_size_bytes "$normalized_target") || size=0
+
+    # Phase 3: rm -rf on a tree with an unreadable part deletes what it can
+    # and stops at the rest, leaving it half-deleted. Quarantine (a rename on
+    # the same volume) is unaffected; permanent removal skips such a tree.
+    # The readability is probed here directly (du exits non-zero), so the
+    # skip does not depend on the unreadable list having been written.
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" && -d "$normalized_target" ]] \
+        && ! du -sk "$normalized_target" >/dev/null 2>&1; then
+        print_skip "Not fully readable, not deleted permanently: ${normalized_target}"
+        record_skipped_item "Not fully readable (macOS privacy or permissions), skipped in permanent mode: ${normalized_target}"
+        cleanup_journal_event "skipped_unreadable" "$normalized_target" "" "$size" "skipped" "partly unreadable; permanent removal would half-delete it"
+        return 0
+    fi
 
     if [[ "$dry" == "1" ]]; then
         print_dry "Would remove: ${normalized_target}  ($(bytes_to_human "$size"))"
         TOTAL_WOULD_FREE_BYTES=$(( TOTAL_WOULD_FREE_BYTES + size ))
         cleanup_journal_event "would_remove" "$normalized_target" "" "$size" "planned" ""
     else
-        if [[ "${REMOVE_MODE:-permanent}" == "quarantine" ]]; then
+        # P0-3: fail closed on an unknown/unset mode instead of deleting.
+        if ! validate_remove_mode; then
+            record_skipped_item "Invalid REMOVE_MODE (fail-closed): ${normalized_target}"
+            cleanup_journal_event "remove_mode_invalid" "$normalized_target" "" "$size" "blocked" "fail-closed (P0-3)"
+            return 1
+        fi
+
+        if [[ "$REMOVE_MODE" == "quarantine" ]]; then
             if is_user_space_path "$normalized_target"; then
                 if quarantine_remove "$normalized_target" "$size"; then
                     return 0
@@ -1811,7 +2218,8 @@ catbytes_add() {
 # CATEGORY_REGISTRY — the single source of truth for reportable categories.
 #
 # Row format:  key|label|class
-#   counted     real byte size, included in TOTAL_WOULD_FREE_BYTES
+#   counted     real byte size of work a cleaner can do; the headline
+#               TOTAL_WOULD_FREE_BYTES is the plan's executable sum (P1-1)
 #   count       ledger value is an ITEM COUNT, not bytes (APFS local snapshots);
 #               listed, never summed
 #   report-only sized and shown, never auto-removed, never summed
@@ -1910,6 +2318,7 @@ unset _reg_row
 # ---------------------------------------------------------------------------
 TOTAL_CLEANED_BYTES=0
 TOTAL_WOULD_FREE_BYTES=0
+TOTAL_INFORMATIONAL_BYTES=0
 TOTAL_QUARANTINED_BYTES=0
 TOTAL_QUARANTINED_ITEMS=0
 TOTAL_RESTORED_BYTES=0

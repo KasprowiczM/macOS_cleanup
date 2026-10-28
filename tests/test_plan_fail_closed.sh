@@ -123,7 +123,7 @@ assert_file_exists "$FC1_FILE" "parser failure must not execute op 1"
 
 begin_test "native npm command exit 42 fails apply"
 reset_apply_state
-FC2_CACHE="${SANDBOX}/npm-cache-fc2"
+FC2_CACHE="${HOME}/.npm"   # P1-4: the tool's own folder
 mkdir -p "$FC2_CACHE"
 FC2_PLAN="${SANDBOX}/fc2.json"
 write_plan_ops "$FC2_PLAN" "[
@@ -138,8 +138,10 @@ write_plan_ops "$FC2_PLAN" "[
 ]"
 FC2_BIN="${SANDBOX}/fc2_bin"
 mkdir -p "$FC2_BIN"
-cat > "${FC2_BIN}/npm" << 'STUB'
+# P1-4: answer the target query, fail the cleanup itself.
+cat > "${FC2_BIN}/npm" << STUB
 #!/bin/sh
+[ "\$*" = "config get cache" ] && { echo "${FC2_CACHE}"; exit 0; }
 exit 42
 STUB
 chmod +x "${FC2_BIN}/npm"

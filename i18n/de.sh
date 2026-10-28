@@ -34,11 +34,11 @@ i18n_get_de() {
         skipped_category) echo "Übersprungen" ;;
 
         # Consequences
-        consequence_safe_quarantine) echo "Dateien werden sicher in die Quarantäne verschoben. Wiederherstellung mit --restore möglich." ;;
+        consequence_safe_quarantine) echo "Dateien werden sicher in die Quarantäne verschoben. Wiederherstellung mit --restore möglich. Speicherplatz wird erst nach --purge-quarantine frei." ;;
         consequence_safe_permanent) echo "Dateien werden gelöscht. Anwendungen erstellen sie bei Bedarf neu." ;;
-        consequence_review_quarantine) echo "Warnung (REVIEW RISIKO): Dateien kommen in Quarantäne. Einige Apps erfordern erneuten Download." ;;
+        consequence_review_quarantine) echo "Warnung (REVIEW RISIKO): Dateien kommen in Quarantäne. Einige Apps erfordern erneuten Download. Speicherplatz wird erst nach --purge-quarantine frei." ;;
         consequence_review_permanent) echo "Warnung (REVIEW RISIKO): Dateien werden ohne Quarantäne dauerhaft gelöscht." ;;
-        consequence_dangerous_quarantine) echo "ACHTUNG (DANGEROUS RISIKO): Hohes Risiko für Datenverlust. Quarantäne erfordert Backup." ;;
+        consequence_dangerous_quarantine) echo "ACHTUNG (DANGEROUS RISIKO): Hohes Risiko für Datenverlust. Quarantäne erfordert Backup. Speicherplatz wird erst nach --purge-quarantine frei." ;;
         consequence_dangerous_permanent) echo "ACHTUNG (DANGEROUS RISIKO): Unwiderrufliche Löschung kritischer System- oder Benutzerdaten." ;;
         consequence_native_irreversible) echo "Dies führt einen nativen Werkzeugbefehl aus. Er ist unumkehrbar und wird nicht in Quarantäne verschoben." ;;
         dangerous_blocked) echo "Nicht Gegenstand der automatischen oder interaktiven Bereinigung." ;;
@@ -160,6 +160,7 @@ i18n_get_de() {
         disk_volumes_header) echo "Volumes (/ Hauptverzeichnis):" ;;
         disk_util_err) echo "(diskutil nicht lesbar)" ;;
         disk_home_top10) echo "Größte Verzeichnisse im Benutzerordner (Top 10):" ;;
+        disk_home_top10_partial) echo "Nach $2 s abgebrochen; die Liste ist evtl. unvollständig (Limit über HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Größte Elemente im Papierkorb:" ;;
         user_caches_section) echo "Benutzer-Caches (~/Library/Caches)" ;;
         user_caches_ok) echo "Keine wesentlichen Elemente im Benutzer-Cache." ;;
@@ -222,6 +223,9 @@ i18n_get_de() {
         cli_deletion_dest) echo "Löschung: Benutzer-Quarantäne" ;;
         cli_scanning) echo "Scanne System..." ;;
         cli_total_freeable) echo "Insgesamt freigebbar" ;;
+        cli_report_only_total) echo "Nur Bericht (gemessen, wird von diesem Tool nie entfernt)" ;;
+        total_quarantine_label) echo "Insgesamt zu verarbeiten (Dateien in Quarantäne geben Speicherplatz erst nach --purge-quarantine frei)" ;;
+        clean_needs_permanent) echo "Außerhalb Ihres Home-Ordners: Der Quarantänemodus verschiebt diese Dateien nicht. Verwenden Sie --permanent, um sie zu entfernen." ;;
         cli_interactive_flow_1) echo "Wir gehen jede Kategorie durch und bitten um Bestätigung." ;;
         cli_interactive_flow_2) echo "Standardantwort ist immer NEIN." ;;
         cli_auto_safe_flow_1) echo "Verschiebe sichere App-Caches in Quarantäne." ;;

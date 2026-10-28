@@ -191,9 +191,10 @@ Das `--json` Flag leitet alle lesbaren Ausgaben (Banner, Abschnitte, Zusammenfas
 |-------|-------------|
 | `mode` | Ausführungsmodus (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
+| `analysis_status` | `complete` / `partial` |
 | `categories` | Array der aktiven Kategorien |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Zähler für `SAFE`/`REVIEW`/`DANGEROUS` Operationen und Bytes |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `unreadable_paths`, `user_decisions_needed` |
+| `plan` | Zähler für `SAFE`/`REVIEW`/`DANGEROUS` Operationen und Bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Pfade zu `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Anzahl übersprungener Elemente |
 | `user_decisions` | Liste von Elementbeschreibungen, die eine Entscheidung erfordern |
@@ -261,6 +262,9 @@ Detailliertes Modell für Operatoren und Agenten: `docs/ux_dx_safety_model.md`.
 - `~/Music/Music/Music Library.musiclibrary`
 - `~/Music/Music Library.musiclibrary`
 - `~/Movies`
+- `~/Library/Messages`
+- `~/Library/Calendars`
+- `~/Library/Application Support/AddressBook`
 - `~/Library/Mobile Documents`
 - `~/Library/CloudStorage`
 - `~/Dropbox`
@@ -285,6 +289,7 @@ Detailliertes Modell für Operatoren und Agenten: `docs/ux_dx_safety_model.md`.
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`
@@ -400,4 +405,4 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG in ~/Downloads
 
 ---
 
-Projekt: `macOS_cleanup` | Version: 2.1.0 | Lizenz: MIT
+Projekt: `macOS_cleanup` | Version: 3.0.6 | Lizenz: MIT

@@ -118,14 +118,26 @@ apply_policy_never_paths() {
     done
 }
 
+# Longest-prefix rule index for a path, or -1. Pass "fold" as $2 for a
+# case-insensitive match: APFS is case-insensitive, so "$HOME/.NPM" is the
+# same object as "$HOME/.npm" (P0-2). A folded match may only RAISE risk; see
+# policy_explicit_risk_for_path and policy_adjust_risk_for_path.
 policy_rule_index_for_path() {
     local candidate="$1"
+    local fold="${2:-}"
     local normalized_candidate
     local best_idx="-1"
     local best_len=0
-    local i rule_path len
+    local i rule_path len saved_nocase=0
 
     normalized_candidate="$(normalize_path "$candidate" || echo "$candidate")"
+
+    shopt -q nocasematch && saved_nocase=1
+    if [[ "$fold" == "fold" ]]; then
+        shopt -s nocasematch
+    else
+        shopt -u nocasematch
+    fi
 
     for (( i = 0; i < ${#POLICY_RULE_PATHS[@]}; i++ )); do
         rule_path="${POLICY_RULE_PATHS[$i]}"
@@ -137,6 +149,12 @@ policy_rule_index_for_path() {
             fi
         fi
     done
+
+    if (( saved_nocase == 1 )); then
+        shopt -s nocasematch
+    else
+        shopt -u nocasematch
+    fi
 
     echo "$best_idx"
 }
@@ -165,7 +183,8 @@ policy_type_for_path() {
     fi
 }
 
-policy_explicit_risk_for_path() {
+# Risk of the exact-case longest match only, or "" (return 1).
+policy_exact_risk_for_path() {
     local idx
     idx="$(policy_rule_index_for_path "$1")"
     if [[ "$idx" == "-1" ]]; then
@@ -173,6 +192,28 @@ policy_explicit_risk_for_path() {
         return 1
     fi
     policy_safety_to_risk "${POLICY_RULE_SAFETY[$idx]}"
+}
+
+# Higher risk of the exact-case and case-insensitive longest matches, or ""
+# (return 1). The folded match can only raise the exact-case result.
+policy_explicit_risk_for_path() {
+    local exact_risk fold_idx fold_risk=""
+    exact_risk="$(policy_exact_risk_for_path "$1" || true)"
+    fold_idx="$(policy_rule_index_for_path "$1" fold)"
+    if [[ "$fold_idx" != "-1" ]]; then
+        fold_risk="$(policy_safety_to_risk "${POLICY_RULE_SAFETY[$fold_idx]}")"
+    fi
+    if [[ -z "$exact_risk" && -z "$fold_risk" ]]; then
+        echo ""
+        return 1
+    fi
+    if [[ -z "$exact_risk" ]]; then
+        echo "$fold_risk"
+    elif [[ -n "$fold_risk" ]] && (( $(policy_risk_rank "$fold_risk") > $(policy_risk_rank "$exact_risk") )); then
+        echo "$fold_risk"
+    else
+        echo "$exact_risk"
+    fi
 }
 
 policy_risk_rank() {
@@ -207,7 +248,9 @@ policy_adjust_risk_for_path() {
 
     # Exact SAFE rules may lower a conservative REVIEW default, for example
     # app-specific cache entries below a broader ~/Library/Caches REVIEW rule.
-    if [[ "$explicit_risk" == "SAFE" && "$default_risk" == "REVIEW" ]]; then
+    # Only an exact-case match may lower; a case variant keeps the default.
+    if [[ "$explicit_risk" == "SAFE" && "$default_risk" == "REVIEW" ]] \
+        && [[ "$(policy_exact_risk_for_path "$path" 2>/dev/null || true)" == "SAFE" ]]; then
         echo "SAFE"
         return 0
     fi

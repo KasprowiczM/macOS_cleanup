@@ -7,6 +7,16 @@
 # Bash 3.2 compatible.
 # =============================================================================
 
+# P1-2: the quarantine mode frees nothing until --purge-quarantine, so its
+# headline must not be called "freeable".
+_report_total_label() {
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+        printf '%s' "Potentially freeable space"
+    else
+        printf '%s' "To process (quarantined files free space only after --purge-quarantine)"
+    fi
+}
+
 generate_report() {
     local mode="${1:-${MODE}}"
     local report_dir
@@ -29,8 +39,18 @@ generate_report() {
 
 | Metric | Value |
 |:-------|:------|
-| Potentially freeable space | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
+| $(_report_total_label) | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
 EOF
+    # Phase 3: locations macOS did not let us read fully are not "0 B".
+    local _unreadable
+    _unreadable="$(analysis_unreadable_count 2>/dev/null)" || _unreadable=0
+    if (( ${_unreadable:-0} > 0 )); then
+        echo "| Not fully readable (macOS privacy or permissions) | ${_unreadable} locations — sizes there are lower bounds; see $(analysis_unreadable_file) |" >> "$REPORT_FILE"
+    fi
+    # P1-1: report-only bytes are sized but never removed; show them apart.
+    if (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )); then
+        echo "| Report-only (never freed by this tool) | $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES") |" >> "$REPORT_FILE"
+    fi
 
     case "$mode" in
         apply-plan)
@@ -58,9 +78,11 @@ EOF
 |:---------|:-----|:-------|:-------------------|
 EOF
 
-    # One pass over the registry, split into what the headline total counts and
-    # what it deliberately does not, so the itemised rows reconcile with the
-    # "Total potentially freeable" line instead of silently omitting categories.
+    # One pass over the registry, split into counted and report-only categories
+    # so no sized category is silently omitted. The rows show what was found
+    # per category; the total below is the plan's executable sum (P1-1), so it
+    # leaves out work this mode will not do (Homebrew counted once, /tmp in
+    # quarantine mode, Docker) and the rows need not add up to it.
     local entry key label klass bytes size_cell status_str action_str recorded_outcome
     local -a report_only_rows=()
 
@@ -91,11 +113,25 @@ EOF
         case "$recorded_outcome" in
             cleaned) status_str="Cleaned/Quarantined"; action_str="Done" ;;
             skipped) status_str="Skipped by you";      action_str="Still on disk — re-run to process" ;;
+            needs-permanent) status_str="Not processed";  action_str="Outside HOME: quarantine mode skips it — needs --permanent" ;;
+            backup-running) status_str="Not processed"; action_str="Time Machine was backing up — re-run later" ;;
+            in-use)  status_str="Not processed";  action_str="In use by a running tool — close it and re-run" ;;
+            kept-newest) status_str="Kept";           action_str="Only the newest local snapshot exists; it is kept" ;;
+            partial) status_str="Partly processed"; action_str="Items under HOME done; the rest is outside HOME — needs --permanent" ;;
         esac
 
         if [[ -z "$recorded_outcome" ]]; then
             case "$key" in
-                user-caches|trash|tmp)
+                tmp|system-logs)
+                    # P1-2: outside HOME — only --permanent can process these.
+                    status_str="Found"
+                    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+                        action_str="Run --interactive to process"
+                        [[ "$key" == "tmp" ]] && action_str="Safe to clean"
+                    else
+                        action_str="Outside HOME: quarantine mode skips it — needs --permanent"
+                    fi ;;
+                user-caches|trash)
                     # No outcome was recorded for this category, so the run never
                     # reached it. Do not claim it was cleaned.
                     status_str="Found"; action_str="Safe to clean" ;;
@@ -143,7 +179,8 @@ EOF
 
 ---
 
-**Total potentially freeable: $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
+**Total — $(_report_total_label): $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
+$( (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )) && printf '\nReport-only, never freed by this tool: %s\n' "$(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")" )
 
 ---
 
@@ -261,7 +298,12 @@ print_summary_report() {
     esac
 
     if [[ "$MODE" != "list-quarantine" && "$MODE" != "list" ]]; then
-        echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+        echo -e "  ${C_BOLD}$(_report_total_label):${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+        local _unreadable_n
+        _unreadable_n="$(analysis_unreadable_count 2>/dev/null)" || _unreadable_n=0
+        if (( ${_unreadable_n:-0} > 0 )); then
+            echo -e "  ${C_YELLOW}Not fully readable:${C_RESET}     ${_unreadable_n} locations (macOS privacy or permissions); their sizes are lower bounds"
+        fi
     fi
 
     if command -v diskutil &>/dev/null; then

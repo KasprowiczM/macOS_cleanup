@@ -111,6 +111,10 @@ NEVER_TOUCH_PATHS=(
     "$HOME/Music/Music/Music Library.musiclibrary"
     "$HOME/Music/Music Library.musiclibrary"
     "$HOME/Movies"
+    # Messages, Calendars, Contacts — local user data (P0-2)
+    "$HOME/Library/Messages"
+    "$HOME/Library/Calendars"
+    "$HOME/Library/Application Support/AddressBook"
     # iCloud and cloud storage (P0-3)
     "$HOME/Library/Mobile Documents"
     "$HOME/Library/CloudStorage"
@@ -140,6 +144,7 @@ NEVER_TOUCH_PATHS=(
     "$HOME/.gnupg"
     "$HOME/.aws/credentials"
     "$HOME/.aws/config"
+    "$HOME/.aws/sso"
     # Git config (not cache)
     "$HOME/.gitconfig"
     "$HOME/.git-credentials"

@@ -34,11 +34,11 @@ i18n_get_fr() {
         skipped_category) echo "Ignoré" ;;
 
         # Consequences
-        consequence_safe_quarantine) echo "Les fichiers seront déplacés en toute sécurité en quarantaine. Restauration possible via --restore." ;;
+        consequence_safe_quarantine) echo "Les fichiers seront déplacés en toute sécurité en quarantaine. Restauration possible via --restore. L'espace n'est libéré qu'après --purge-quarantine." ;;
         consequence_safe_permanent) echo "Les fichiers seront supprimés. Les applications les recréeront si nécessaire." ;;
-        consequence_review_quarantine) echo "Avertissement (RISQUE REVIEW) : Fichiers en quarantaine. Certaines apps peuvent nécessiter un nouveau téléchargement." ;;
+        consequence_review_quarantine) echo "Avertissement (RISQUE REVIEW) : Fichiers en quarantaine. Certaines apps peuvent nécessiter un nouveau téléchargement. L'espace n'est libéré qu'après --purge-quarantine." ;;
         consequence_review_permanent) echo "Avertissement (RISQUE REVIEW) : Fichiers supprimés définitivement sans quarantaine." ;;
-        consequence_dangerous_quarantine) echo "ATTENTION (RISQUE DANGEROUS) : Risque élevé de perte de données. Sauvegarde requise." ;;
+        consequence_dangerous_quarantine) echo "ATTENTION (RISQUE DANGEROUS) : Risque élevé de perte de données. Sauvegarde requise. L'espace n'est libéré qu'après --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "ATTENTION (RISQUE DANGEROUS) : Suppression irréversible de données système ou utilisateur critiques." ;;
         consequence_native_irreversible) echo "Ceci exécute une commande native de l'outil. Elle est irréversible et n'est pas mise en quarantaine." ;;
         dangerous_blocked) echo "Non soumis au nettoyage automatique ou interactif." ;;
@@ -160,6 +160,7 @@ i18n_get_fr() {
         disk_volumes_header) echo "Volumes (/ racine) :" ;;
         disk_util_err) echo "(Impossible de lire diskutil)" ;;
         disk_home_top10) echo "Plus grands répertoires du dossier personnel (top 10) :" ;;
+        disk_home_top10_partial) echo "Arrêté après $2 s ; la liste peut être incomplète (limite : HOME_TOP_DIRS_TIMEOUT)." ;;
         trash_top_items) echo "Plus grands éléments de la corbeille :" ;;
         user_caches_section) echo "Caches Utilisateur (~/Library/Caches)" ;;
         user_caches_ok) echo "Aucun élément significatif dans les caches utilisateur." ;;
@@ -222,6 +223,9 @@ i18n_get_fr() {
         cli_deletion_dest) echo "Suppression : quarantaine utilisateur" ;;
         cli_scanning) echo "Analyse du système..." ;;
         cli_total_freeable) echo "Total potentiellement libérable" ;;
+        cli_report_only_total) echo "Rapport seul (mesuré, jamais supprimé par cet outil)" ;;
+        total_quarantine_label) echo "Total à traiter (les fichiers en quarantaine ne libèrent l'espace qu'après --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Hors de votre dossier personnel : le mode quarantaine ne déplace pas ces fichiers. Utilisez --permanent pour les supprimer." ;;
         cli_interactive_flow_1) echo "Nous passerons en revue chaque catégorie en demandant confirmation." ;;
         cli_interactive_flow_2) echo "La réponse par défaut est toujours NON." ;;
         cli_auto_safe_flow_1) echo "Déplacement des caches d'applications sûrs en quarantaine." ;;

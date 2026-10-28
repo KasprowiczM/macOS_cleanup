@@ -5,6 +5,26 @@
 # Bash 3.2 compatible.
 # =============================================================================
 
+# P1-4: native targets are checked with validate_cache_path.
+if ! command -v validate_cache_path >/dev/null 2>&1; then
+    _PLANNER_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+    if [[ -f "${_PLANNER_LIB_DIR}/pathguard.sh" ]]; then
+        # shellcheck disable=SC1091
+        source "${_PLANNER_LIB_DIR}/pathguard.sh"
+    fi
+fi
+
+# P1-7: temp files removed by remove_plan_temp_files when a run aborts.
+PLAN_TMP_OUTPUT=""
+APPLY_PLAN_SNAPSHOT=""
+
+# remove_plan_temp_files — called from the EXIT handler.
+remove_plan_temp_files() {
+    [[ -n "${PLAN_TMP_OUTPUT:-}" ]] && rm -f "$PLAN_TMP_OUTPUT" 2>/dev/null
+    [[ -n "${APPLY_PLAN_SNAPSHOT:-}" ]] && rm -f "$APPLY_PLAN_SNAPSHOT" 2>/dev/null
+    return 0
+}
+
 declare -a PLAN_OP_IDS=()
 declare -a PLAN_OP_CATEGORIES=()
 declare -a PLAN_OP_RISKS=()
@@ -76,6 +96,92 @@ plan_add_native() {
     local path="${7:-}"
     local tool="${8:-}"
     plan_add_operation "$(plan_next_id)" "$category" "$risk" "native_command" "$path" "$command" "$bytes" "$description" "$recommendation" "false" "$tool"
+}
+
+# P1-4: plan_add_bound_native <category> <default-risk> <command> <bytes> <desc> <rec>
+# The op's path is the target its tool resolves now (native_tool_target), the
+# same value apply re-resolves and must match. A tool that cannot name its
+# target is reported instead of planned.
+plan_add_bound_native() {
+    local category="$1" default_risk="$2" command="$3" bytes="$4" description="$5" recommendation="$6"
+    local tool target
+    tool="$(native_tool_for_command "$command")" || return 1
+    if ! target="$(native_tool_target "$tool")" || [[ -z "$target" ]]; then
+        plan_add_report_only "$category" "REVIEW" "${tool}: target unresolved" "$bytes" "$description" \
+            "${tool} did not report the directory it cleans; run it by hand after review."
+        return 0
+    fi
+    if ! native_target_allowed "$tool" "$target"; then
+        plan_add_report_only "$category" "REVIEW" "$target" "$bytes" "$description" \
+            "${tool} cleans ${target}, which is outside the known cache roots; review it by hand."
+        return 0
+    fi
+    plan_add_native "$category" "$(policy_adjust_risk_for_path "$target" "$default_risk")" "$command" "$bytes" \
+        "$description" "$recommendation" "$target" "$tool"
+}
+
+# P1-1: plan_op_is_executable <index> — true when this run's mode would act on
+# the operation. report_only never runs, DANGEROUS is never applied, and the
+# quarantine mode skips non-user remove_path targets (/tmp, /Library/Logs), so
+# none of them can free anything.
+plan_op_is_executable() {
+    local i="$1"
+    case "${PLAN_OP_ACTIONS[$i]}" in
+        remove_path|native_command) ;;
+        *) return 1 ;;
+    esac
+    [[ "${PLAN_OP_RISKS[$i]}" == "SAFE" || "${PLAN_OP_RISKS[$i]}" == "REVIEW" ]] || return 1
+    [[ "${PLAN_OP_ACTIONS[$i]}" == "remove_path" ]] || return 0
+    # Mirror safe_remove: an invalid REMOVE_MODE removes nothing (P0-3).
+    case "${REMOVE_MODE:-}" in
+        permanent)  return 0 ;;
+        quarantine) is_user_space_path "${PLAN_OP_PATHS[$i]}" ;;
+        *)          return 1 ;;
+    esac
+}
+
+# P1-1: plan_compute_totals — sets PLAN_SUM_* from the current operations.
+# The risk buckets hold remove_path/native_command only; report_only items are
+# counted apart, because summing never-executed bytes into review/dangerous
+# inflated the plan by 22% (13.24 GB) on the 2026-10-27 measurement.
+plan_compute_totals() {
+    local i r b count
+    count=${#PLAN_OP_IDS[@]}
+    PLAN_SUM_SAFE_OPS=0; PLAN_SUM_REVIEW_OPS=0; PLAN_SUM_DANGEROUS_OPS=0
+    PLAN_SUM_SAFE_BYTES=0; PLAN_SUM_REVIEW_BYTES=0; PLAN_SUM_DANGEROUS_BYTES=0
+    PLAN_SUM_REPORT_ONLY_OPS=0; PLAN_SUM_REPORT_ONLY_BYTES=0
+    PLAN_SUM_EXECUTABLE_BYTES=0
+    for (( i=0; i<count; i++ )); do
+        r="${PLAN_OP_RISKS[$i]}"
+        b="${PLAN_OP_BYTES[$i]:-0}"
+        case "$b" in ''|*[!0-9]*) b=0 ;; esac
+        if [[ "${PLAN_OP_ACTIONS[$i]}" == "report_only" ]]; then
+            PLAN_SUM_REPORT_ONLY_OPS=$(( PLAN_SUM_REPORT_ONLY_OPS + 1 ))
+            PLAN_SUM_REPORT_ONLY_BYTES=$(( PLAN_SUM_REPORT_ONLY_BYTES + b ))
+            continue
+        fi
+        case "$r" in
+            SAFE)      PLAN_SUM_SAFE_OPS=$(( PLAN_SUM_SAFE_OPS + 1 ));           PLAN_SUM_SAFE_BYTES=$(( PLAN_SUM_SAFE_BYTES + b )) ;;
+            REVIEW)    PLAN_SUM_REVIEW_OPS=$(( PLAN_SUM_REVIEW_OPS + 1 ));       PLAN_SUM_REVIEW_BYTES=$(( PLAN_SUM_REVIEW_BYTES + b )) ;;
+            DANGEROUS) PLAN_SUM_DANGEROUS_OPS=$(( PLAN_SUM_DANGEROUS_OPS + 1 )); PLAN_SUM_DANGEROUS_BYTES=$(( PLAN_SUM_DANGEROUS_BYTES + b )) ;;
+        esac
+        if plan_op_is_executable "$i"; then
+            PLAN_SUM_EXECUTABLE_BYTES=$(( PLAN_SUM_EXECUTABLE_BYTES + b ))
+        fi
+    done
+}
+
+# P1-1: plan_record_headline_totals — the headline figure is the plan's
+# executable sum, and report-only bytes are informational. The old headline
+# summed category ledgers, which counted Homebrew twice and included work the
+# current mode never performs.
+plan_record_headline_totals() {
+    plan_compute_totals
+    # shellcheck disable=SC2034  # read by reporter.sh and json_summary.sh
+    TOTAL_WOULD_FREE_BYTES=$PLAN_SUM_EXECUTABLE_BYTES
+    # shellcheck disable=SC2034
+    TOTAL_INFORMATIONAL_BYTES=0
+    add_informational_bytes "$PLAN_SUM_REPORT_ONLY_BYTES"
 }
 
 build_cleanup_plan_from_analysis() {
@@ -176,9 +282,9 @@ build_cleanup_plan_from_analysis() {
                         "Review in Xcode Organizer before deletion."
                     ;;
                 ios_simulators)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
+                    plan_add_bound_native "dev" "REVIEW" "xcrun simctl delete unavailable" "$(catbytes_get "simulators")" \
                         "Deletes only unavailable simulators." \
-                        "Execute after review; runtimes can be re-downloaded." "$path" "xcrun"
+                        "Execute after review; runtimes can be re-downloaded."
                     ;;
                 npx_cache|pnpm_stale_store)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
@@ -186,27 +292,31 @@ build_cleanup_plan_from_analysis() {
                         "The tool will re-download packages as needed."
                     ;;
                 npm_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "npm cache clean --force" "$(catbytes_get "npm")" \
-                        "npm cache." "Packages will be re-downloaded if needed." "$path" "npm" ;;
+                    plan_add_bound_native "dev" "SAFE" "npm cache clean --force" "$(catbytes_get "npm")" \
+                        "npm cache." "Packages will be re-downloaded if needed." ;;
                 yarn_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "yarn cache clean" "$(catbytes_get "yarn")" \
-                        "Yarn cache." "Packages will be re-downloaded if needed." "$path" "yarn" ;;
+                    plan_add_bound_native "dev" "SAFE" "yarn cache clean" "$(catbytes_get "yarn")" \
+                        "Yarn cache." "Packages will be re-downloaded if needed." ;;
                 pnpm_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pnpm store prune" "$(catbytes_get "pnpm")" \
-                        "pnpm store." "pnpm prunes unused store items." "$path" "pnpm" ;;
+                    plan_add_bound_native "dev" "SAFE" "pnpm store prune" "$(catbytes_get "pnpm")" \
+                        "pnpm store." "pnpm prunes unused store items." ;;
                 pip_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pip cache purge" "$(catbytes_get "pip")" \
-                        "pip cache." "Packages will be re-downloaded if needed." "$path" "pip" ;;
+                    plan_add_bound_native "dev" "SAFE" "pip cache purge" "$(catbytes_get "pip")" \
+                        "pip cache." "Packages will be re-downloaded if needed." ;;
                 brew_cache|brew_cleanup)
+                    # P1-1: one brew cleanup covers the cache and the stale
+                    # versions, which overlap; count the larger estimate once.
                     brew_b="$(catbytes_get "brew")"
-                    if [[ "$brew_b" == "0" || -z "$brew_b" ]]; then
+                    if (( $(catbytes_get "brew-stale") > brew_b )); then
                         brew_b="$(catbytes_get "brew-stale")"
                     fi
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "brew cleanup --prune=all" "$brew_b" \
-                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." "$path" "brew" ;;
+                    # P1-4: --prune=all also removes old formula versions (REVIEW).
+                    plan_add_bound_native "dev" "REVIEW" "brew cleanup --prune=all" "$brew_b" \
+                        "Homebrew cache & old formulae versions." "Homebrew rebuilds cache on demand." ;;
                 gem_cache)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "gem cleanup" "$(catbytes_get "gem")" \
-                        "Ruby gems cache / old versions." "Gems can be reinstalled." "$path" "gem" ;;
+                    # P1-4: gem cleanup uninstalls old gem versions (REVIEW).
+                    plan_add_bound_native "dev" "REVIEW" "gem cleanup" "$(catbytes_get "gem")" \
+                        "Ruby gems cache / old versions." "Gems can be reinstalled." ;;
                 gradle_cache|cocoapods_cache|cargo_cache|swift_pm_cache|bundler_cache|composer_cache)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Recreateable dev tool cache." \
@@ -223,9 +333,12 @@ build_cleanup_plan_from_analysis() {
                         "Remove via Android Studio Device Manager after review."
                     ;;
                 docker_prune)
-                    plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "REVIEW")" "docker system prune -f" "$(catbytes_get "docker")" \
+                    # P1-4: Docker storage lives in its VM, so there is no host
+                    # target to bind; a plan reports it and the interactive
+                    # mode runs it with its own confirmation.
+                    plan_add_report_only "dev" "REVIEW" "docker: reclaimable (docker system df)" "$(catbytes_get "docker")" \
                         "Docker: images, stopped containers, networks, and build cache." \
-                        "Execute only if stopped container data is no longer required." "$path" "docker"
+                        "Run 'docker system prune' yourself, or use --interactive, if stopped container data is no longer required."
                     ;;
             esac
         done
@@ -298,33 +411,38 @@ build_cleanup_plan_from_analysis() {
 generate_plan_json() {
     local output="${1:-$PLAN_FILE_DEFAULT}"
     local i count safe_count review_count dangerous_count safe_bytes review_bytes dangerous_bytes
+    local report_only_count report_only_bytes executable_bytes
     count=${#PLAN_OP_IDS[@]}
-    safe_count=0; review_count=0; dangerous_count=0
-    safe_bytes=0; review_bytes=0; dangerous_bytes=0
-
-    for (( i=0; i<count; i++ )); do
-        local r="${PLAN_OP_RISKS[$i]}"
-        local b="${PLAN_OP_BYTES[$i]:-0}"
-        case "$r" in
-            SAFE)      safe_count=$(( safe_count + 1 ));           safe_bytes=$(( safe_bytes + b )) ;;
-            REVIEW)    review_count=$(( review_count + 1 ));       review_bytes=$(( review_bytes + b )) ;;
-            DANGEROUS) dangerous_count=$(( dangerous_count + 1 )); dangerous_bytes=$(( dangerous_bytes + b )) ;;
-        esac
-    done
+    plan_compute_totals
+    safe_count=$PLAN_SUM_SAFE_OPS; review_count=$PLAN_SUM_REVIEW_OPS; dangerous_count=$PLAN_SUM_DANGEROUS_OPS
+    safe_bytes=$PLAN_SUM_SAFE_BYTES; review_bytes=$PLAN_SUM_REVIEW_BYTES; dangerous_bytes=$PLAN_SUM_DANGEROUS_BYTES
+    report_only_count=$PLAN_SUM_REPORT_ONLY_OPS; report_only_bytes=$PLAN_SUM_REPORT_ONLY_BYTES
+    executable_bytes=$PLAN_SUM_EXECUTABLE_BYTES
 
     local checksum_val
     checksum_val="pending"
 
-    local dir
+    local dir tmp_output
     dir="$(dirname "$output")"
     mkdir -p "$dir" 2>/dev/null || true
+    # P1-7: write and stamp a temp file next to the destination, then rename it
+    # into place, so a failed stamp or an interrupted run never leaves a
+    # half-written plan where apply --from-plan will read it.
+    tmp_output="${output}.tmp.$$"
+    if [[ -d "$output" ]]; then
+        print_error "Plan file is a directory: ${output}"
+        return 1
+    fi
+    # Bare (no `|| handler`) so set -e still aborts on a failed write; the
+    # EXIT handler removes the temp file in that case.
+    PLAN_TMP_OUTPUT="$tmp_output"
 
     {
         printf '{\n'
         printf '  "schema_version": "1.0",\n'
         printf '  "version": "1.0",\n'
         printf '  "tool": "%s",\n' "$(json_escape "${SCRIPT_NAME:-cleanup_all.sh}")"
-        printf '  "tool_version": "%s",\n' "$(json_escape "${SCRIPT_VERSION:-3.0.0}")"
+        printf '  "tool_version": "%s",\n' "$(json_escape "${SCRIPT_VERSION:-unknown}")"
         printf '  "run_id": "%s",\n' "$(json_escape "${RUN_TIMESTAMP:-test_run}")"
         printf '  "generated_at": "%s",\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
         printf '  "checksum": "%s",\n' "$checksum_val"
@@ -336,7 +454,10 @@ generate_plan_json() {
         printf '    "dangerous_operations": %d,\n' "$dangerous_count"
         printf '    "safe_bytes": %s,\n' "$safe_bytes"
         printf '    "review_bytes": %s,\n' "$review_bytes"
-        printf '    "dangerous_bytes": %s\n' "$dangerous_bytes"
+        printf '    "dangerous_bytes": %s,\n' "$dangerous_bytes"
+        printf '    "report_only_operations": %d,\n' "$report_only_count"
+        printf '    "report_only_bytes": %s,\n' "$report_only_bytes"
+        printf '    "executable_bytes": %s\n' "$executable_bytes"
         printf '  },\n'
         printf '  "operations": [\n'
 
@@ -373,9 +494,9 @@ generate_plan_json() {
         done
         printf '  ]\n'
         printf '}\n'
-    } > "$output"
+    } > "$tmp_output"
 
-    if ! python3 - "$output" <<'PLANCKSUM'
+    if ! python3 - "$tmp_output" <<'PLANCKSUM'
 import hashlib
 import json
 import re
@@ -394,20 +515,32 @@ with open(path, "w", encoding="utf-8") as f:
     f.write(new)
 PLANCKSUM
     then
+        rm -f "$tmp_output"
+        PLAN_TMP_OUTPUT=""
         print_error "Failed to stamp plan checksum: ${output}"
         return 1
     fi
+    if ! mv -f "$tmp_output" "$output"; then
+        rm -f "$tmp_output"
+        print_error "Failed to write plan: ${output}"
+        return 1
+    fi
+    PLAN_TMP_OUTPUT=""
 
     cleanup_journal_event "plan_generated" "$output" "" 0 "ok" "operations=${count}" "plan"
-    TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count ))
+    TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count + report_only_count ))
     if (( review_count > 0 )); then
         USER_DECISION_ITEMS+=("Plan JSON: ${review_count} REVIEW operations require conscious decision")
     fi
     if (( dangerous_count > 0 )); then
         USER_DECISION_ITEMS+=("Plan JSON: ${dangerous_count} DANGEROUS operations will never execute automatically")
     fi
+    if (( report_only_count > 0 )); then
+        USER_DECISION_ITEMS+=("Plan JSON: ${report_only_count} report-only items are sized for manual review and never executed")
+    fi
     if type json_summary_record_plan >/dev/null 2>&1; then
-        json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" "$safe_bytes" "$review_bytes" "$dangerous_bytes"
+        json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" "$safe_bytes" "$review_bytes" "$dangerous_bytes" \
+            "$report_only_count" "$report_only_bytes" "$executable_bytes"
     fi
     print_ok "Plan JSON saved: ${output}"
 }
@@ -420,72 +553,57 @@ execute_plan_native_command() {
     local after=0
 
     if [[ -n "$path" && -e "$path" ]]; then
-        before="$(path_size_bytes "$path")"
+        before="$(path_size_bytes "$path")" || before=0
     fi
 
-    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    local _cmd_rc=0 tool bin target want
+    if ! tool="$(native_tool_for_command "$command")"; then
+        print_warn "Plan native command not in allowlist: ${command}"
+        cleanup_journal_event "plan_apply_blocked" "$command" "" "$bytes" "blocked" "native command not allowlisted" "plan"
+        return 1
+    fi
+    bin="$tool"
+    if [[ "$tool" == "pip" ]]; then
+        bin="$(native_pip_bin)" || bin=""
+    fi
+    if [[ -z "$bin" ]] || ! command -v "$bin" >/dev/null 2>&1; then
+        [[ "$tool" == "pip" ]] && tool="pip/pip3"
+        record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: ${tool}"
+        print_skip "${tool} unavailable — skipping: ${command}"
+        return 0
+    fi
+
+    # P1-4: the op is bound to its tool's target, re-resolved now. A plan that
+    # names another directory, or a config that moved the cache since the
+    # plan was written, is refused instead of cleaning something else.
+    target="$(native_tool_target "$tool")" || target=""
+    want="$(normalize_path "$path" 2>/dev/null)" || want=""
+    if [[ -z "$target" || "$target" != "$want" ]]; then
+        print_warn "Plan command target mismatch: ${command} (plan: ${path:-none}, ${tool}: ${target:-unresolved})"
+        cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "native target mismatch: ${target:-unresolved}" "plan"
+        return 1
+    fi
+    if ! native_target_allowed "$tool" "$target"; then
+        print_warn "Plan command target outside the cache roots: ${command} (${target})"
+        cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "native target outside cache roots" "plan"
+        return 1
+    fi
+
+    # P1-4: a dry-run previews only what a real apply would run.
+    if is_dry_run; then
         print_dry "Would run: ${command}"
         record_native_command_event "$command" "planned" "$bytes" "plan dry-run"
         return 0
     fi
 
-    local _cmd_rc=0
     case "$command" in
-        "npm cache clean --force")
-            if ! command -v npm >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: npm"
-                print_skip "npm unavailable — skipping: ${command}"
-                return 0
-            fi
-            npm cache clean --force || _cmd_rc=$?
-            ;;
-        "yarn cache clean")
-            if ! command -v yarn >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: yarn"
-                print_skip "yarn unavailable — skipping: ${command}"
-                return 0
-            fi
-            yarn cache clean || _cmd_rc=$?
-            ;;
-        "pnpm store prune")
-            if ! command -v pnpm >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pnpm"
-                print_skip "pnpm unavailable — skipping: ${command}"
-                return 0
-            fi
-            pnpm store prune || _cmd_rc=$?
-            ;;
-        "pip cache purge")
-            local _pip_cmd=""
-            command -v pip3 >/dev/null 2>&1 && _pip_cmd="pip3"
-            [[ -z "$_pip_cmd" ]] && command -v pip >/dev/null 2>&1 && _pip_cmd="pip"
-            if [[ -z "$_pip_cmd" ]]; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: pip/pip3"
-                print_skip "pip/pip3 unavailable — skipping: ${command}"
-                return 0
-            fi
-            $_pip_cmd cache purge || _cmd_rc=$?
-            ;;
-        "brew cleanup --prune=all")
-            if ! command -v brew >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: brew"
-                print_skip "brew unavailable — skipping: ${command}"
-                return 0
-            fi
-            brew cleanup --prune=all || _cmd_rc=$?
-            ;;
-        "gem cleanup")
-            if ! command -v gem >/dev/null 2>&1; then
-                record_native_command_event "$command" "skipped" "$bytes" "tool unavailable: gem"
-                print_skip "gem unavailable — skipping: ${command}"
-                return 0
-            fi
-            gem cleanup || _cmd_rc=$?
-            ;;
-        *)
-            print_warn "Plan native command not in allowlist: ${command}"
-            cleanup_journal_event "plan_apply_blocked" "$command" "" "$bytes" "blocked" "native command not allowlisted" "plan"
-            return 1 ;;
+        "npm cache clean --force")         npm cache clean --force || _cmd_rc=$? ;;
+        "yarn cache clean")                yarn cache clean || _cmd_rc=$? ;;
+        "pnpm store prune")                pnpm store prune || _cmd_rc=$? ;;
+        "pip cache purge")                 "$bin" cache purge || _cmd_rc=$? ;;
+        "brew cleanup --prune=all")        brew cleanup --prune=all || _cmd_rc=$? ;;
+        "gem cleanup")                     gem cleanup || _cmd_rc=$? ;;
+        "xcrun simctl delete unavailable") xcrun simctl delete unavailable || _cmd_rc=$? ;;
     esac
 
     if (( _cmd_rc == 0 )); then
@@ -565,7 +683,31 @@ apply_plan_file() {
     [[ -f "$plan_file" ]] || { print_error "Plan file not found: ${plan_file}"; return 2; }
     command -v python3 >/dev/null 2>&1 || { print_error "apply --from-plan requires python3 for safe JSON parsing."; return 2; }
 
-    if ! verify_plan_file_checksum "$plan_file"; then
+    # P1-7: verify and parse one private snapshot, so the plan cannot change
+    # between the checksum check and the parse.
+    local plan_snapshot
+    plan_snapshot="$(mktemp -t macos_cleanup_plan_snapshot.XXXXXX)" || { print_error "Cannot snapshot plan: ${plan_file}"; return 2; }
+    if ! cp "$plan_file" "$plan_snapshot" 2>/dev/null; then
+        rm -f "$plan_snapshot"
+        print_error "Cannot snapshot plan: ${plan_file}"
+        return 2
+    fi
+    # Called bare so set -e keeps aborting inside the apply loop; on such an
+    # abort the EXIT handler removes the snapshot.
+    APPLY_PLAN_SNAPSHOT="$plan_snapshot"
+    local _apply_rc=0
+    _apply_plan_snapshot "$plan_file" "$plan_snapshot"
+    _apply_rc=$?
+    rm -f "$plan_snapshot"
+    APPLY_PLAN_SNAPSHOT=""
+    return "$_apply_rc"
+}
+
+# _apply_plan_snapshot <plan-file-for-messages> <snapshot> — body of apply_plan_file.
+_apply_plan_snapshot() {
+    local plan_file="$1" plan_snapshot="$2"
+
+    if ! verify_plan_file_checksum "$plan_snapshot"; then
         print_error "Plan checksum verification failed: ${plan_file}"
         cleanup_journal_event "plan_apply_blocked" "$plan_file" "" 0 "blocked" "checksum mismatch" "plan"
         return 2
@@ -574,7 +716,7 @@ apply_plan_file() {
     local parsed_ops apply_failed
     parsed_ops="$(mktemp -t macos_cleanup_plan_parsed.XXXXXX)"
     apply_failed=0
-    if ! python3 - "$plan_file" > "$parsed_ops" <<'PLANPARSE'
+    if ! python3 - "$plan_snapshot" > "$parsed_ops" <<'PLANPARSE'
 import base64
 import json
 import sys
@@ -586,6 +728,7 @@ ALLOWLIST = {
     "pip cache purge",
     "brew cleanup --prune=all",
     "gem cleanup",
+    "xcrun simctl delete unavailable",
 }
 ACTIONS = {"remove_path", "native_command", "report_only"}
 RISKS = {"SAFE", "REVIEW", "DANGEROUS"}
@@ -648,7 +791,7 @@ PLANPARSE
 
     local id_b64 risk action path_b64 command_b64 bytes category_b64
     local id path command category
-    local explicit_risk
+    local explicit_risk owner_key
 
     while IFS=$'\x1f' read -u3 -r id_b64 risk action path_b64 command_b64 bytes category_b64; do
         id="$(base64_decode_string "$id_b64")"
@@ -656,6 +799,14 @@ PLANPARSE
         command="$(base64_decode_string "$command_b64")"
         category="$(base64_decode_string "$category_b64")"
         case "$bytes" in ''|*[!0-9]*) bytes=0 ;; esac
+
+        # Holistic review: these commands remove installed versions or devices,
+        # so apply enforces REVIEW even when a hand-edited plan says SAFE.
+        if [[ "$action" == "native_command" && "$risk" == "SAFE" ]]; then
+            case "$command" in
+                "brew cleanup --prune=all"|"gem cleanup"|"xcrun simctl delete unavailable") risk="REVIEW" ;;
+            esac
+        fi
 
         case "$risk" in
             DANGEROUS)
@@ -691,6 +842,13 @@ PLANPARSE
                     if _plan_path_blocked_or_escalated "$path" "$risk"; then
                         print_warn "Plan ${id}: risk escalated (${risk}->${explicit_risk:-protected}) or path protected — skipping."
                         cleanup_journal_event "plan_apply_blocked" "$path" "" "$bytes" "blocked" "risk escalated since plan: ${risk}->${explicit_risk:-protected}" "$category"
+                        continue
+                    fi
+                    # Phase 3: same in-use check as the interactive cleaners.
+                    owner_key="$(cache_owner_key_for_path "$path")" || owner_key=""
+                    if [[ -n "$owner_key" ]] && cache_owner_running "$owner_key"; then
+                        print_skip "Plan ${id}: in use by a running tool (${owner_key}) — skipping."
+                        cleanup_journal_event "plan_apply_skipped" "$path" "" "$bytes" "skipped" "in use: ${owner_key}" "$category"
                         continue
                     fi
                     if ! safe_remove "$path"; then

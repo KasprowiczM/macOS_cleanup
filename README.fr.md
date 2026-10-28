@@ -191,9 +191,10 @@ L'indicateur `--json` redirige toute la sortie lisible (bannières, sections, r�
 |-------|-------------|
 | `mode` | Mode d'exécution (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
+| `analysis_status` | `complete` / `partial` |
 | `categories` | Tableau des catégories actives |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Compteurs pour opérations `SAFE`/`REVIEW`/`DANGEROUS` et octets |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `unreadable_paths`, `user_decisions_needed` |
+| `plan` | Compteurs pour opérations `SAFE`/`REVIEW`/`DANGEROUS` et octets; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Chemins d'accès vers `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Nombre d'éléments ignorés |
 | `user_decisions` | Liste des descriptions d'éléments nécessitant une décision |
@@ -261,6 +262,9 @@ Modèle détaillé pour les opérateurs et les agents : `docs/ux_dx_safety_model
 - `~/Music/Music/Music Library.musiclibrary`
 - `~/Music/Music Library.musiclibrary`
 - `~/Movies`
+- `~/Library/Messages`
+- `~/Library/Calendars`
+- `~/Library/Application Support/AddressBook`
 - `~/Library/Mobile Documents`
 - `~/Library/CloudStorage`
 - `~/Dropbox`
@@ -285,6 +289,7 @@ Modèle détaillé pour les opérateurs et les agents : `docs/ux_dx_safety_model
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`
@@ -388,4 +393,4 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG dans ~/Downloads
 
 ---
 
-Projet : `macOS_cleanup` | Version : 2.1.0 | Licence : MIT
+Projet : `macOS_cleanup` | Version : 3.0.6 | Licence : MIT
