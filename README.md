@@ -189,8 +189,9 @@ The `--json` flag redirects all human-readable output (banners, sections, summar
 |------|------|
 | `mode` | Execution mode (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
+| `analysis_status` | `complete` / `partial` |
 | `categories` | Array of active categories |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `unreadable_paths`, `user_decisions_needed` |
 | `plan` | `SAFE`/`REVIEW`/`DANGEROUS` operation counters and bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Paths to `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Number of skipped items |
@@ -286,6 +287,7 @@ Detailed model for operators and agents: `docs/ux_dx_safety_model.md`.
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`

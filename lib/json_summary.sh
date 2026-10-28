@@ -35,6 +35,14 @@ emit_json_summary() {
         printf '  "mode": "%s",\n'         "$(json_escape "$mode")"
         printf '  "remove_mode": "%s",\n'  "$(json_escape "${REMOVE_MODE:-quarantine}")"
         printf '  "dry_run": %s,\n'        "$([ "${DRY_RUN:-1}" = "1" ] && echo true || echo false)"
+        # Phase 3: a scan that could not read everything is partial, not "0 B".
+        local _unreadable _status="complete"
+        _unreadable="$(analysis_unreadable_count 2>/dev/null)" || _unreadable=0
+        case "$_unreadable" in ''|*[!0-9]*) _unreadable=0 ;; esac
+        if (( _unreadable > 0 )) || [[ "${ANALYSIS_PARTIAL:-0}" == "1" ]]; then
+            _status="partial"
+        fi
+        printf '  "analysis_status": "%s",\n' "$_status"
         # Build a proper JSON array of quoted category strings.
         local _cats_json=""
         local _first_cat=1
@@ -58,6 +66,7 @@ emit_json_summary() {
         printf '    "restored_bytes": %s,\n'        "${TOTAL_RESTORED_BYTES:-0}"
         printf '    "restored_items": %s,\n'        "${TOTAL_RESTORED_ITEMS:-0}"
         printf '    "skipped_items": %s,\n'         "${TOTAL_SKIPPED_ITEMS:-0}"
+        printf '    "unreadable_paths": %s,\n'      "$_unreadable"
         printf '    "user_decisions_needed": %s\n'  "${TOTAL_USER_DECISIONS_NEEDED:-0}"
         printf '  },\n'
         printf '  "plan": {\n'

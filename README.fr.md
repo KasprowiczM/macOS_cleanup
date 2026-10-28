@@ -191,8 +191,9 @@ L'indicateur `--json` redirige toute la sortie lisible (bannières, sections, r�
 |-------|-------------|
 | `mode` | Mode d'exécution (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
+| `analysis_status` | `complete` / `partial` |
 | `categories` | Tableau des catégories actives |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `unreadable_paths`, `user_decisions_needed` |
 | `plan` | Compteurs pour opérations `SAFE`/`REVIEW`/`DANGEROUS` et octets; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Chemins d'accès vers `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Nombre d'éléments ignorés |
@@ -288,6 +289,7 @@ Modèle détaillé pour les opérateurs et les agents : `docs/ux_dx_safety_model
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`

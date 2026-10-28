@@ -194,8 +194,9 @@ Flaga `--json` przekierowuje cały czytelny output (banery, sekcje, podsumowanie
 |------|------|
 | `mode` | Tryb wykonania (`dry-run`, `plan`, `apply-plan`, itp.) |
 | `dry_run` | `true` / `false` |
+| `analysis_status` | `complete` / `partial` |
 | `categories` | Tablica aktywnych kategorii |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `unreadable_paths`, `user_decisions_needed` |
 | `plan` | Liczniki operacji `SAFE`/`REVIEW`/`DANGEROUS` i bajty; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Ścieżki do `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Liczba pominięć |
@@ -291,6 +292,7 @@ Szczegółowy model dla operatorów i agentów: `docs/ux_dx_safety_model.md`.
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`

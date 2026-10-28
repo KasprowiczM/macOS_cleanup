@@ -144,6 +144,7 @@ NEVER_TOUCH_PATHS=(
     "$HOME/.gnupg"
     "$HOME/.aws/credentials"
     "$HOME/.aws/config"
+    "$HOME/.aws/sso"
     # Git config (not cache)
     "$HOME/.gitconfig"
     "$HOME/.git-credentials"

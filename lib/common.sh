@@ -163,7 +163,7 @@ _rotate_artifact_file() {
     path_is_within "$candidate" "$root" || return 1
     base="${candidate##*/}"
     case "$base" in
-        cleanup_*.log|report_*.md|plan_*.json|journal_*.jsonl) ;;
+        cleanup_*.log|unreadable_*.txt|report_*.md|plan_*.json|journal_*.jsonl) ;;
         *) return 1 ;;
     esac
     rm -f "$candidate"
@@ -244,7 +244,7 @@ rotate_old_artifacts() {
             if _rotate_artifact_file "$candidate" "$logs_dir"; then
                 removed=$((removed + 1))
             fi
-        done < <(find "$logs_dir" -type f -name "cleanup_*.log" -mtime +"$max_days" 2>/dev/null)
+        done < <(find "$logs_dir" -type f \( -name "cleanup_*.log" -o -name "unreadable_*.txt" \) -mtime +"$max_days" 2>/dev/null)
     fi
 
     if [[ -n "$reports_dir" && -d "$reports_dir" ]]; then
@@ -330,10 +330,47 @@ bytes_to_human() {
     fi
 }
 
+# Phase 3: unreadable is not empty. macOS can deny access to other apps'
+# folders silently; du then exits non-zero and used to make this function
+# report 0 bytes. Every location that could not be fully read is recorded in
+# a run-scoped file (written from command substitutions too), and the
+# summaries report the analysis as partial.
+analysis_unreadable_file() {
+    printf '%s/unreadable_%s.txt' "${LOGS_DIR:-${TMPDIR:-/tmp}}" "${RUN_TIMESTAMP:-run}"
+}
+
+analysis_record_unreadable() {
+    local kind="$1" path="$2" file
+    file="$(analysis_unreadable_file)"
+    { printf '%s\t%s\n' "$kind" "$path" >> "$file"; } 2>/dev/null || true
+}
+
+# analysis_unreadable_count — distinct locations recorded this run.
+analysis_unreadable_count() {
+    local file
+    file="$(analysis_unreadable_file)"
+    if [[ -f "$file" ]]; then
+        cut -f2- "$file" 2>/dev/null | sort -u | grep -c . 2>/dev/null || true
+    else
+        echo 0
+    fi
+}
+
+# analysis_path_partial <path> — true when this run recorded <path> as only
+# partly (or not) readable.
+analysis_path_partial() {
+    local file
+    file="$(analysis_unreadable_file)"
+    [[ -f "$file" ]] || return 1
+    cut -f2- "$file" 2>/dev/null | grep -qFx -- "$1"
+}
+
 # Return the disk usage of a path in bytes.
 # Missing path: echo 0, return 0.
-# Existing path, du succeeds with a numeric KB: echo kb*1024, return 0.
-# Existing path, du fails or yields no numeric: warn, echo 0, return 1.
+# du succeeds with a numeric KB: echo kb*1024, return 0.
+# du fails but reports a numeric KB (partly unreadable): record, echo the
+# readable lower bound, return 0.
+# du fails with no numeric KB: record, warn, echo 0, return 1.
 path_size_bytes() {
     local path="$1"
     if [[ ! -e "$path" ]]; then
@@ -345,9 +382,22 @@ path_size_bytes() {
     du_out=$(du -sk "$path" 2>/dev/null) || du_rc=$?
     kb=$(printf '%s\n' "$du_out" | awk 'NR==1{print $1}')
     case "$kb" in
-        ''|*[!0-9]*) du_rc=1 ;;
+        ''|*[!0-9]*) kb="" ;;
     esac
     if (( du_rc != 0 )); then
+        if [[ -n "$kb" ]]; then
+            # Partly readable: keep what du could count; it is a lower bound.
+            analysis_record_unreadable "partial" "$path"
+            echo $(( kb * 1024 ))
+            return 0
+        fi
+        analysis_record_unreadable "unreadable" "$path"
+        print_warn "Could not measure size of: $path" >&2
+        echo 0
+        return 1
+    fi
+    if [[ -z "$kb" ]]; then
+        analysis_record_unreadable "unreadable" "$path"
         print_warn "Could not measure size of: $path" >&2
         echo 0
         return 1
@@ -1982,6 +2032,16 @@ safe_remove() {
 
     local size
     size=$(path_size_bytes "$normalized_target")
+
+    # Phase 3: rm -rf on a tree with an unreadable part deletes what it can
+    # and stops at the rest, leaving it half-deleted. Quarantine (a rename on
+    # the same volume) is unaffected; permanent removal skips such a tree.
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]] && analysis_path_partial "$normalized_target"; then
+        print_skip "Not fully readable, not deleted permanently: ${normalized_target}"
+        record_skipped_item "Not fully readable (macOS privacy or permissions), skipped in permanent mode: ${normalized_target}"
+        cleanup_journal_event "skipped_unreadable" "$normalized_target" "" "$size" "skipped" "partly unreadable; permanent removal would half-delete it"
+        return 0
+    fi
 
     if [[ "$dry" == "1" ]]; then
         print_dry "Would remove: ${normalized_target}  ($(bytes_to_human "$size"))"

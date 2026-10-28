@@ -41,6 +41,12 @@ generate_report() {
 |:-------|:------|
 | $(_report_total_label) | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
 EOF
+    # Phase 3: locations macOS did not let us read fully are not "0 B".
+    local _unreadable
+    _unreadable="$(analysis_unreadable_count 2>/dev/null)" || _unreadable=0
+    if (( ${_unreadable:-0} > 0 )); then
+        echo "| Not fully readable (macOS privacy or permissions) | ${_unreadable} locations — sizes there are lower bounds; see $(analysis_unreadable_file) |" >> "$REPORT_FILE"
+    fi
     # P1-1: report-only bytes are sized but never removed; show them apart.
     if (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )); then
         echo "| Report-only (never freed by this tool) | $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES") |" >> "$REPORT_FILE"
@@ -290,6 +296,11 @@ print_summary_report() {
 
     if [[ "$MODE" != "list-quarantine" && "$MODE" != "list" ]]; then
         echo -e "  ${C_BOLD}$(_report_total_label):${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+        local _unreadable_n
+        _unreadable_n="$(analysis_unreadable_count 2>/dev/null)" || _unreadable_n=0
+        if (( ${_unreadable_n:-0} > 0 )); then
+            echo -e "  ${C_YELLOW}Not fully readable:${C_RESET}     ${_unreadable_n} locations (macOS privacy or permissions); their sizes are lower bounds"
+        fi
     fi
 
     if command -v diskutil &>/dev/null; then

@@ -60,6 +60,7 @@ The `macOS_cleanup` script **never touches** the following locations under any c
 - `~/.gnupg`
 - `~/.aws/credentials`
 - `~/.aws/config`
+- `~/.aws/sso`
 - `~/.gitconfig`
 - `~/.git-credentials`
 - `~/.config`
