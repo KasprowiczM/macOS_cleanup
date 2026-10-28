@@ -89,6 +89,18 @@ t() {
     echo "$humanized"
 }
 
+# P1-2: headline_total_label [permanent-key] — quarantined files free nothing
+# until --purge-quarantine, so the quarantine-mode total must not be called
+# "freeable" (it also covers native commands, which free space at once).
+# The permanent mode keeps its own wording (default cli_total_freeable).
+headline_total_label() {
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+        t "${1:-cli_total_freeable}"
+    else
+        t "total_quarantine_label"
+    fi
+}
+
 # Cached path size calculation to optimize filesystem du traversal
 SIZE_CACHE_KEYS=()
 SIZE_CACHE_VALS=()
@@ -1158,7 +1170,9 @@ record_native_command_freed() {
 # ---------------------------------------------------------------------------
 CLEANUP_CATEGORY_OUTCOMES=""
 
-# mark_category_outcome <category-key> <cleaned|skipped|report-only>
+# mark_category_outcome <category-key> <cleaned|skipped|report-only|needs-permanent|partial>
+#   needs-permanent: quarantine mode cannot move these paths (outside HOME)
+#   partial:         the paths under HOME were processed, the rest need --permanent
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
     [[ -n "$key" && -n "$outcome" ]] || return 0

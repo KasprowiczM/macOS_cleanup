@@ -7,6 +7,16 @@
 # Bash 3.2 compatible.
 # =============================================================================
 
+# P1-2: the quarantine mode frees nothing until --purge-quarantine, so its
+# headline must not be called "freeable".
+_report_total_label() {
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+        printf '%s' "Potentially freeable space"
+    else
+        printf '%s' "To process (quarantined files free space only after --purge-quarantine)"
+    fi
+}
+
 generate_report() {
     local mode="${1:-${MODE}}"
     local report_dir
@@ -29,7 +39,7 @@ generate_report() {
 
 | Metric | Value |
 |:-------|:------|
-| Potentially freeable space | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
+| $(_report_total_label) | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
 EOF
     # P1-1: report-only bytes are sized but never removed; show them apart.
     if (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )); then
@@ -95,11 +105,22 @@ EOF
         case "$recorded_outcome" in
             cleaned) status_str="Cleaned/Quarantined"; action_str="Done" ;;
             skipped) status_str="Skipped by you";      action_str="Still on disk — re-run to process" ;;
+            needs-permanent) status_str="Not processed";  action_str="Outside HOME: quarantine mode skips it — needs --permanent" ;;
+            partial) status_str="Partly processed"; action_str="Items under HOME done; the rest is outside HOME — needs --permanent" ;;
         esac
 
         if [[ -z "$recorded_outcome" ]]; then
             case "$key" in
-                user-caches|trash|tmp)
+                tmp|system-logs)
+                    # P1-2: outside HOME — only --permanent can process these.
+                    status_str="Found"
+                    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+                        action_str="Run --interactive to process"
+                        [[ "$key" == "tmp" ]] && action_str="Safe to clean"
+                    else
+                        action_str="Outside HOME: quarantine mode skips it — needs --permanent"
+                    fi ;;
+                user-caches|trash)
                     # No outcome was recorded for this category, so the run never
                     # reached it. Do not claim it was cleaned.
                     status_str="Found"; action_str="Safe to clean" ;;
@@ -147,7 +168,7 @@ EOF
 
 ---
 
-**Total potentially freeable: $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
+**Total — $(_report_total_label): $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
 $( (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )) && printf '\nReport-only, never freed by this tool: %s\n' "$(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")" )
 
 ---
@@ -266,7 +287,7 @@ print_summary_report() {
     esac
 
     if [[ "$MODE" != "list-quarantine" && "$MODE" != "list" ]]; then
-        echo -e "  ${C_BOLD}Potentially freeable:${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+        echo -e "  ${C_BOLD}$(_report_total_label):${C_RESET}   ${C_CYAN}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
     fi
 
     if command -v diskutil &>/dev/null; then

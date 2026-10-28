@@ -35,9 +35,9 @@ i18n_get_en() {
         # Consequences
         consequence_safe_quarantine) echo "Files will be safely moved to quarantine. You can restore them with --restore. Space is not freed until --purge-quarantine." ;;
         consequence_safe_permanent) echo "Files will be deleted. Applications will recreate them if needed. No recovery with this tool." ;;
-        consequence_review_quarantine) echo "Warning (REVIEW RISK): Files will be moved to quarantine. Some applications may require redownloading or reindexing." ;;
+        consequence_review_quarantine) echo "Warning (REVIEW RISK): Files will be moved to quarantine. Some applications may require redownloading or reindexing. Space is not freed until --purge-quarantine." ;;
         consequence_review_permanent) echo "Warning (REVIEW RISK): Files will be permanently deleted from disk without quarantine." ;;
-        consequence_dangerous_quarantine) echo "WARNING (DANGEROUS RISK): High risk of data damage. Quarantine requires an up-to-date backup." ;;
+        consequence_dangerous_quarantine) echo "WARNING (DANGEROUS RISK): High risk of data damage. Quarantine requires an up-to-date backup. Space is not freed until --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "WARNING (DANGEROUS RISK): Irreversible deletion of critical system or user data." ;;
         consequence_native_irreversible) echo "This runs a native tool command. It is irreversible and is not quarantined." ;;
         dangerous_blocked) echo "Not subject to automatic or interactive cleaning." ;;
@@ -223,6 +223,8 @@ i18n_get_en() {
         cli_scanning) echo "Scanning system... (without deleting anything)" ;;
         cli_total_freeable) echo "Total space that can be freed" ;;
         cli_report_only_total) echo "Report-only (sized, never removed by this tool)" ;;
+        total_quarantine_label) echo "Total to process (quarantined files free space only after --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Outside your home folder: quarantine mode does not move these files. Use --permanent to remove them." ;;
         cli_interactive_flow_1) echo "We will go through each category and ask for confirmation." ;;
         cli_interactive_flow_2) echo "Default response is always NO — safely press Enter." ;;
         cli_auto_safe_flow_1) echo "Moving explicitly safe app caches to quarantine; tmp requires --permanent." ;;

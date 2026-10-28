@@ -598,7 +598,7 @@ run_dry_run_phase() {
         fi
     done | sort -rh
     echo -e "  ${C_DIM}──────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}$(t "cli_total_freeable"): ${C_YELLOW}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    echo -e "  ${C_BOLD}$(headline_total_label): ${C_YELLOW}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
     if (( TOTAL_INFORMATIONAL_BYTES > 0 )); then
         echo -e "  ${C_DIM}$(t "cli_report_only_total"): $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")${C_RESET}"
     fi

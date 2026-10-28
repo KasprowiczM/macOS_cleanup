@@ -44,6 +44,38 @@ category_max_risk() {
 }
 
 # ---------------------------------------------------------------------------
+# P1-2: processable_paths <path>... → PROCESSABLE_PATHS
+# The paths safe_remove will act on in this REMOVE_MODE. Quarantine mode only
+# moves paths under HOME, so /tmp, /Library/Logs and system DiagnosticReports
+# used to get a consent prompt and a "cleaned" outcome while every item was
+# skipped. Filtering only narrows what reaches safe_remove.
+# ---------------------------------------------------------------------------
+processable_paths() {
+    PROCESSABLE_PATHS=()
+    local p
+    for p in "$@"; do
+        if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]] || is_user_space_path "$p"; then
+            PROCESSABLE_PATHS+=("$p")
+        fi
+    done
+}
+
+# processable_total_bytes <found-count> <ledger-bytes> — the ledger total when
+# nothing was filtered out, else the size of PROCESSABLE_PATHS (non-empty).
+# Callers pass catbytes_get "<key>" literally so test_report_parity sees the key.
+processable_total_bytes() {
+    local found="$1" ledger="$2" total=0 p
+    if (( ${#PROCESSABLE_PATHS[@]} == found )); then
+        echo "$ledger"
+        return 0
+    fi
+    for p in "${PROCESSABLE_PATHS[@]}"; do
+        total=$(( total + $(path_size_bytes "$p") ))
+    done
+    echo "$total"
+}
+
+# ---------------------------------------------------------------------------
 # clean_trash — ~/.Trash
 # Simplest and safest cleanup — always offer first
 # ---------------------------------------------------------------------------
@@ -245,15 +277,6 @@ clean_logs() {
     local total_count=$(( ${#FOUND_APP_LOGS[@]} + ${#FOUND_SYSTEM_LOGS[@]} ))
     [[ $total_count -eq 0 ]] && return
 
-    # The ledger has no "logs" key — analyze_logs() writes "user-logs" and
-    # "system-logs". catbytes_get returns 0 for an unknown key, so this
-    # prompt offered every log cleanup as "0 B" no matter how much was
-    # actually queued.
-    local total_bytes
-    total_bytes=$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))
-    local total_h
-    total_h=$(bytes_to_human "$total_bytes")
-
     # bash 3.2 + set -u: "${empty_array[@]}" is an *unbound variable* error, not
     # an empty expansion. The guard above only checks the SUM, so a machine with
     # user logs but no old system logs (or vice versa) aborted the whole run
@@ -267,6 +290,26 @@ clean_logs() {
         all_logs+=("${FOUND_SYSTEM_LOGS[@]}")
     fi
     (( ${#all_logs[@]} > 0 )) || return
+
+    # P1-2: the quarantine mode never moves the system logs (outside HOME).
+    local system_deferred=0
+    processable_paths "${all_logs[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#all_logs[@]} )); then
+        system_deferred=1
+        print_skip "Log files outside HOME: $(t "clean_needs_permanent")"
+        mark_category_outcome "system-logs" needs-permanent
+    fi
+    (( ${#PROCESSABLE_PATHS[@]} > 0 )) || return 0
+    all_logs=("${PROCESSABLE_PATHS[@]}")
+
+    # The ledger has no "logs" key — analyze_logs() writes "user-logs" and
+    # "system-logs". catbytes_get returns 0 for an unknown key, so this
+    # prompt offered every log cleanup as "0 B" no matter how much was
+    # actually queued.
+    local total_bytes
+    total_bytes="$(processable_total_bytes "$total_count" "$(( $(catbytes_get "user-logs") + $(catbytes_get "system-logs") ))")"
+    local total_h
+    total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
@@ -282,11 +325,11 @@ clean_logs() {
             --safe-if    "$(t "clean_logs_safe_if")" \
             --risk       "$cat_risk" || {
                 mark_category_outcome "user-logs" skipped
-                mark_category_outcome "system-logs" skipped
+                (( system_deferred )) || mark_category_outcome "system-logs" skipped
                 return 0
             }
             mark_category_outcome "user-logs" cleaned
-            mark_category_outcome "system-logs" cleaned
+            (( system_deferred )) || mark_category_outcome "system-logs" cleaned
     fi
 
     print_section "Cleaning: logs"
@@ -301,15 +344,26 @@ clean_logs() {
 clean_diagnostic_reports() {
     [[ ${#FOUND_DIAGNOSTIC_REPORTS[@]} -eq 0 ]] && return
 
+    # P1-2: /Library/Logs/DiagnosticReports is outside HOME.
+    processable_paths "${FOUND_DIAGNOSTIC_REPORTS[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#FOUND_DIAGNOSTIC_REPORTS[@]} )); then
+        print_skip "Diagnostic reports outside HOME: $(t "clean_needs_permanent")"
+    fi
+    if (( ${#PROCESSABLE_PATHS[@]} == 0 )); then
+        mark_category_outcome "diagnostic-reports" needs-permanent
+        return 0
+    fi
+    local -a reports=("${PROCESSABLE_PATHS[@]}")
+
     local total_bytes
-    total_bytes=$(catbytes_get "diagnostic-reports")
+    total_bytes="$(processable_total_bytes "${#FOUND_DIAGNOSTIC_REPORTS[@]}" "$(catbytes_get "diagnostic-reports")")"
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
-        paths_str=$(printf '%s|' "${FOUND_DIAGNOSTIC_REPORTS[@]}")
-        cat_risk="$(category_max_risk "${FOUND_DIAGNOSTIC_REPORTS[@]}")"
+        paths_str=$(printf '%s|' "${reports[@]}")
+        cat_risk="$(category_max_risk "${reports[@]}")"
 
         confirm_category \
             --title      "Diagnostic Reports / Crash Logs" \
@@ -319,11 +373,15 @@ clean_diagnostic_reports() {
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_crash_logs_safe_if")" \
             --risk       "$cat_risk" || { mark_category_outcome "diagnostic-reports" skipped; return 0; }
-            mark_category_outcome "diagnostic-reports" cleaned
+            if (( ${#reports[@]} < ${#FOUND_DIAGNOSTIC_REPORTS[@]} )); then
+                mark_category_outcome "diagnostic-reports" partial
+            else
+                mark_category_outcome "diagnostic-reports" cleaned
+            fi
     fi
 
     print_section "Cleaning: diagnostic reports"
-    for f in "${FOUND_DIAGNOSTIC_REPORTS[@]}"; do
+    for f in "${reports[@]}"; do
         safe_remove "$f"
     done
 }
@@ -334,15 +392,27 @@ clean_diagnostic_reports() {
 clean_tmp() {
     [[ ${#FOUND_TMP_FILES[@]} -eq 0 ]] && return
 
+    # P1-2: /tmp is outside HOME, so the quarantine mode never moves it.
+    processable_paths "${FOUND_TMP_FILES[@]}"
+    if (( ${#PROCESSABLE_PATHS[@]} == 0 )); then
+        print_skip "Temporary files (/tmp): $(t "clean_needs_permanent")"
+        mark_category_outcome "tmp" needs-permanent
+        return 0
+    fi
+    if (( ${#PROCESSABLE_PATHS[@]} < ${#FOUND_TMP_FILES[@]} )); then
+        print_skip "Temporary files outside HOME: $(t "clean_needs_permanent")"
+    fi
+    local -a tmp_files=("${PROCESSABLE_PATHS[@]}")
+
     local total_bytes
-    total_bytes=$(catbytes_get "tmp")
+    total_bytes="$(processable_total_bytes "${#FOUND_TMP_FILES[@]}" "$(catbytes_get "tmp")")"
     local total_h
     total_h=$(bytes_to_human "$total_bytes")
 
     if [[ "${MODE}" == "interactive" || "${MODE}" == "dry-run-then-interactive" ]]; then
         local paths_str cat_risk
-        paths_str=$(printf '%s|' "${FOUND_TMP_FILES[@]}")
-        cat_risk="$(category_max_risk "${FOUND_TMP_FILES[@]}")"
+        paths_str=$(printf '%s|' "${tmp_files[@]}")
+        cat_risk="$(category_max_risk "${tmp_files[@]}")"
 
         confirm_category \
             --title      "Temporary files (/tmp)" \
@@ -352,11 +422,15 @@ clean_tmp() {
             --consequence "$(consequence_for_mode "$cat_risk" "${REMOVE_MODE:-quarantine}")" \
             --safe-if    "$(t "clean_tmp_safe_if")" \
             --risk       "$cat_risk" || { mark_category_outcome "tmp" skipped; return 0; }
-            mark_category_outcome "tmp" cleaned
+            if (( ${#tmp_files[@]} < ${#FOUND_TMP_FILES[@]} )); then
+                mark_category_outcome "tmp" partial
+            else
+                mark_category_outcome "tmp" cleaned
+            fi
     fi
 
     print_section "Cleaning: temporary files (/tmp)"
-    for f in "${FOUND_TMP_FILES[@]}"; do
+    for f in "${tmp_files[@]}"; do
         safe_remove "$f"
     done
 }

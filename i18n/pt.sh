@@ -34,11 +34,11 @@ i18n_get_pt() {
         skipped_category) echo "Ignorado" ;;
 
         # Consequences
-        consequence_safe_quarantine) echo "Os arquivos serão movidos com segurança para a quarentena. Restauração com --restore." ;;
+        consequence_safe_quarantine) echo "Os arquivos serão movidos com segurança para a quarentena. Restauração com --restore. O espaço só é liberado após --purge-quarantine." ;;
         consequence_safe_permanent) echo "Os arquivos serão removidos. As aplicações os recriarão se necessário." ;;
-        consequence_review_quarantine) echo "Aviso (RISCO REVIEW): Arquivos em quarentena. Algumas apps podem exigir download novamente." ;;
+        consequence_review_quarantine) echo "Aviso (RISCO REVIEW): Arquivos em quarentena. Algumas apps podem exigir download novamente. O espaço só é liberado após --purge-quarantine." ;;
         consequence_review_permanent) echo "Aviso (RISCO REVIEW): Arquivos removidos permanentemente sem quarentena." ;;
-        consequence_dangerous_quarantine) echo "ATENÇÃO (RISCO DANGEROUS): Alto risco de perda de dados. Requer backup atualizado." ;;
+        consequence_dangerous_quarantine) echo "ATENÇÃO (RISCO DANGEROUS): Alto risco de perda de dados. Requer backup atualizado. O espaço só é liberado após --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "ATENÇÃO (RISCO DANGEROUS): Remoção irreversível de dados críticos do sistema ou usuário." ;;
         consequence_native_irreversible) echo "Isto executa um comando nativo da ferramenta. É irreversível e não é colocado em quarentena." ;;
         dangerous_blocked) echo "Não sujeito à limpeza automática ou interativa." ;;
@@ -223,6 +223,8 @@ i18n_get_pt() {
         cli_scanning) echo "Escaneando sistema..." ;;
         cli_total_freeable) echo "Total potencialmente liberável" ;;
         cli_report_only_total) echo "Apenas relatório (medido, nunca removido por esta ferramenta)" ;;
+        total_quarantine_label) echo "Total a processar (arquivos em quarentena só liberam espaço após --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Fora da sua pasta pessoal: o modo quarentena não move estes arquivos. Use --permanent para removê-los." ;;
         cli_interactive_flow_1) echo "Passaremos por cada categoria pedindo confirmação." ;;
         cli_interactive_flow_2) echo "A resposta padrão é sempre NÃO." ;;
         cli_auto_safe_flow_1) echo "Movendo caches seguros de aplicações para a quarentena." ;;

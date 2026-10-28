@@ -34,11 +34,11 @@ i18n_get_es() {
         skipped_category) echo "Omitido" ;;
 
         # Consequences
-        consequence_safe_quarantine) echo "Los archivos se moverán de forma segura a cuarentena. Puede restaurarlos con --restore." ;;
+        consequence_safe_quarantine) echo "Los archivos se moverán de forma segura a cuarentena. Puede restaurarlos con --restore. El espacio no se libera hasta --purge-quarantine." ;;
         consequence_safe_permanent) echo "Los archivos se eliminarán. Las aplicaciones los recrearán si es necesario." ;;
-        consequence_review_quarantine) echo "Advertencia (RIESGO REVIEW): Archivos a cuarentena. Algunas apps pueden requerir descargar de nuevo." ;;
+        consequence_review_quarantine) echo "Advertencia (RIESGO REVIEW): Archivos a cuarentena. Algunas apps pueden requerir descargar de nuevo. El espacio no se libera hasta --purge-quarantine." ;;
         consequence_review_permanent) echo "Advertencia (RIESGO REVIEW): Archivos eliminados permanentemente sin cuarentena." ;;
-        consequence_dangerous_quarantine) echo "ATENCIÓN (RIESGO DANGEROUS): Alto riesgo de pérdida de datos. Requiere copia de seguridad." ;;
+        consequence_dangerous_quarantine) echo "ATENCIÓN (RIESGO DANGEROUS): Alto riesgo de pérdida de datos. Requiere copia de seguridad. El espacio no se libera hasta --purge-quarantine." ;;
         consequence_dangerous_permanent) echo "ATENCIÓN (RIESGO DANGEROUS): Eliminación irreversible de datos críticos del sistema o usuario." ;;
         consequence_native_irreversible) echo "Esto ejecuta un comando nativo de la herramienta. Es irreversible y no se pone en cuarentena." ;;
         dangerous_blocked) echo "No sujeto a limpieza automática o interactiva." ;;
@@ -223,6 +223,8 @@ i18n_get_es() {
         cli_scanning) echo "Escaneando sistema..." ;;
         cli_total_freeable) echo "Total potencialmente liberable" ;;
         cli_report_only_total) echo "Solo informe (medido, esta herramienta nunca lo elimina)" ;;
+        total_quarantine_label) echo "Total a procesar (los archivos en cuarentena solo liberan espacio tras --purge-quarantine)" ;;
+        clean_needs_permanent) echo "Fuera de su carpeta personal: el modo cuarentena no mueve estos archivos. Use --permanent para eliminarlos." ;;
         cli_interactive_flow_1) echo "Revisaremos cada categoría pidiendo confirmación." ;;
         cli_interactive_flow_2) echo "La respuesta predeterminada siempre es NO." ;;
         cli_auto_safe_flow_1) echo "Moviendo cachés seguros de aplicaciones a cuarentena." ;;

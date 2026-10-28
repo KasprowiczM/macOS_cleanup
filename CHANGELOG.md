@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1, P1-3 and P1-6.
+Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1, P1-2, P1-3 and P1-6.
 
 ### Fixed
 
@@ -17,6 +17,7 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 - **P0-2 (remainder): policy rule lookup sees case variants.** A hand-edited plan with `$HOME/.NPM` no longer skips the REVIEW escalation for the `~/.npm` `ask` rule. Matching is asymmetric: a case-insensitive match can only raise risk, and a SAFE rule lowers a REVIEW default only on an exact-case match.
 - **P1-6: unset `USER` no longer fails open.** Under launchd, cron or `env -i`, `set -u` made path expansion abort, and callers fell back to raw paths (a `~/.npm` policy rule was stored unexpanded and never matched). `$USER` tokens now fall back to `id -un`, and expansion fails when neither source resolves.
 - **P1-1: the headline total is the plan's executable sum.** `would_free_bytes` used to add up the category ledgers. That counted Homebrew twice (cache plus `brew-stale`, which one `brew cleanup --prune=all` removes together). It also counted `/tmp` and `/Library/Logs` work that the default quarantine mode always skips. Now the dry-run total sums only `remove_path` and `native_command` operations with SAFE or REVIEW risk that the current mode will run. In quarantine mode that means user-space paths only. Report-only items stay out of the plan's `safe`/`review`/`dangerous` buckets: they get their own `report_only_operations` and `report_only_bytes`, and they feed `informational_bytes`, which was always 0 before. The plan and the `--json` summary gain `executable_bytes`: SAFE and REVIEW work this mode can run, where REVIEW still needs confirmation at apply. An invalid `REMOVE_MODE` counts nothing, matching `safe_remove`. The Homebrew operation uses the larger of the two estimates, never the sum. The terminal summary and the Markdown report show the report-only total on its own line. Report-only DANGEROUS items (Mail, browser data) are now listed under report-only in the decision list, not under DANGEROUS operations.
+- **P1-2: the quarantine mode says what it does.** It moves files and frees nothing until `--purge-quarantine`, but the totals called that space "freeable". In quarantine mode the terminal total, the interactive prompts and the Markdown report now say "to process (quarantined files free space only after --purge-quarantine)"; the total also covers native commands, which are never quarantined. The SAFE, REVIEW and DANGEROUS consent texts mention purge in all 7 languages. The quarantine mode only moves paths under HOME, yet `clean_tmp`, `clean_logs` and `clean_diagnostic_reports` asked for consent for `/tmp`, `/Library/Logs` and system DiagnosticReports, and then recorded the category as cleaned while every item was skipped. These paths no longer reach the prompt or `safe_remove` in quarantine mode, the category is recorded as `needs-permanent` (or `partial` when only its items under HOME were processed), and the report says so. `--permanent` is unchanged.
 
 ### Security
 
@@ -25,7 +26,7 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
-- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
+- Regression tests: `tests/test_path_protection_case.sh`, `tests/test_dryrun_authoritative.sh`, `tests/test_runtime_config_validation.sh`, `tests/test_policy_case.sh`, `tests/test_user_unset.sh`, `tests/test_plan_accounting.sh`, `tests/test_quarantine_honesty.sh`, and `DevSyncRcloneImportFilterTests` in `tests/test_dev_sync_safety.py`.
 
 ## [3.0.6] — 2026-09-07
 
