@@ -37,6 +37,10 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 
 - **P1-3: dev-sync rclone import applies the hard-exclude list.** The remote listing is untrusted. A forged remote could previously deliver `.git/hooks/*` (code execution on the next Git command), `.git/config`, `.ssh/`, `secrets/`, `*.pem` and dependency folders. The listing now passes through the same candidate filter as the local provider. Hard excludes and the tracked-file guard ignore case, so `.GIT/hooks` and `readme.MD` (which overwrote `README.md` on APFS) are rejected. The tracked-file guard also ignores Unicode normalization: an NFD `Café.txt` no longer overwrites a tracked NFC `Café.txt`. A bare `.git` gitfile is hard-excluded. The rclone import refuses to write through a symlinked destination ancestor, matching the local provider. It passes names with `--files-from-raw` and rejects names with leading or trailing whitespace or control characters; `--files-from` stripped whitespace, so an approved " README.md" copied over the tracked `README.md`. Export and prune use the same deny list, so case variants such as `id.PEM` are no longer exported and are pruned from the provider mirror.
 
+### Changed
+
+- **P2: historical prompts and reviews moved to `docs/history/`.** 22 dated prompts, reviews, release notes and progress logs left the repository root. `docs/history/README.md` says they are kept for reference only.
+
 ### Added
 
 - NEVER_TOUCH now covers `~/Library/Messages`, `~/Library/Calendars`, and `~/Library/Application Support/AddressBook`.
