@@ -222,6 +222,7 @@ i18n_get_pl() {
         cli_deletion_dest) echo "Usuwanie: kwarantanna użytkownika" ;;
         cli_scanning) echo "Skanuję system... (bez usuwania czegokolwiek)" ;;
         cli_total_freeable) echo "Łącznie potencjalnie do zwolnienia" ;;
+        cli_report_only_total) echo "Tylko raport (zmierzone, nigdy nie usuwane przez to narzędzie)" ;;
         cli_interactive_flow_1) echo "Przejdę przez każdą kategorię i poproszę o potwierdzenie." ;;
         cli_interactive_flow_2) echo "Domyślna odpowiedź to zawsze NIE — możesz bezpiecznie nacisnąć Enter." ;;
         cli_auto_safe_flow_1) echo "Przenoszę jawnie bezpieczne cache aplikacji do kwarantanny; tmp wymaga --permanent." ;;

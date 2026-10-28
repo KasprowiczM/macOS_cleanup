@@ -192,8 +192,8 @@ Das `--json` Flag leitet alle lesbaren Ausgaben (Banner, Abschnitte, Zusammenfas
 | `mode` | Ausführungsmodus (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
 | `categories` | Array der aktiven Kategorien |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Zähler für `SAFE`/`REVIEW`/`DANGEROUS` Operationen und Bytes |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `plan` | Zähler für `SAFE`/`REVIEW`/`DANGEROUS` Operationen und Bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Pfade zu `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Anzahl übersprungener Elemente |
 | `user_decisions` | Liste von Elementbeschreibungen, die eine Entscheidung erfordern |

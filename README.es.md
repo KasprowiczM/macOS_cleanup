@@ -192,8 +192,8 @@ La bandera `--json` redirige toda la salida legible (banners, secciones, resúme
 | `mode` | Modo de ejecución (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
 | `categories` | Matriz de categorías activas |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Contadores para operaciones `SAFE`/`REVIEW`/`DANGEROUS` y bytes |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `plan` | Contadores para operaciones `SAFE`/`REVIEW`/`DANGEROUS` y bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Rutas de `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Número de elementos omitidos |
 | `user_decisions` | Lista de descripciones de elementos que requieren una decisión |

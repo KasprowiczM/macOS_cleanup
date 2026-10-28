@@ -1933,7 +1933,8 @@ catbytes_add() {
 # CATEGORY_REGISTRY — the single source of truth for reportable categories.
 #
 # Row format:  key|label|class
-#   counted     real byte size, included in TOTAL_WOULD_FREE_BYTES
+#   counted     real byte size of work a cleaner can do; the headline
+#               TOTAL_WOULD_FREE_BYTES is the plan's executable sum (P1-1)
 #   count       ledger value is an ITEM COUNT, not bytes (APFS local snapshots);
 #               listed, never summed
 #   report-only sized and shown, never auto-removed, never summed
@@ -2032,6 +2033,7 @@ unset _reg_row
 # ---------------------------------------------------------------------------
 TOTAL_CLEANED_BYTES=0
 TOTAL_WOULD_FREE_BYTES=0
+TOTAL_INFORMATIONAL_BYTES=0
 TOTAL_QUARANTINED_BYTES=0
 TOTAL_QUARANTINED_ITEMS=0
 TOTAL_RESTORED_BYTES=0

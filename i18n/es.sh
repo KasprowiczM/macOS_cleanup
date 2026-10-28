@@ -222,6 +222,7 @@ i18n_get_es() {
         cli_deletion_dest) echo "Eliminación: cuarentena de usuario" ;;
         cli_scanning) echo "Escaneando sistema..." ;;
         cli_total_freeable) echo "Total potencialmente liberable" ;;
+        cli_report_only_total) echo "Solo informe (medido, esta herramienta nunca lo elimina)" ;;
         cli_interactive_flow_1) echo "Revisaremos cada categoría pidiendo confirmación." ;;
         cli_interactive_flow_2) echo "La respuesta predeterminada siempre es NO." ;;
         cli_auto_safe_flow_1) echo "Moviendo cachés seguros de aplicaciones a cuarentena." ;;

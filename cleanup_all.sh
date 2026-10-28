@@ -578,18 +578,15 @@ run_dry_run_phase() {
 
     run_full_analysis "${ACTIVE_CATEGORIES[@]}"
 
+    # P1-1: the headline is the plan's executable sum, not the ledger total.
+    # The ledger counted Homebrew twice (cache + brew-stale) and included
+    # /tmp and /Library/Logs work that the quarantine mode always skips.
+    build_cleanup_plan_from_analysis
+    plan_record_headline_totals
+
     # Print category summary
     echo
     print_section "$(t "cli_summary_analysis")"
-    # Accumulate grand_total first (avoid subshell from piping to sort)
-    local grand_total=0
-    for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
-        local bytes; bytes=$(catbytes_get "$key")
-        (( bytes == 0 )) && continue
-        # time-machine stores a snapshot count, not a byte size
-        [[ "$key" == "time-machine" ]] && continue
-        grand_total=$(( grand_total + bytes ))
-    done
     # Render sorted (size first so -h sort works on whole lines)
     for key in "${ALL_KNOWN_CATEGORY_KEYS[@]}"; do
         local bytes; bytes=$(catbytes_get "$key")
@@ -601,10 +598,11 @@ run_dry_run_phase() {
         fi
     done | sort -rh
     echo -e "  ${C_DIM}──────────────────────────────────────────${C_RESET}"
-    echo -e "  ${C_BOLD}$(t "cli_total_freeable"): ${C_YELLOW}$(bytes_to_human "$grand_total")${C_RESET}"
-    TOTAL_WOULD_FREE_BYTES=$grand_total
+    echo -e "  ${C_BOLD}$(t "cli_total_freeable"): ${C_YELLOW}$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")${C_RESET}"
+    if (( TOTAL_INFORMATIONAL_BYTES > 0 )); then
+        echo -e "  ${C_DIM}$(t "cli_report_only_total"): $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")${C_RESET}"
+    fi
 
-    build_cleanup_plan_from_analysis
     generate_plan_json "$PLAN_FILE"
 
     # Plan mode writes its final report after the JSON plan is available.

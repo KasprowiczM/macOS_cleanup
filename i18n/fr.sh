@@ -222,6 +222,7 @@ i18n_get_fr() {
         cli_deletion_dest) echo "Suppression : quarantaine utilisateur" ;;
         cli_scanning) echo "Analyse du système..." ;;
         cli_total_freeable) echo "Total potentiellement libérable" ;;
+        cli_report_only_total) echo "Rapport seul (mesuré, jamais supprimé par cet outil)" ;;
         cli_interactive_flow_1) echo "Nous passerons en revue chaque catégorie en demandant confirmation." ;;
         cli_interactive_flow_2) echo "La réponse par défaut est toujours NON." ;;
         cli_auto_safe_flow_1) echo "Déplacement des caches d'applications sûrs en quarantaine." ;;

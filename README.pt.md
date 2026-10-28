@@ -192,8 +192,8 @@ A flag `--json` redireciona todas as saídas legíveis (banners, seções, resum
 | `mode` | Modo de execução (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
 | `categories` | Matriz de categorias ativas |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Contadores para operações `SAFE`/`REVIEW`/`DANGEROUS` e bytes |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `plan` | Contadores para operações `SAFE`/`REVIEW`/`DANGEROUS` e bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Caminhos para `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Número de itens pulados |
 | `user_decisions` | Lista de descrições de itens que exigem uma decisão |

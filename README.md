@@ -190,8 +190,8 @@ The `--json` flag redirects all human-readable output (banners, sections, summar
 | `mode` | Execution mode (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
 | `categories` | Array of active categories |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | `SAFE`/`REVIEW`/`DANGEROUS` operation counters and bytes |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `plan` | `SAFE`/`REVIEW`/`DANGEROUS` operation counters and bytes; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Paths to `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Number of skipped items |
 | `user_decisions` | List of descriptions for items requiring a decision |

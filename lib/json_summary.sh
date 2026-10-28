@@ -67,7 +67,10 @@ emit_json_summary() {
         printf '    "dangerous_operations": %s,\n' "$plan_dangerous"
         printf '    "safe_bytes": %s,\n'       "$plan_safe_bytes"
         printf '    "review_bytes": %s,\n'     "$plan_review_bytes"
-        printf '    "dangerous_bytes": %s\n'   "$plan_dangerous_bytes"
+        printf '    "dangerous_bytes": %s,\n'  "$plan_dangerous_bytes"
+        printf '    "report_only_operations": %s,\n' "${_JSON_PLAN_REPORT_ONLY:-0}"
+        printf '    "report_only_bytes": %s,\n' "${_JSON_PLAN_REPORT_ONLY_BYTES:-0}"
+        printf '    "executable_bytes": %s\n'  "${_JSON_PLAN_EXECUTABLE_BYTES:-0}"
         printf '  },\n'
         printf '  "artifacts": {\n'
         printf '    "report": "%s",\n'   "$(json_escape "${REPORT_FILE:-}")"
@@ -112,6 +115,9 @@ json_summary_record_plan() {
     _JSON_PLAN_SAFE_BYTES="${5:-0}"
     _JSON_PLAN_REVIEW_BYTES="${6:-0}"
     _JSON_PLAN_DANGEROUS_BYTES="${7:-0}"
+    _JSON_PLAN_REPORT_ONLY="${8:-0}"
+    _JSON_PLAN_REPORT_ONLY_BYTES="${9:-0}"
+    _JSON_PLAN_EXECUTABLE_BYTES="${10:-0}"
 }
 
 # Initialize plan counters to zero (called at source time).
@@ -122,3 +128,6 @@ _JSON_PLAN_DANGEROUS=0
 _JSON_PLAN_SAFE_BYTES=0
 _JSON_PLAN_REVIEW_BYTES=0
 _JSON_PLAN_DANGEROUS_BYTES=0
+_JSON_PLAN_REPORT_ONLY=0
+_JSON_PLAN_REPORT_ONLY_BYTES=0
+_JSON_PLAN_EXECUTABLE_BYTES=0

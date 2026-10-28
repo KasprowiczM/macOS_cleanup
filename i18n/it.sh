@@ -222,6 +222,7 @@ i18n_get_it() {
         cli_deletion_dest) echo "Eliminazione: quarantena utente" ;;
         cli_scanning) echo "Scansione del sistema..." ;;
         cli_total_freeable) echo "Totale potenzialmente liberabile" ;;
+        cli_report_only_total) echo "Solo report (misurato, mai rimosso da questo strumento)" ;;
         cli_interactive_flow_1) echo "Esamineremo ogni categoria chiedendo conferma." ;;
         cli_interactive_flow_2) echo "La risposta predefinita è sempre NO." ;;
         cli_auto_safe_flow_1) echo "Spostamento delle cache sicure in quarantena." ;;

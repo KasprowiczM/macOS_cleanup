@@ -222,6 +222,7 @@ i18n_get_pt() {
         cli_deletion_dest) echo "Remoção: quarentena de usuário" ;;
         cli_scanning) echo "Escaneando sistema..." ;;
         cli_total_freeable) echo "Total potencialmente liberável" ;;
+        cli_report_only_total) echo "Apenas relatório (medido, nunca removido por esta ferramenta)" ;;
         cli_interactive_flow_1) echo "Passaremos por cada categoria pedindo confirmação." ;;
         cli_interactive_flow_2) echo "A resposta padrão é sempre NÃO." ;;
         cli_auto_safe_flow_1) echo "Movendo caches seguros de aplicações para a quarentena." ;;

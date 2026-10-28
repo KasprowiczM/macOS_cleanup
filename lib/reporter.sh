@@ -31,6 +31,10 @@ generate_report() {
 |:-------|:------|
 | Potentially freeable space | **$(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")** |
 EOF
+    # P1-1: report-only bytes are sized but never removed; show them apart.
+    if (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )); then
+        echo "| Report-only (never freed by this tool) | $(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES") |" >> "$REPORT_FILE"
+    fi
 
     case "$mode" in
         apply-plan)
@@ -144,6 +148,7 @@ EOF
 ---
 
 **Total potentially freeable: $(bytes_to_human "$TOTAL_WOULD_FREE_BYTES")**
+$( (( ${TOTAL_INFORMATIONAL_BYTES:-0} > 0 )) && printf '\nReport-only, never freed by this tool: %s\n' "$(bytes_to_human "$TOTAL_INFORMATIONAL_BYTES")" )
 
 ---
 

@@ -78,6 +78,70 @@ plan_add_native() {
     plan_add_operation "$(plan_next_id)" "$category" "$risk" "native_command" "$path" "$command" "$bytes" "$description" "$recommendation" "false" "$tool"
 }
 
+# P1-1: plan_op_is_executable <index> — true when this run's mode would act on
+# the operation. report_only never runs, DANGEROUS is never applied, and the
+# quarantine mode skips non-user remove_path targets (/tmp, /Library/Logs), so
+# none of them can free anything.
+plan_op_is_executable() {
+    local i="$1"
+    case "${PLAN_OP_ACTIONS[$i]}" in
+        remove_path|native_command) ;;
+        *) return 1 ;;
+    esac
+    [[ "${PLAN_OP_RISKS[$i]}" == "SAFE" || "${PLAN_OP_RISKS[$i]}" == "REVIEW" ]] || return 1
+    [[ "${PLAN_OP_ACTIONS[$i]}" == "remove_path" ]] || return 0
+    # Mirror safe_remove: an invalid REMOVE_MODE removes nothing (P0-3).
+    case "${REMOVE_MODE:-}" in
+        permanent)  return 0 ;;
+        quarantine) is_user_space_path "${PLAN_OP_PATHS[$i]}" ;;
+        *)          return 1 ;;
+    esac
+}
+
+# P1-1: plan_compute_totals — sets PLAN_SUM_* from the current operations.
+# The risk buckets hold remove_path/native_command only; report_only items are
+# counted apart, because summing never-executed bytes into review/dangerous
+# inflated the plan by 22% (13.24 GB) on the 2026-10-27 measurement.
+plan_compute_totals() {
+    local i r b count
+    count=${#PLAN_OP_IDS[@]}
+    PLAN_SUM_SAFE_OPS=0; PLAN_SUM_REVIEW_OPS=0; PLAN_SUM_DANGEROUS_OPS=0
+    PLAN_SUM_SAFE_BYTES=0; PLAN_SUM_REVIEW_BYTES=0; PLAN_SUM_DANGEROUS_BYTES=0
+    PLAN_SUM_REPORT_ONLY_OPS=0; PLAN_SUM_REPORT_ONLY_BYTES=0
+    PLAN_SUM_EXECUTABLE_BYTES=0
+    for (( i=0; i<count; i++ )); do
+        r="${PLAN_OP_RISKS[$i]}"
+        b="${PLAN_OP_BYTES[$i]:-0}"
+        case "$b" in ''|*[!0-9]*) b=0 ;; esac
+        if [[ "${PLAN_OP_ACTIONS[$i]}" == "report_only" ]]; then
+            PLAN_SUM_REPORT_ONLY_OPS=$(( PLAN_SUM_REPORT_ONLY_OPS + 1 ))
+            PLAN_SUM_REPORT_ONLY_BYTES=$(( PLAN_SUM_REPORT_ONLY_BYTES + b ))
+            continue
+        fi
+        case "$r" in
+            SAFE)      PLAN_SUM_SAFE_OPS=$(( PLAN_SUM_SAFE_OPS + 1 ));           PLAN_SUM_SAFE_BYTES=$(( PLAN_SUM_SAFE_BYTES + b )) ;;
+            REVIEW)    PLAN_SUM_REVIEW_OPS=$(( PLAN_SUM_REVIEW_OPS + 1 ));       PLAN_SUM_REVIEW_BYTES=$(( PLAN_SUM_REVIEW_BYTES + b )) ;;
+            DANGEROUS) PLAN_SUM_DANGEROUS_OPS=$(( PLAN_SUM_DANGEROUS_OPS + 1 )); PLAN_SUM_DANGEROUS_BYTES=$(( PLAN_SUM_DANGEROUS_BYTES + b )) ;;
+        esac
+        if plan_op_is_executable "$i"; then
+            PLAN_SUM_EXECUTABLE_BYTES=$(( PLAN_SUM_EXECUTABLE_BYTES + b ))
+        fi
+    done
+}
+
+# P1-1: plan_record_headline_totals — the headline figure is the plan's
+# executable sum, and report-only bytes are informational. The old headline
+# summed category ledgers, which counted Homebrew twice and included work the
+# current mode never performs.
+plan_record_headline_totals() {
+    plan_compute_totals
+    # shellcheck disable=SC2034  # read by reporter.sh and json_summary.sh
+    TOTAL_WOULD_FREE_BYTES=$PLAN_SUM_EXECUTABLE_BYTES
+    # shellcheck disable=SC2034
+    TOTAL_INFORMATIONAL_BYTES=0
+    add_informational_bytes "$PLAN_SUM_REPORT_ONLY_BYTES"
+}
+
 build_cleanup_plan_from_analysis() {
     local item path label key brew_b
     plan_reset
@@ -198,8 +262,10 @@ build_cleanup_plan_from_analysis() {
                     plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "pip cache purge" "$(catbytes_get "pip")" \
                         "pip cache." "Packages will be re-downloaded if needed." "$path" "pip" ;;
                 brew_cache|brew_cleanup)
+                    # P1-1: one brew cleanup covers the cache and the stale
+                    # versions, which overlap; count the larger estimate once.
                     brew_b="$(catbytes_get "brew")"
-                    if [[ "$brew_b" == "0" || -z "$brew_b" ]]; then
+                    if (( $(catbytes_get "brew-stale") > brew_b )); then
                         brew_b="$(catbytes_get "brew-stale")"
                     fi
                     plan_add_native "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "brew cleanup --prune=all" "$brew_b" \
@@ -298,19 +364,13 @@ build_cleanup_plan_from_analysis() {
 generate_plan_json() {
     local output="${1:-$PLAN_FILE_DEFAULT}"
     local i count safe_count review_count dangerous_count safe_bytes review_bytes dangerous_bytes
+    local report_only_count report_only_bytes executable_bytes
     count=${#PLAN_OP_IDS[@]}
-    safe_count=0; review_count=0; dangerous_count=0
-    safe_bytes=0; review_bytes=0; dangerous_bytes=0
-
-    for (( i=0; i<count; i++ )); do
-        local r="${PLAN_OP_RISKS[$i]}"
-        local b="${PLAN_OP_BYTES[$i]:-0}"
-        case "$r" in
-            SAFE)      safe_count=$(( safe_count + 1 ));           safe_bytes=$(( safe_bytes + b )) ;;
-            REVIEW)    review_count=$(( review_count + 1 ));       review_bytes=$(( review_bytes + b )) ;;
-            DANGEROUS) dangerous_count=$(( dangerous_count + 1 )); dangerous_bytes=$(( dangerous_bytes + b )) ;;
-        esac
-    done
+    plan_compute_totals
+    safe_count=$PLAN_SUM_SAFE_OPS; review_count=$PLAN_SUM_REVIEW_OPS; dangerous_count=$PLAN_SUM_DANGEROUS_OPS
+    safe_bytes=$PLAN_SUM_SAFE_BYTES; review_bytes=$PLAN_SUM_REVIEW_BYTES; dangerous_bytes=$PLAN_SUM_DANGEROUS_BYTES
+    report_only_count=$PLAN_SUM_REPORT_ONLY_OPS; report_only_bytes=$PLAN_SUM_REPORT_ONLY_BYTES
+    executable_bytes=$PLAN_SUM_EXECUTABLE_BYTES
 
     local checksum_val
     checksum_val="pending"
@@ -336,7 +396,10 @@ generate_plan_json() {
         printf '    "dangerous_operations": %d,\n' "$dangerous_count"
         printf '    "safe_bytes": %s,\n' "$safe_bytes"
         printf '    "review_bytes": %s,\n' "$review_bytes"
-        printf '    "dangerous_bytes": %s\n' "$dangerous_bytes"
+        printf '    "dangerous_bytes": %s,\n' "$dangerous_bytes"
+        printf '    "report_only_operations": %d,\n' "$report_only_count"
+        printf '    "report_only_bytes": %s,\n' "$report_only_bytes"
+        printf '    "executable_bytes": %s\n' "$executable_bytes"
         printf '  },\n'
         printf '  "operations": [\n'
 
@@ -399,15 +462,19 @@ PLANCKSUM
     fi
 
     cleanup_journal_event "plan_generated" "$output" "" 0 "ok" "operations=${count}" "plan"
-    TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count ))
+    TOTAL_USER_DECISIONS_NEEDED=$(( TOTAL_USER_DECISIONS_NEEDED + review_count + dangerous_count + report_only_count ))
     if (( review_count > 0 )); then
         USER_DECISION_ITEMS+=("Plan JSON: ${review_count} REVIEW operations require conscious decision")
     fi
     if (( dangerous_count > 0 )); then
         USER_DECISION_ITEMS+=("Plan JSON: ${dangerous_count} DANGEROUS operations will never execute automatically")
     fi
+    if (( report_only_count > 0 )); then
+        USER_DECISION_ITEMS+=("Plan JSON: ${report_only_count} report-only items are sized for manual review and never executed")
+    fi
     if type json_summary_record_plan >/dev/null 2>&1; then
-        json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" "$safe_bytes" "$review_bytes" "$dangerous_bytes"
+        json_summary_record_plan "$count" "$safe_count" "$review_count" "$dangerous_count" "$safe_bytes" "$review_bytes" "$dangerous_bytes" \
+            "$report_only_count" "$report_only_bytes" "$executable_bytes"
     fi
     print_ok "Plan JSON saved: ${output}"
 }

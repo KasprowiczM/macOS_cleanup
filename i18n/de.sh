@@ -222,6 +222,7 @@ i18n_get_de() {
         cli_deletion_dest) echo "Löschung: Benutzer-Quarantäne" ;;
         cli_scanning) echo "Scanne System..." ;;
         cli_total_freeable) echo "Insgesamt freigebbar" ;;
+        cli_report_only_total) echo "Nur Bericht (gemessen, wird von diesem Tool nie entfernt)" ;;
         cli_interactive_flow_1) echo "Wir gehen jede Kategorie durch und bitten um Bestätigung." ;;
         cli_interactive_flow_2) echo "Standardantwort ist immer NEIN." ;;
         cli_auto_safe_flow_1) echo "Verschiebe sichere App-Caches in Quarantäne." ;;

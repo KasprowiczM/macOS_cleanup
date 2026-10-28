@@ -222,6 +222,7 @@ i18n_get_en() {
         cli_deletion_dest) echo "Deletion: user quarantine" ;;
         cli_scanning) echo "Scanning system... (without deleting anything)" ;;
         cli_total_freeable) echo "Total space that can be freed" ;;
+        cli_report_only_total) echo "Report-only (sized, never removed by this tool)" ;;
         cli_interactive_flow_1) echo "We will go through each category and ask for confirmation." ;;
         cli_interactive_flow_2) echo "Default response is always NO — safely press Enter." ;;
         cli_auto_safe_flow_1) echo "Moving explicitly safe app caches to quarantine; tmp requires --permanent." ;;

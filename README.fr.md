@@ -192,8 +192,8 @@ L'indicateur `--json` redirige toute la sortie lisible (bannières, sections, r�
 | `mode` | Mode d'exécution (`dry-run`, `plan`, `apply-plan`, etc.) |
 | `dry_run` | `true` / `false` |
 | `categories` | Tableau des catégories actives |
-| `counters` | `would_free_bytes`, `cleaned_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
-| `plan` | Compteurs pour opérations `SAFE`/`REVIEW`/`DANGEROUS` et octets |
+| `counters` | `would_free_bytes`, `cleaned_bytes`, `informational_bytes`, `quarantined_bytes`, `skipped_items`, `user_decisions_needed` |
+| `plan` | Compteurs pour opérations `SAFE`/`REVIEW`/`DANGEROUS` et octets; `report_only_operations`, `report_only_bytes`, `executable_bytes` |
 | `artifacts` | Chemins d'accès vers `report`, `plan`, `journal`, `restore_manifest` |
 | `warnings` | Nombre d'éléments ignorés |
 | `user_decisions` | Liste des descriptions d'éléments nécessitant une décision |
