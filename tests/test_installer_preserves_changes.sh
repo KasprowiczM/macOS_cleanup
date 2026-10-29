@@ -106,4 +106,47 @@ assert_false "grep -q 'Installed to:' \"$SUMS_OUT\"" "checksum abort must not pr
 assert_false "grep -q 'Checksum verification warning' \"$SUMS_OUT\"" "mismatch must not be a warning"
 assert_true "grep -q 'checksum mismatch' \"$SUMS_OUT\"" "aborted for the mismatch, not another reason"
 
+# --- Verified clean DEST: installs (the checks above must not block every install)
+OK_DEST="${SANDBOX}/macOS_cleanup_ok"
+clone_dest "$OK_DEST"
+git -C "$OK_DEST" checkout -B main >/dev/null 2>&1
+OK_BARE="${SANDBOX}/origin_ok.git"
+git clone --bare --no-hardlinks "$OK_DEST" "$OK_BARE" >/dev/null 2>&1
+point_origin_at_local "$OK_DEST" "$OK_BARE"
+export MACOS_CLEANUP_DIR="$OK_DEST"
+OK_OUT="${SANDBOX}/ok.out"
+set +e
+PATH="${SHIM_DIR}:${PATH}" /bin/bash "${PROJ_DIR}/install.sh" --edge >"$OK_OUT" 2>&1
+ok_rc=$?
+set -u
+
+begin_test "a verified clean checkout installs"
+assert_eq "$ok_rc" "0" "verified install must succeed: $(tr '\n' ' ' < "$OK_OUT")"
+assert_true "grep -q 'Installed to:' \"$OK_OUT\"" "verified install prints the success banner"
+
+# --- SHA256SUMS missing on a clean DEST: abort, not a silent skip --------------
+NOSUMS_DEST="${SANDBOX}/macOS_cleanup_nosums"
+clone_dest "$NOSUMS_DEST"
+git -C "$NOSUMS_DEST" checkout -B main >/dev/null 2>&1
+git -C "$NOSUMS_DEST" rm -q SHA256SUMS >/dev/null 2>&1
+git -C "$NOSUMS_DEST" -c user.name=installer-test -c user.email=installer-test@example.com \
+    commit -m "drop SHA256SUMS for installer test" >/dev/null 2>&1
+NOSUMS_BARE="${SANDBOX}/origin_nosums.git"
+git clone --bare --no-hardlinks "$NOSUMS_DEST" "$NOSUMS_BARE" >/dev/null 2>&1
+point_origin_at_local "$NOSUMS_DEST" "$NOSUMS_BARE"
+export MACOS_CLEANUP_DIR="$NOSUMS_DEST"
+NOSUMS_OUT="${SANDBOX}/nosums.out"
+set +e
+PATH="${SHIM_DIR}:${PATH}" /bin/bash "${PROJ_DIR}/install.sh" --edge >"$NOSUMS_OUT" 2>&1
+nosums_rc=$?
+set -u
+
+begin_test "Phase 4: a checkout without SHA256SUMS aborts install"
+assert_neq "$nosums_rc" "0" "missing SHA256SUMS must abort"
+assert_false "grep -q 'Installed to:' \"$NOSUMS_OUT\"" "missing SHA256SUMS must not print success banner"
+assert_true "grep -q 'SHA256SUMS is missing' \"$NOSUMS_OUT\"" "aborted for the missing file, not another reason"
+
+begin_test "Phase 4: a checksum mismatch names the file"
+assert_true "grep -q 'cleanup_all.sh: FAILED' \"$SUMS_OUT\"" "the failing file is shown"
+
 print_test_summary

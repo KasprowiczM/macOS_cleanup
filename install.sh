@@ -44,6 +44,10 @@ if ! command -v git >/dev/null 2>&1; then
     say "       xcode-select --install"
     exit 1
 fi
+if ! command -v shasum >/dev/null 2>&1; then
+    say "✖  shasum is required to verify the checkout and was not found."
+    exit 1
+fi
 
 # --- Clone or update --------------------------------------------------------
 if [[ -d "$DEST/.git" ]]; then
@@ -71,12 +75,15 @@ else
     git clone --depth 1 --branch "$TARGET_REF" "$REPO_URL" "$DEST"
 fi
 
-if [[ -f "$DEST/SHA256SUMS" ]]; then
-    say "✓  Verifying checksums in $DEST/SHA256SUMS"
-    if ! ( cd "$DEST" && shasum -a 256 -c SHA256SUMS >/dev/null 2>&1 ); then
-        say "✖  SHA256SUMS checksum mismatch. Aborting."
-        exit 1
-    fi
+if [[ ! -f "$DEST/SHA256SUMS" ]]; then
+    say "✖  SHA256SUMS is missing in $DEST, so the checkout cannot be verified. Aborting."
+    exit 1
+fi
+say "✓  Verifying checksums in $DEST/SHA256SUMS"
+if ! sums_out="$(cd "$DEST" && shasum -a 256 -c --quiet --strict SHA256SUMS 2>&1)"; then
+    say "✖  SHA256SUMS checksum mismatch. Aborting."
+    printf '%s\n' "$sums_out" | sed 's/^/    /'
+    exit 1
 fi
 
 chmod +x "$DEST/cleanup_all.sh" 2>/dev/null || true

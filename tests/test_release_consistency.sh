@@ -40,6 +40,21 @@ else
 fi
 rm -f "$sums_out"
 
+begin_test "Phase 4: SHA256SUMS covers every shipped script, rule file and schema"
+listed="$(awk '{print $2}' "${PROJ_DIR}/SHA256SUMS")"
+missing=""
+shipped_count=0
+while IFS= read -r shipped; do
+    [[ -n "$shipped" ]] || continue
+    shipped_count=$((shipped_count + 1))
+    printf '%s\n' "$listed" | grep -qxF "$shipped" || missing="${missing} ${shipped}"
+done < <(cd "$PROJ_DIR" && git ls-files -- cleanup_all.sh install.sh cleanup_rules.yaml \
+    'config/*.sh' 'lib/*.sh' 'i18n/*.sh' 'tools/*.sh' 'dev-sync-*.sh' \
+    'dev-sync/*.sh' 'dev-sync/*.py' 'schemas/*.json' 2>/dev/null)
+assert_eq "${missing}" "" "shipped files missing from SHA256SUMS"
+# An empty list (no git, or an exported tree) would pass without checking.
+assert_true "(( shipped_count > 20 ))" "git ls-files listed the shipped files (got ${shipped_count})"
+
 begin_test "protected-path docs check passes with isolated HOME"
 iso_home="/tmp/macos_cleanup_isolated_home_$$"
 check_out="$(mktemp -t macos_cleanup_protected_docs.XXXXXX)"
