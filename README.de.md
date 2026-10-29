@@ -42,7 +42,7 @@
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/KasprowiczM/macOS_cleanup/main/install.sh)"
 ```
 
-Der Installer **klont nur das Repo und druckt die nächsten Schritte** — er löscht nichts und startet die Bereinigung nicht. Er installiert standardmäßig nach `~/Dev_Env/macOS_cleanup` (änderbar über `MACOS_CLEANUP_DIR=...`). Möchten Sie zuerst den Code überprüfen? Laden Sie [`install.sh`](install.sh) herunter und inspizieren Sie es vor der Ausführung.
+Der Installer **klont nur das Repo und druckt die nächsten Schritte** — er löscht nichts und startet die Bereinigung nicht. Er installiert standardmäßig nach `~/Dev_Env/macOS_cleanup` (änderbar über `MACOS_CLEANUP_DIR=...`). Möchten Sie zuerst den Code überprüfen? Laden Sie [`install.sh`](install.sh) herunter und inspizieren Sie es vor der Ausführung. Nach dem Klonen prüft er jedes Laufzeitskript, jede Regeldatei und jedes Schema gegen `SHA256SUMS` und bricht bei einer Abweichung oder fehlender Datei ab. Das erkennt einen beschädigten oder unvollständigen Download; es ist keine Signatur.
 
 ### Manuelle Installation
 
@@ -405,4 +405,4 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG in ~/Downloads
 
 ---
 
-Projekt: `macOS_cleanup` | Version: 3.0.6 | Lizenz: MIT
+Projekt: `macOS_cleanup` | Version: 3.0.7 | Lizenz: MIT

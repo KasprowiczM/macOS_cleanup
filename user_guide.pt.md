@@ -147,6 +147,14 @@ São símbolos de depuração para dispositivos iOS/watchOS/tvOS. O Xcode os bai
 
 Arquivos `.xcarchive` podem ser necessários para a App Store, simbolização de falhas (crashes) e recriação de compilações. O script apenas relata-os. Exclua manualmente a partir do Xcode Organizer após verificar.
 
+### Runtimes do simulador
+
+Os runtimes que o `simctl` marca como inutilizáveis ficam num armazenamento gerido pelo sistema. O script nunca os remove com `rm`: em `--interactive` executa `xcrun simctl runtime delete --unusable` depois do seu consentimento e não o faz enquanto Xcode, Simulator ou xcodebuild estiverem em execução. Os planos apenas os reportam. O Xcode pode baixar um runtime novamente. Verifique:
+
+```bash
+xcrun simctl runtime delete --unusable --dry-run
+```
+
 ### Docker
 
 `docker system prune -f` exclui imagens, contêineres parados, redes e caches de build. Não exclui volumes, mas contêineres parados podem conter estado que você ainda não moveu para um volume. Verifique:

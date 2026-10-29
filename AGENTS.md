@@ -20,6 +20,7 @@ Stack: bash 3.2, macOS 10.15+, modular scripts in `lib/`.
 
 ```bash
 bash -n cleanup_all.sh lib/*.sh config/*.sh
+/bin/bash tests/run_all.sh
 bash cleanup_all.sh --dry-run
 bash cleanup_all.sh --dry-run --category dev
 python3 -m unittest tests/test_dev_sync_safety.py

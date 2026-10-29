@@ -6,8 +6,8 @@
 # 1. Syntax validation (mandatory)
 bash -n cleanup_all.sh lib/*.sh config/*.sh tests/*.sh
 
-# 2. Run unit tests
-bash tests/run_all.sh
+# 2. Run unit tests under the system bash 3.2 (each test runs under "$BASH")
+/bin/bash tests/run_all.sh
 
 # 3. Dry-run test
 bash cleanup_all.sh --dry-run
@@ -32,3 +32,10 @@ bash cleanup_all.sh --dry-run
 - `tests/test_dev_sync_safety.py` tests the safety logic of the `dev-sync/` python wrapper.
 - Run it using `python3 -m unittest tests/test_dev_sync_safety.py`.
 - It verifies that the quarantine and overlay systems properly isolate files.
+
+## Release Checklist
+- Bump `SCRIPT_VERSION` (`config/defaults.sh`), `RELEASE_TAG` (`install.sh`), the `# Version:` header of `cleanup_all.sh` and the seven README footers; `tests/test_release_consistency.sh` checks they agree.
+- Move `[Unreleased]` in `CHANGELOG.md` to a dated version section.
+- Regenerate `SHA256SUMS` after the last edit. It must list every runtime script, rule file and schema (the release test lists them with `git ls-files`), and `shasum -a 256 -c --strict SHA256SUMS` must pass. The installer aborts without it.
+- Run `/bin/bash tools/verify_release.sh --summary`.
+- Pushing a tag starts the `macos-latest` CI job (billed at 10x against the GitHub Free minutes); push tags only with the owner's approval.

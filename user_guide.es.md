@@ -147,6 +147,14 @@ Son símbolos de depuración para dispositivos iOS/watchOS/tvOS. Xcode los desca
 
 Los archivos `.xcarchive` pueden ser necesarios para la App Store, la simbolización de bloqueos (crashes) y la recreación de compilaciones. El script solo los reporta. Bórrelos manualmente desde el Organizador de Xcode tras comprobarlos.
 
+### Runtimes del simulador
+
+Los runtimes que `simctl` marca como inutilizables están en un almacén gestionado por el sistema. El script nunca los borra con `rm`: en `--interactive` ejecuta `xcrun simctl runtime delete --unusable` tras su consentimiento y lo omite mientras Xcode, Simulator o xcodebuild estén en ejecución. Los planes solo los informan. Xcode puede volver a descargar un runtime. Compruebe:
+
+```bash
+xcrun simctl runtime delete --unusable --dry-run
+```
+
 ### Docker
 
 `docker system prune -f` borra imágenes, contenedores parados, redes y cachés de compilación. No borra volúmenes, pero los contenedores parados podrían contener estado que aún no ha movido a un volumen. Compruebe:

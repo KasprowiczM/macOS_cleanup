@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1 to P1-7.
+## [3.0.7] — 2026-10-29
+
+Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1 to P1-7 and the P2/P3 follow-ups.
 
 ### Fixed
 
@@ -44,6 +46,8 @@ Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review
 
 ### Changed
 
+- Docs: the installer section of all seven READMEs explains the `SHA256SUMS` check; all seven user guides and `docs/USER_GUIDE.md` describe simulator runtimes. `docs/agents/testing_rules.md` gains a release checklist, and the agent workflows run the full suite under `/bin/bash`.
+- `SCRIPT_VERSION` is `3.0.7`; `install.sh` `RELEASE_TAG` is `v3.0.7`. Tag `v3.0.6` was never pushed, so until this release the default (non-`--edge`) install failed to clone; `v3.0.7` is the first pushed tag since `v3.0.2`.
 - **P2: exit codes no longer hide failures.** `--restore` exited 0 even when no row could be restored. It now writes its report and exits 1 if any entry was blocked, conflicted or failed. `--purge-quarantine` returned its failure count, so two failed runs looked like exit 2 ("bad argument"); it now returns 1 for any failure. A failing apply, restore or purge still writes its report, the terminal summary and the `--json` object before it exits. Re-running an already completed restore no longer counts as incomplete.
 - **Apply enforces REVIEW for `brew cleanup --prune=all`, `gem cleanup` and `xcrun simctl delete unavailable`,** even when a hand-edited plan labels them SAFE. In `--permanent` mode, `safe_remove` checks directly whether a tree is fully readable, so the skip no longer depends on the unreadable list having been written. An unmeasurable size no longer aborts a run under errexit. Plans written before these changes carry `__brew__` or `_cacache` paths: apply refuses those native ops (target mismatch), so regenerate old plans. Refused native ops count as apply failures; refused or in-use `remove_path` ops are skipped.
 - **P2: the exit-code table matches the code.** `docs/agents/security.md` listed a security-violation exit 99 that is never emitted, and it omitted 3 (unsupported macOS) and 130 (interrupted).

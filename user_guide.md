@@ -147,6 +147,14 @@ These are debugging symbols for iOS/watchOS/tvOS devices. Xcode will redownload 
 
 `.xcarchive` archives might be needed for the App Store, crash symbolication, and recreating builds. The script only reports them. Delete manually from Xcode Organizer after checking.
 
+### Simulator runtimes
+
+Runtimes that `simctl` marks unusable live in a system-managed store. The script never removes them with `rm`: in `--interactive` it runs `xcrun simctl runtime delete --unusable` after you agree, and skips it while Xcode, Simulator or xcodebuild is running. Plans only report them. Xcode can download a runtime again. Check:
+
+```bash
+xcrun simctl runtime delete --unusable --dry-run
+```
+
 ### Docker
 
 `docker system prune -f` deletes images, stopped containers, networks, and build caches. It does not delete volumes, but stopped containers might contain state you haven't moved to a volume yet. Check:

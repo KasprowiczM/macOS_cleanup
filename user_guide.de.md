@@ -147,6 +147,14 @@ Dies sind Debugging-Symbole für iOS/watchOS/tvOS-Geräte. Xcode lädt sie erneu
 
 `.xcarchive`-Archive werden möglicherweise für den App Store, die Symbolisierung von Abstürzen und die Neuerstellung von Builds benötigt. Das Skript meldet sie nur. Nach Überprüfung manuell über den Xcode Organizer löschen.
 
+### Simulator-Laufzeiten
+
+Laufzeiten, die `simctl` als unbrauchbar markiert, liegen in einem vom System verwalteten Speicher. Das Skript entfernt sie nie mit `rm`: In `--interactive` führt es nach Ihrer Zustimmung `xcrun simctl runtime delete --unusable` aus und überspringt das, solange Xcode, Simulator oder xcodebuild läuft. Pläne melden sie nur. Xcode kann eine Laufzeit erneut herunterladen. Prüfen Sie:
+
+```bash
+xcrun simctl runtime delete --unusable --dry-run
+```
+
 ### Docker
 
 `docker system prune -f` löscht Images, gestoppte Container, Netzwerke und Build-Caches. Volumes werden nicht gelöscht, aber gestoppte Container können Zustände enthalten, die Sie noch nicht in ein Volume verschoben haben. Prüfen Sie:

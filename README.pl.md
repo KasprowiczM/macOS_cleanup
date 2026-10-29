@@ -46,6 +46,9 @@ Instalator **tylko klonuje repo i drukuje kolejne kroki** — niczego nie usuwa 
 nie uruchamia czyszczenia. Domyślnie instaluje do `~/Dev_Env/macOS_cleanup`
 (zmień przez `MACOS_CLEANUP_DIR=...`). Wolisz najpierw przejrzeć kod? Pobierz i
 obejrzyj [`install.sh`](install.sh) przed uruchomieniem.
+Po sklonowaniu sprawdza każdy skrypt, plik reguł i schemat względem `SHA256SUMS`
+i przerywa przy niezgodności albo braku tego pliku. Wykrywa to uszkodzone lub
+niepełne pobranie; nie jest to podpis.
 
 ### Ręczna instalacja
 
@@ -430,4 +433,4 @@ DMG_MAX_AGE_DAYS=30       # DMG/PKG w ~/Downloads
 
 ---
 
-Projekt: `macOS_cleanup` | Wersja: 3.0.6 | Licencja: MIT
+Projekt: `macOS_cleanup` | Wersja: 3.0.7 | Licencja: MIT

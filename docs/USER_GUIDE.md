@@ -179,6 +179,7 @@ Hint: Target a specific run with: bash cleanup_all.sh --restore <run_id>
 - **`system-logs`**: User diagnostic logs (`~/Library/Logs/*`). Purely informational diagnostic logs.
 - **`dev`**: Developer build caches including Xcode `DerivedData`, `Archives`, CocoaPods, `cargo`, `pip`, `gradle`, and `npm`/`yarn`/`pnpm` caches.
 - **`ios-simulators`**: Unavailable or orphaned iOS Simulator devices (`xcrun simctl delete unavailable`).
+- **`sim-runtimes`**: Simulator runtimes that simctl marks unusable (`xcrun simctl runtime delete --unusable`). Report-only in plans; deleted only in `--interactive`, after consent, and never while Xcode, Simulator or xcodebuild runs.
 - **`device-support`**: Old Xcode iOS DeviceSupport debug symbols for older iOS versions.
 - **`downloads`**: Old `.dmg` and `.pkg` installers in `~/Downloads` older than 30 days.
 - **`trash`**: User Trash contents (`~/.Trash`).
