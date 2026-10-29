@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Native cleanup commands check the mode themselves.** Both cleaners ran their command in any mode they were called from; only the call site kept them out of `--auto-safe`. They now run it only in the interactive modes and otherwise journal it as skipped (`tests/test_native_cleaner_outcomes.sh`). A reviewed plan applied with `apply --from-plan` still runs `xcrun simctl delete unavailable` through its allowlist and checksum, by design.
 - **Release gate G09 works on a fresh runner.** It called the deprecated `jsonschema` CLI, which the macOS CI runner does not have, so the `v3.0.7` tag run failed 17/18. G09 now validates through the Python `jsonschema` module and says how to install it when it is missing; the tag/dispatch-only macOS job installs it into a throwaway venv (one `pip install`; triggers and runners unchanged).
 
+### Changed
+
+- The installer tests cover the fresh-clone path as well as the update path: a verified checkout installs, and a checksum mismatch or a missing `SHA256SUMS` aborts after `git clone`.
+
 ## [3.0.7] — 2026-10-29
 
 Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1 to P1-7 and the P2/P3 follow-ups.

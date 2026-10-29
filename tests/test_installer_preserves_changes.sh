@@ -15,8 +15,8 @@ OFFICIAL_HTTPS="https://github.com/KasprowiczM/macOS_cleanup.git"
 # install.sh checks origin with `git remote get-url`, which applies insteadOf
 # rewrites, so a url.<local>.insteadOf redirect made origin look unofficial and
 # every case was refused at the origin check. Origin keeps the official URL;
-# a git shim on PATH turns `fetch origin` into a fetch from the local
-# upstream (no network).
+# a git shim on PATH turns `fetch origin`, and a fresh `clone` of the official
+# URL, into a fetch or clone from the local upstream (no network).
 SHIM_DIR="${SANDBOX}/shim"
 mkdir -p "$SHIM_DIR"
 cat > "${SHIM_DIR}/git" <<'EOF'
@@ -30,11 +30,17 @@ while (( i + 1 < ${#args[@]} )); do
     fi
     i=$((i + 1))
 done
+i=0
+while (( i < ${#args[@]} )); do
+    [[ "${args[i]}" == "$INSTALLER_TEST_OFFICIAL" ]] && args[i]="file://$INSTALLER_TEST_UPSTREAM"
+    i=$((i + 1))
+done
 exec "$INSTALLER_TEST_REAL_GIT" "${args[@]}"
 EOF
 chmod +x "${SHIM_DIR}/git"
 INSTALLER_TEST_REAL_GIT="$(command -v git)"
 export INSTALLER_TEST_REAL_GIT
+export INSTALLER_TEST_OFFICIAL="$OFFICIAL_HTTPS"
 
 point_origin_at_local() {
     local dest="$1"
@@ -148,5 +154,35 @@ assert_true "grep -q 'SHA256SUMS is missing' \"$NOSUMS_OUT\"" "aborted for the m
 
 begin_test "Phase 4: a checksum mismatch names the file"
 assert_true "grep -q 'cleanup_all.sh: FAILED' \"$SUMS_OUT\"" "the failing file is shown"
+
+# --- Fresh clone (no DEST yet): the same checks run after `git clone` --------
+# Reuses the upstreams above: junk SHA256SUMS, no SHA256SUMS, and a good one.
+fresh_install() {
+    local upstream="$1" out="$2"
+    export INSTALLER_TEST_UPSTREAM="$upstream"
+    MACOS_CLEANUP_DIR="${SANDBOX}/fresh_$(basename "$out" .out)"
+    export MACOS_CLEANUP_DIR
+    set +e
+    PATH="${SHIM_DIR}:${PATH}" /bin/bash "${PROJ_DIR}/install.sh" --edge >"$out" 2>&1
+    fresh_rc=$?
+    set -u
+}
+
+begin_test "fresh clone: a verified checkout installs"
+fresh_install "$OK_BARE" "${SANDBOX}/fresh_ok.out"
+assert_eq "$fresh_rc" "0" "fresh verified install must succeed: $(tr '\n' ' ' < "${SANDBOX}/fresh_ok.out")"
+assert_true "grep -q 'Cloning macOS Cleanup' \"${SANDBOX}/fresh_ok.out\"" "the fresh-clone path ran"
+assert_true "grep -q 'Installed to:' \"${SANDBOX}/fresh_ok.out\"" "success banner"
+
+begin_test "fresh clone: a checksum mismatch aborts and names the file"
+fresh_install "$BARE" "${SANDBOX}/fresh_sums.out"
+assert_neq "$fresh_rc" "0" "fresh mismatch must abort"
+assert_true "grep -q 'cleanup_all.sh: FAILED' \"${SANDBOX}/fresh_sums.out\"" "the failing file is shown"
+assert_false "grep -q 'Installed to:' \"${SANDBOX}/fresh_sums.out\"" "no success banner"
+
+begin_test "fresh clone: a missing SHA256SUMS aborts"
+fresh_install "$NOSUMS_BARE" "${SANDBOX}/fresh_nosums.out"
+assert_neq "$fresh_rc" "0" "fresh install without SHA256SUMS must abort"
+assert_true "grep -q 'SHA256SUMS is missing' \"${SANDBOX}/fresh_nosums.out\"" "aborted for the missing file"
 
 print_test_summary
