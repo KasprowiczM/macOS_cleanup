@@ -287,6 +287,15 @@ build_cleanup_plan_from_analysis() {
                         "Deletes only unavailable simulators." \
                         "Execute after review; runtimes can be re-downloaded."
                     ;;
+                sim_runtimes_unusable)
+                    # Runtimes live in a system-managed store that only simctl
+                    # may change; a plan reports them and the interactive mode
+                    # runs simctl with its own confirmation.
+                    plan_add_report_only "dev" "REVIEW" "simctl: unusable runtimes (xcrun simctl runtime delete --unusable)" \
+                        "$(catbytes_get "sim-runtimes")" \
+                        "Simulator runtimes that simctl marks unusable." \
+                        "Run 'xcrun simctl runtime delete --unusable' yourself, or use --interactive."
+                    ;;
                 npx_cache|pnpm_stale_store)
                     plan_add_path "dev" "$(policy_adjust_risk_for_path "$path" "SAFE")" "$path" \
                         "Recreateable package manager cache." \

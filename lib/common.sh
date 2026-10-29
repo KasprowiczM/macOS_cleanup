@@ -1225,6 +1225,7 @@ cache_owner_running() {
         npx_cache)        _proc_running -f '\.npm/_npx/' || _proc_running -f 'npm exec' || _proc_running -x npx ;;
         pnpm_stale_store) _proc_running -x pnpm || _proc_running -f '(^|/)pnpm(\.c?js)?( |$)' ;;
         xcode_derived)    _proc_running -x Xcode || _proc_running -x xcodebuild ;;
+        sim_runtimes)     _proc_running -x Xcode || _proc_running -x Simulator || _proc_running -x xcodebuild ;;
         *) return 1 ;;
     esac
 }
@@ -2268,6 +2269,7 @@ CATEGORY_REGISTRY=(
     "xcode-derived|Xcode DerivedData|counted"
     "xcode-archives|Xcode Archives|report-only"
     "simulators|iOS Simulators (unavailable)|counted"
+    "sim-runtimes|Simulator runtimes (unusable)|counted"
     "device-support|Xcode Device Support|counted"
     "npm|npm cache (~/.npm/_cacache)|counted"
     "npx|npx cache (~/.npm/_npx)|counted"

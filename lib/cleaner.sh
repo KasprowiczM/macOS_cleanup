@@ -602,6 +602,69 @@ clean_xcode_simulators() {
     fi
 }
 
+# clean_sim_runtimes — deletes the simulator runtimes simctl marks unusable,
+# only with simctl itself (never rm), only in the interactive modes, only
+# after consent, and never while Xcode, Simulator or xcodebuild runs: a
+# disk-image runtime is unmounted and its booted simulators are shut down.
+clean_sim_runtimes() {
+    [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
+    local has_runtimes=0 item
+    for item in "${FOUND_DEV_ITEMS[@]}"; do
+        [[ "$item" == "sim_runtimes_unusable:__simctl_runtime__" ]] && { has_runtimes=1; break; }
+    done
+    [[ $has_runtimes -eq 0 ]] && return
+    case "${MODE:-}" in
+        interactive|dry-run-then-interactive) ;;
+        *) return 0 ;;
+    esac
+
+    local cmd="xcrun simctl runtime delete --unusable"
+    local bytes size_h
+    bytes="$(catbytes_get "sim-runtimes")"
+    if (( bytes > 0 )); then size_h="$(bytes_to_human "$bytes")"; else size_h="size unknown"; fi
+
+    print_section "Cleaning: unusable simulator runtimes"
+    if is_dry_run; then
+        print_dry "Would run: ${cmd}"
+        record_native_command_event "$cmd" "planned" "$bytes" "dry-run"
+        return 0
+    fi
+    if cache_owner_running sim_runtimes; then
+        print_skip "Xcode, Simulator or xcodebuild is running; simulator runtimes are left alone."
+        record_skipped_item "Simulator runtimes in use (Xcode, Simulator or xcodebuild running)"
+        mark_category_outcome "sim-runtimes" in-use
+        return 0
+    fi
+    confirm_category \
+        --title      "Unusable simulator runtimes" \
+        --size       "$size_h" \
+        --what       "Simulator runtimes that simctl marks unusable, deleted by: ${cmd}" \
+        --consequence "$(consequence_for_mode "REVIEW" "native")" \
+        --safe-if    "Safe if you do not need these runtimes; Xcode can download runtimes again." \
+        --risk       "REVIEW" || { mark_category_outcome "sim-runtimes" skipped; return 0; }
+    # Xcode may have been started while the prompt was open.
+    if cache_owner_running sim_runtimes; then
+        print_skip "Xcode, Simulator or xcodebuild started; simulator runtimes are left alone."
+        record_skipped_item "Simulator runtimes in use (Xcode, Simulator or xcodebuild running)"
+        mark_category_outcome "sim-runtimes" in-use
+        return 0
+    fi
+
+    if ! command -v xcrun &>/dev/null; then
+        record_native_command_event "$cmd" "skipped" "$bytes" "xcrun unavailable"
+        print_warn "xcrun is not available."
+        return 0
+    fi
+    if xcrun simctl runtime delete --unusable 2>/dev/null; then
+        mark_category_outcome "sim-runtimes" cleaned
+        print_cleaned "Unusable simulator runtimes deleted."
+        record_native_command_event "$cmd" "ok" "$bytes" ""
+    else
+        record_native_command_event "$cmd" "failed" "$bytes" "xcrun failed"
+        print_warn "xcrun simctl runtime delete --unusable failed."
+    fi
+}
+
 clean_dev_review_only_items() {
     [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
 
@@ -1134,6 +1197,7 @@ run_cleanup() {
             dev)           _run_cleaner clean_xcode_derived_data
                            _run_cleaner clean_ios_device_support
                            _run_cleaner clean_xcode_simulators
+                           _run_cleaner clean_sim_runtimes
                            _run_cleaner clean_dev_review_only_items
                            _run_cleaner clean_dev_caches
                            _run_cleaner clean_docker ;;

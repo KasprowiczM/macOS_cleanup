@@ -122,6 +122,47 @@ simctl_unavailable_udids() {
     xcrun simctl list devices unavailable 2>/dev/null | grep -Eo '[0-9A-Fa-f-]{36}' | sort -u
 }
 
+# analyze_sim_runtimes — simulator runtimes that simctl itself marks unusable.
+# They live in a system-managed store, so only `xcrun simctl runtime delete
+# --unusable` may remove them. Its dry-run names the runtimes it would delete
+# on stderr (and exits 2 with "No matching images found to delete" when there
+# are none), so both streams are read and the exit status is not trusted;
+# only runtime UUIDs in the report count. The size is the sum of `sizeBytes`
+# for exactly those runtimes; when it cannot be read (or is 0) the runtimes
+# are still offered, as size unknown. Without developer tools xcrun is not
+# run: its shim can open the install-tools dialog during a read-only scan.
+analyze_sim_runtimes() {
+    command -v xcrun >/dev/null 2>&1 || return 0
+    xcode-select -p >/dev/null 2>&1 || return 0
+    local dry="" uuids="" bytes=""
+    dry="$(xcrun simctl runtime delete --unusable --dry-run 2>&1)" || true
+    case "$dry" in *"No matching images found to delete"*) return 0 ;; esac
+    uuids="$(printf '%s\n' "$dry" \
+        | grep -Eo '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' \
+        | sort -u)" || uuids=""
+    [[ -n "$uuids" ]] || return 0
+    bytes="$(xcrun simctl runtime list -j 2>/dev/null | python3 -I -c '
+import json, sys
+want = {u.upper() for u in sys.argv[1].split()}
+total = 0
+for key, rt in json.load(sys.stdin).items():
+    if not isinstance(rt, dict):
+        continue
+    if str(rt.get("identifier") or key).upper() in want:
+        total += int(rt.get("sizeBytes") or 0)
+print(total)
+' "$uuids" 2>/dev/null)" || bytes=""
+    case "$bytes" in ''|0|*[!0-9]*) bytes="" ;; esac
+
+    FOUND_DEV_ITEMS+=("sim_runtimes_unusable:__simctl_runtime__")
+    catbytes_set "sim-runtimes" "${bytes:-0}"
+    if [[ -n "$bytes" ]]; then
+        print_found "Simulator runtimes (unusable): $(bytes_to_human "$bytes")"
+    else
+        print_found "Simulator runtimes (unusable): size unknown"
+    fi
+}
+
 analyze_application_inventory() {
     print_section "Inwentarz aplikacji"
 
@@ -966,6 +1007,9 @@ analyze_dev_environment() {
             print_found "$(t "simulators_found"): $(bytes_to_human "$sim_size") (${sim_count})"
         fi
     fi
+
+    # --- Simulator runtimes simctl marks unusable ---
+    analyze_sim_runtimes
 
     # --- npm cache ---
     #
