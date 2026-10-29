@@ -44,6 +44,7 @@ source "${PROJ_DIR}/lib/analyzer.sh"
 source "${PROJ_DIR}/lib/planner.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
+stub_native_tools "${SANDBOX}/native_bin"
 
 cleanup() { rm -rf "$SANDBOX"; }
 trap cleanup EXIT

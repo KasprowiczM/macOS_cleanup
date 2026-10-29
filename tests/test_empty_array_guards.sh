@@ -27,6 +27,10 @@ PROJ_DIR="$(cd "${TEST_DIR}/.." && pwd)"
 
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
+# Every cleaner runs here with MODE=interactive and DRY_RUN=0.
+NATIVE_STUB_DIR="$(mktemp -d -t macos_cleanup_native_stubs.XXXXXX)"
+trap 'rm -rf "$NATIVE_STUB_DIR"' EXIT
+stub_native_tools "$NATIVE_STUB_DIR"
 
 FOUND_ARRAYS="FOUND_USER_CACHES FOUND_SYSTEM_CACHES FOUND_APP_LOGS FOUND_SYSTEM_LOGS \
 FOUND_TMP_FILES FOUND_APP_LEFTOVERS FOUND_DEV_ITEMS FOUND_TM_SNAPSHOTS FOUND_IOS_BACKUPS \

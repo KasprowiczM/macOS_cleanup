@@ -746,6 +746,12 @@ _clean_dev_native_or_fallback() {
 
 clean_dev_caches() {
     [[ ${#FOUND_DEV_ITEMS[@]} -eq 0 ]] && return
+    # Like the other native cleaners: a dry-run previews in any mode, but
+    # only the interactive modes run npm/pip/brew/gem or remove a cache.
+    if ! is_dry_run && ! native_cleanup_mode_allowed; then
+        print_skip "Developer caches are cleaned only in --interactive."
+        return 0
+    fi
 
     local -a cleanable_items=()
     local item key path _ledger
@@ -1030,6 +1036,11 @@ tm_other_volume_newest_dates() {
 
 clean_time_machine_snapshots() {
     [[ ${#FOUND_TM_SNAPSHOTS[@]} -eq 0 ]] && return
+    # A dry-run previews in any mode; only the interactive modes delete.
+    if ! is_dry_run && ! native_cleanup_mode_allowed; then
+        print_skip "Local Time Machine snapshots are deleted only in --interactive."
+        return 0
+    fi
 
     # Phase 3: the newest local snapshot is always kept as the most recent
     # local restore point, and nothing is deleted while Time Machine is

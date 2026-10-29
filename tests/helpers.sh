@@ -163,3 +163,21 @@ setup_artifact_isolation() {
     mkdir -p "$LOGS_DIR" "$REPORTS_DIR" "$QUARANTINE_ROOT" "$QUARANTINE_RUN_DIR"
 }
 
+# stub_native_tools <dir> — put failing stubs for every native cleanup tool
+# first on PATH and check that they win. A test that hides its own stubs, or
+# seeds a key it did not mean to, must never reach the real npm, brew,
+# docker, tmutil or xcrun (/usr/bin/xcrun and /usr/bin/tmutil always exist).
+# Calls are logged to <dir>/native_calls.log; every stub exits 97.
+NATIVE_TOOL_STUBS="npm yarn pnpm corepack pip pip3 brew gem docker tmutil xcrun"
+stub_native_tools() {
+    local dir="$1" tool
+    mkdir -p "$dir"
+    for tool in $NATIVE_TOOL_STUBS; do
+        printf '#!/bin/sh\necho "%s $*" >> "%s/native_calls.log"\nexit 97\n' "$tool" "$dir" > "${dir}/${tool}"
+        chmod +x "${dir}/${tool}"
+    done
+    export PATH="${dir}:${PATH}"
+    for tool in $NATIVE_TOOL_STUBS; do
+        [[ "$(command -v "$tool")" == "${dir}/${tool}" ]] || { echo "stub_native_tools: ${tool} is not stubbed" >&2; exit 1; }
+    done
+}

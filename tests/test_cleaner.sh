@@ -33,6 +33,7 @@ source "${PROJ_DIR}/lib/analyzer.sh"
 source "${PROJ_DIR}/lib/cleaner.sh"
 # shellcheck disable=SC1091
 source "${TEST_DIR}/helpers.sh"
+stub_native_tools "${SANDBOX}/native_bin"
 
 cleanup() {
     rm -rf "$SANDBOX"

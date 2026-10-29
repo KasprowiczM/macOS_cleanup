@@ -41,6 +41,7 @@ source "${PROJ_DIR}/lib/reporter.sh"
 
 trap 'rm -rf "$SANDBOX"' EXIT
 
+stub_native_tools "${SANDBOX}/native_bin"
 STUB_BIN="${SANDBOX}/bin"; CALLS="${SANDBOX}/calls.log"; FAIL_FLAG="${SANDBOX}/fail"
 mkdir -p "$STUB_BIN"
 for tool in docker xcrun; do
@@ -128,6 +129,20 @@ for c in "clean_docker|docker|${DOCKER_CMD}" "clean_xcode_simulators|simulators|
         assert_eq "$(category_outcome "$key")" "" "MODE=$m: no outcome in a dry-run"
     done
 done
+
+# ---------------------------------------------------------------------------
+begin_test "developer caches and Time Machine snapshots: nothing outside --interactive"
+NPM_DIR="${SANDBOX}/npm-cache"; mkdir -p "$NPM_DIR"; echo data > "${NPM_DIR}/blob"
+for m in auto-safe dry-run plan apply-plan; do
+    reset_state; MODE="$m"
+    FOUND_DEV_ITEMS=("npm_cache:${NPM_DIR}")
+    FOUND_TM_SNAPSHOTS=("com.apple.TimeMachine.2026-10-01-010101.local" "com.apple.TimeMachine.2026-10-02-010101.local")
+    clean_dev_caches >/dev/null 2>&1
+    clean_time_machine_snapshots >/dev/null 2>&1
+    assert_false "[[ -s \"${SANDBOX}/native_bin/native_calls.log\" ]]" "MODE=$m: no npm or tmutil call"
+    assert_file_exists "${NPM_DIR}/blob" "MODE=$m: the cache is left alone"
+done
+FOUND_TM_SNAPSHOTS=()
 
 # ---------------------------------------------------------------------------
 begin_test "the report shows a failed native command as Failed"

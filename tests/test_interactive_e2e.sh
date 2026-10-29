@@ -51,7 +51,9 @@ SUDO_RECORDER="${SANDBOX}/sudo_calls.log"
 TOOL_RECORDER="${SANDBOX}/tool_calls.log"
 touch "$SUDO_RECORDER" "$TOOL_RECORDER"
 
-for tool in sudo brew docker npm yarn pnpm corepack tmutil xcrun; do
+# pip/pip3/gem too: a host PIP_CACHE_DIR could otherwise reach the real pip.
+unset PIP_CACHE_DIR
+for tool in sudo brew docker npm yarn pnpm corepack tmutil xcrun pip pip3 gem; do
     cat << EOF > "${SHIM_DIR}/${tool}"
 #!/usr/bin/env bash
 if [[ "${tool}" == "sudo" ]]; then
