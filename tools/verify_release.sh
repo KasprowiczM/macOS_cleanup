@@ -156,7 +156,7 @@ run_gate "G08" "Protected path assertions >= 60 (tests/test_path_protection.sh)"
 
 # G09: plan.json schema validation
 run_gate "G09" "plan.json validates against schemas/plan.schema.json" \
-    '_g09_tmp=$(mktemp -d) && HOME="$_g09_tmp" /bin/bash "${PROJ_DIR}/cleanup_all.sh" plan --non-interactive --no-color >/dev/null 2>&1 && _plan=$(ls -t "${PROJ_DIR}/reports/plan_"*.json 2>/dev/null | head -1) && [[ -n "$_plan" ]] && jsonschema -i "$_plan" "${PROJ_DIR}/schemas/plan.schema.json" && rm -rf "${_g09_tmp}"'
+    '_g09_tmp=$(mktemp -d) && HOME="$_g09_tmp" /bin/bash "${PROJ_DIR}/cleanup_all.sh" plan --non-interactive --no-color >/dev/null 2>&1 && _plan=$(ls -t "${PROJ_DIR}/reports/plan_"*.json 2>/dev/null | head -1) && [[ -n "$_plan" ]] && { python3 -c "import jsonschema" 2>/dev/null || { echo "G09 needs the Python jsonschema module (python3 -m pip install jsonschema)"; false; }; } && python3 -c "import json,sys,jsonschema; jsonschema.validate(json.load(open(sys.argv[1])), json.load(open(sys.argv[2])))" "$_plan" "${PROJ_DIR}/schemas/plan.schema.json" && rm -rf "${_g09_tmp}"'
 
 # G10: Risk parity (Must check category_max_risk wiring and parity assertions)
 run_gate "G10" "Risk parity (tests/test_risk_parity.sh)" \

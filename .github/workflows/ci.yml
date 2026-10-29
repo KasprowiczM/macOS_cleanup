@@ -95,6 +95,14 @@ jobs:
               assert op["risk"] in ("SAFE", "REVIEW", "DANGEROUS"), "bad risk: %s" % op["risk"]
           print("Plan validated: %d operations" % len(plan["operations"]))
 
+      # G09 validates the plan with the Python jsonschema module; the runner's
+      # Python is externally managed, so it goes into a throwaway venv.
+      - name: Install jsonschema for plan validation (G09)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/jsonschema-venv"
+          "$RUNNER_TEMP/jsonschema-venv/bin/pip" install --quiet jsonschema
+          echo "$RUNNER_TEMP/jsonschema-venv/bin" >> "$GITHUB_PATH"
+
       - name: Release verification gates
         run: /bin/bash tools/verify_release.sh
 

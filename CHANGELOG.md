@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release gate G09 works on a fresh runner.** It called the deprecated `jsonschema` CLI, which the macOS CI runner does not have, so the `v3.0.7` tag run failed 17/18. G09 now validates through the Python `jsonschema` module and says how to install it when it is missing; the tag/dispatch-only macOS job installs it into a throwaway venv (one `pip install`; triggers and runners unchanged).
+
 ## [3.0.7] — 2026-10-29
 
 Safety fixes for the confirmed data-loss findings of the 2026-10-27 ultra-review (P0-1, P0-2, P0-3), plus P1-1 to P1-7 and the P2/P3 follow-ups.
