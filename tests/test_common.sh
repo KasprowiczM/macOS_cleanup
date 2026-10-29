@@ -314,42 +314,34 @@ APP_BUNDLE_SEARCH_DIRS=("/Applications" "$HOME/Applications" "/System/Applicatio
 normalize_never_touch_paths 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# Regression: the sudo keep-alive background loop must be `disown`ed so that a
-# signal-kill (e.g. interrupting the run) does NOT leak a job-control notice
-# like "lib/common.sh: line N: <pid> Terminated: 15 ( while true; ... )".
-# We run the scenario in a child bash and capture its combined output.
+# Regression: a sudo keep-alive loop once leaked a job-control notice
+# ("<pid> Terminated: 15 ( while true; ... )") when a run was interrupted.
+# Privileged operations were removed (P0-1b) and _start_sudo_keepalive now
+# starts nothing. The old control case killed a raw background job and
+# expected bash to print "Terminated"; whether bash prints it depends on the
+# environment, so the suite failed on some hosts. Check the property itself:
+# no child process, tracked or disowned, so nothing can leak.
+# pgrep writes to a file so that no command-substitution subshell is counted;
+# a disowned control child proves pgrep sees children at all.
 # ---------------------------------------------------------------------------
-_run_keepalive_scenario() {
-    # $1 = "raw" (pre-fix control) or "fixed" (real _start_sudo_keepalive)
-    local mode="$1"
-    MODE="$mode" bash -c '
-        set -u
-        SUDO_KEEPALIVE_PID=""
-        source "'"${PROJ_DIR}"'/lib/common.sh"
-        if [[ "$MODE" == "fixed" ]]; then
-            _start_sudo_keepalive
-        else
-            # Raw pre-fix pattern: a tracked background job, no disown.
-            (while true; do sleep 50; kill -0 "$$" 2>/dev/null || exit; done 2>/dev/null) &
-            SUDO_KEEPALIVE_PID=$!
-        fi
-        kill -TERM "$SUDO_KEEPALIVE_PID" 2>/dev/null
-        # Parent keeps executing commands so a *tracked* dead job would be reported.
-        sleep 0.2; :; sleep 0.2; :
-    ' 2>&1
-}
-
-begin_test "keepalive control: raw pattern DOES leak a Terminated job notice"
-_KP_RAW_OUT="$(_run_keepalive_scenario raw)"
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    assert_true "printf '%s' \"\$_KP_RAW_OUT\" | grep -qi terminated" \
-        "raw (no disown) keepalive should leak 'Terminated' — proves the test detects the bug"
-fi
-
-begin_test "keepalive fixed: _start_sudo_keepalive disowns; no Terminated notice leaks"
-_KP_FIXED_OUT="$(_run_keepalive_scenario fixed)"
-assert_false "printf '%s' \"\$_KP_FIXED_OUT\" | grep -qi terminated" \
-    "disowned keepalive must NOT print a 'Terminated' job-control notice"
+begin_test "keepalive: _start_sudo_keepalive starts no background process"
+_KP_OUT="$("$BASH" -c '
+    set -u
+    SUDO_KEEPALIVE_PID=""
+    source "'"${PROJ_DIR}"'/lib/common.sh"
+    _start_sudo_keepalive
+    kids_file="$(mktemp)"
+    pgrep -P $$ >"$kids_file"
+    kids="$(wc -l <"$kids_file" | tr -d " ")"
+    # Control: a disowned child must be counted, or the probe proves nothing.
+    sleep 5 & ctl_pid=$!; disown
+    pgrep -P $$ >"$kids_file"
+    ctl="$(wc -l <"$kids_file" | tr -d " ")"
+    kill "$ctl_pid" 2>/dev/null
+    rm -f "$kids_file"
+    printf "pid=%s kids=%s control=%s\n" "${SUDO_KEEPALIVE_PID:-}" "$kids" "$ctl"
+' </dev/null)"
+assert_eq "$_KP_OUT" "pid= kids=0 control=1" "no keep-alive process is started, so none can leak a notice"
 
 begin_test "print_warn records WARNINGS_LIST"
 WARNINGS_LIST=()
