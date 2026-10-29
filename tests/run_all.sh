@@ -13,13 +13,17 @@ echo "==========================================================="
 echo " macOS_cleanup test suite"
 echo "==========================================================="
 
+# Each test runs under the shell running this script ("$BASH"), not the first
+# bash on PATH: CI starts it with /bin/bash (3.2), while PATH on a macOS
+# runner finds Homebrew bash 5. Stdin is /dev/null so no test can wait on it
+# (test_empty_array_guards hung on a live terminal).
 for test_file in "${TEST_DIR}"/test_*.sh; do
     [[ -f "$test_file" ]] || continue
     echo
     echo ">>> $(basename "$test_file")"
     if [[ "${QUIET:-0}" -eq 1 ]]; then
         tlog="$(mktemp)"
-        if bash "$test_file" > "$tlog" 2>&1; then
+        if "$BASH" "$test_file" </dev/null > "$tlog" 2>&1; then
             grep -E '^(Pass:|Fail:)' "$tlog" || echo "Pass: OK"
             rm -f "$tlog"
         else
@@ -28,7 +32,7 @@ for test_file in "${TEST_DIR}"/test_*.sh; do
             FAIL_COUNT=$(( FAIL_COUNT + 1 ))
         fi
     else
-        if bash "$test_file"; then
+        if "$BASH" "$test_file" </dev/null; then
             :
         else
             FAIL_COUNT=$(( FAIL_COUNT + 1 ))
@@ -46,7 +50,7 @@ if [[ -f "${TEST_DIR}/test_dev_sync_safety.py" ]]; then
     # non-zero status (e.g. 7) would still report ALL TEST FILES PASSED.
     _py_log="$(mktemp)"
     _py_rc=0
-    ( cd "${TEST_DIR}/.." && python3 -m unittest tests/test_dev_sync_safety.py ) >"$_py_log" 2>&1 || _py_rc=$?
+    ( cd "${TEST_DIR}/.." && python3 -m unittest tests/test_dev_sync_safety.py ) </dev/null >"$_py_log" 2>&1 || _py_rc=$?
     if [[ "$_py_rc" -eq 0 ]]; then
         tail -3 "$_py_log"
     else
