@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tools/verify_release.sh — Release verification gates (G01–G15)
+# tools/verify_release.sh — Release verification gates (G01–G19)
 # Part 2 & Part 0.1 Contract Specification
 # Exit 0 only if all gates pass.
 # Bash 3.2 compatible.
@@ -84,7 +84,7 @@ run_gate() {
 }
 
 echo "═══════════════════════════════════════════════════"
-echo "  macOS_cleanup v3.0.0 — Release Verification"
+echo "  macOS_cleanup v$(sed -n 's/^readonly SCRIPT_VERSION="\([^"]*\)".*/\1/p' "${PROJ_DIR}/config/defaults.sh") — Release Verification"
 echo "═══════════════════════════════════════════════════"
 echo
 
@@ -146,9 +146,9 @@ run_gate "G05" "Python dev sync safety tests" \
 run_gate "G06" "Artifact isolation (git status --porcelain unchanged by suite)" \
     '[[ "$_GIT_BEFORE" == "$_GIT_AFTER" ]]'
 
-# G07: No executable sudo
+# G07: No executable sudo (grep -rn prefixes file:line:, so comments are matched after it)
 run_gate "G07" "No executable sudo in lib/ or cleanup_all.sh" \
-    '! grep -rn "sudo " "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" | grep -v "^[[:space:]]*#" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_\|cleanup_journal_event\|użyj trybu\|sudo disabled" | grep -qv "^$"'
+    '! grep -rn "sudo " "${PROJ_DIR}/lib/" "${PROJ_DIR}/cleanup_all.sh" | grep -v "^[^:]*:[0-9]*:[[:space:]]*#" | grep -v "request_sudo.*return 1" | grep -v "print_\|log_\|echo\|record_\|cleanup_journal_event\|użyj trybu\|sudo disabled" | grep -qv "^$"'
 
 # G08: Protected path assertions >= 60
 run_gate "G08" "Protected path assertions >= 60 (tests/test_path_protection.sh)" \
@@ -162,9 +162,11 @@ run_gate "G09" "plan.json validates against schemas/plan.schema.json" \
 run_gate "G10" "Risk parity (tests/test_risk_parity.sh)" \
     '[[ $(grep -c "category_max_risk\|policy_adjust_risk_for_path" "${PROJ_DIR}/lib/cleaner.sh") -ge 12 ]] && ! grep -qE -e '\''--risk "(LOW|MEDIUM|HIGH)"'\'' "${PROJ_DIR}/lib/cleaner.sh" && [[ -f "${PROJ_DIR}/tests/test_risk_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_risk_parity.sh"'
 
-# G11: i18n string coverage (Must check 7 lang files, key equality, and 0 Polish literals)
+# G11: i18n string coverage (Must check 7 lang files, key equality, and 0 Polish literals).
+# The count runs under UTF-8: in the C locale grep matches bytes, so any arrow or
+# em dash counted as a Polish letter.
 run_gate "G11" "i18n string coverage (no literals outside i18n/)" \
-    '[[ -d "${PROJ_DIR}/i18n" ]] && [[ -f "${PROJ_DIR}/i18n/en.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pl.sh" ]] && [[ -f "${PROJ_DIR}/i18n/de.sh" ]] && [[ -f "${PROJ_DIR}/i18n/es.sh" ]] && [[ -f "${PROJ_DIR}/i18n/fr.sh" ]] && [[ -f "${PROJ_DIR}/i18n/it.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pt.sh" ]] && [[ $(grep -rcE "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]" "${PROJ_DIR}/lib/"*.sh "${PROJ_DIR}/cleanup_all.sh" | awk -F: "{s+=\$2} END{print s}") -eq 0 ]] && /bin/bash "${PROJ_DIR}/tests/test_i18n_accessibility.sh" >/dev/null 2>&1'
+    '[[ -d "${PROJ_DIR}/i18n" ]] && [[ -f "${PROJ_DIR}/i18n/en.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pl.sh" ]] && [[ -f "${PROJ_DIR}/i18n/de.sh" ]] && [[ -f "${PROJ_DIR}/i18n/es.sh" ]] && [[ -f "${PROJ_DIR}/i18n/fr.sh" ]] && [[ -f "${PROJ_DIR}/i18n/it.sh" ]] && [[ -f "${PROJ_DIR}/i18n/pt.sh" ]] && [[ $(LC_ALL=en_US.UTF-8 grep -rcE "[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]" "${PROJ_DIR}/lib/"*.sh "${PROJ_DIR}/cleanup_all.sh" | awk -F: "{s+=\$2} END{print s}") -eq 0 ]] && /bin/bash "${PROJ_DIR}/tests/test_i18n_accessibility.sh" >/dev/null 2>&1'
 
 # G12: Suite passes with and without grealpath on PATH (Only gate allowed 2nd full suite run)
 run_gate "G12" "Normalizer determinism (suite passes with and without grealpath)" \
@@ -190,9 +192,11 @@ run_gate "G16" "Functional deletion smoke gate (quarantine mode cleans candidate
 run_gate "G17" "Plan risk vs policy parity (tests/test_plan_policy_parity.sh)" \
     '[[ -f "${PROJ_DIR}/tests/test_plan_policy_parity.sh" ]] && /bin/bash "${PROJ_DIR}/tests/test_plan_policy_parity.sh"'
 
-# G18: Plan native_command round-trip preservation
+# G18: Plan native_command round-trip preservation. Since P1-4 apply binds a
+# native command to its tool's own target, so the fake npm answers `config get cache`,
+# and that target must be a real cache root ($HOME/.npm under the fixture HOME).
 run_gate "G18" "Plan native_command round-trip preservation (apply_plan_file native_command)" \
-    '_g18_tmp=$(mktemp -d) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && _g18_cache="${_g18_tmp}/npm-cache" && mkdir -p "${_g18_bin}" "${_g18_cache}" "${_g18_tmp}/logs" "${_g18_tmp}/reports" "${_g18_tmp}/quarantine" && printf "#!/bin/bash\necho NPM:\$* >> \"${_g18_rec}\"\n" > "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && python3 -c "import hashlib,json,sys; p,c=sys.argv[1],sys.argv[2]; ops=[{\"id\":\"op-g18\",\"category\":\"dev\",\"risk\":\"SAFE\",\"action\":\"native_command\",\"path\":c,\"command\":\"npm cache clean --force\",\"estimated_bytes\":1024,\"size\":1024,\"description\":\"g18\",\"recommendation\":\"test\",\"rollback\":False,\"tool\":\"npm\"}]; chk=hashlib.sha256(json.dumps(ops,sort_keys=True,separators=(\",\",\":\")).encode()).hexdigest(); json.dump({\"schema_version\":\"1.0\",\"tool\":\"cleanup_all.sh\",\"tool_version\":\"3.0.0\",\"run_id\":\"g18\",\"generated_at\":\"2026-09-07T00:00:00Z\",\"checksum\":chk,\"summary\":{\"operations\":1,\"safe_operations\":1,\"review_operations\":0,\"dangerous_operations\":0,\"safe_bytes\":1024,\"review_bytes\":0,\"dangerous_bytes\":0},\"operations\":ops}, open(p,\"w\"))" "${_g18_plan}" "${_g18_cache}" && PATH="${_g18_bin}:${PATH}" DRY_RUN=0 HOME="${_g18_tmp}" LOGS_DIR="${_g18_tmp}/logs" REPORTS_DIR="${_g18_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g18_tmp}/reports/journal.jsonl" QUARANTINE_ROOT="${_g18_tmp}/quarantine" /bin/bash -c '\''source "'"${PROJ_DIR}"'/config/defaults.sh"; source "'"${PROJ_DIR}"'/lib/common.sh"; source "'"${PROJ_DIR}"'/lib/policy.sh"; source "'"${PROJ_DIR}"'/lib/planner.sh"; apply_plan_file "$1"'\'' _ "${_g18_plan}" >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
+    '_g18_tmp=$(cd "$(mktemp -d)" && pwd -P) && _g18_plan="${_g18_tmp}/g18.json" && _g18_rec="${_g18_tmp}/rec.log" && _g18_bin="${_g18_tmp}/bin" && _g18_cache="${_g18_tmp}/.npm" && mkdir -p "${_g18_bin}" "${_g18_cache}" "${_g18_tmp}/logs" "${_g18_tmp}/reports" "${_g18_tmp}/quarantine" && printf "#!/bin/bash\nif [ \"\$*\" = \"config get cache\" ]; then echo \"${_g18_cache}\"; exit 0; fi\necho NPM:\$* >> \"${_g18_rec}\"\n" > "${_g18_bin}/npm" && chmod +x "${_g18_bin}/npm" && python3 -c "import hashlib,json,sys; p,c=sys.argv[1],sys.argv[2]; ops=[{\"id\":\"op-g18\",\"category\":\"dev\",\"risk\":\"SAFE\",\"action\":\"native_command\",\"path\":c,\"command\":\"npm cache clean --force\",\"estimated_bytes\":1024,\"size\":1024,\"description\":\"g18\",\"recommendation\":\"test\",\"rollback\":False,\"tool\":\"npm\"}]; chk=hashlib.sha256(json.dumps(ops,sort_keys=True,separators=(\",\",\":\")).encode()).hexdigest(); json.dump({\"schema_version\":\"1.0\",\"tool\":\"cleanup_all.sh\",\"tool_version\":\"3.0.0\",\"run_id\":\"g18\",\"generated_at\":\"2026-09-07T00:00:00Z\",\"checksum\":chk,\"summary\":{\"operations\":1,\"safe_operations\":1,\"review_operations\":0,\"dangerous_operations\":0,\"safe_bytes\":1024,\"review_bytes\":0,\"dangerous_bytes\":0},\"operations\":ops}, open(p,\"w\"))" "${_g18_plan}" "${_g18_cache}" && PATH="${_g18_bin}:${PATH}" DRY_RUN=0 HOME="${_g18_tmp}" LOGS_DIR="${_g18_tmp}/logs" REPORTS_DIR="${_g18_tmp}/reports" CLEANUP_JOURNAL_FILE="${_g18_tmp}/reports/journal.jsonl" QUARANTINE_ROOT="${_g18_tmp}/quarantine" /bin/bash -c '\''source "'"${PROJ_DIR}"'/config/defaults.sh"; source "'"${PROJ_DIR}"'/lib/common.sh"; source "'"${PROJ_DIR}"'/lib/policy.sh"; source "'"${PROJ_DIR}"'/lib/planner.sh"; apply_plan_file "$1"'\'' _ "${_g18_plan}" >/dev/null 2>&1 && grep -q "NPM:cache clean --force" "${_g18_rec}" && rm -rf "${_g18_tmp}"'
 
 # G19: Protected path documentation sync
 run_gate "G19" "Protected paths docs sync (tools/gen_protected_docs.sh --check)" \

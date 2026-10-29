@@ -111,6 +111,7 @@ mkdir "$LOCK"; printf '%s\n' "$DEAD_PID" > "${LOCK}/pid"
 PS_BIN="${SANDBOX}/psbin"; mkdir -p "$PS_BIN"
 printf '#!/bin/sh\nexit 1\n' > "${PS_BIN}/ps"; chmod +x "${PS_BIN}/ps"
 _old_path="$PATH"; PATH="${PS_BIN}:${PATH}"
+# shellcheck disable=SC2034  # read by acquire_cleanup_lock
 CLEANUP_LOCK_HELD=0
 acquire_cleanup_lock; rc=$?
 PATH="$_old_path"
@@ -169,6 +170,7 @@ assert_eq "$(find "$REPORTS_DIR" -name 'plan.json.*' | wc -l | tr -d ' ')" "0" "
 begin_test "plan generation still aborts under errexit when a write fails"
 printf '%s\n' '{"previous": true}' > "$PLAN"
 ( set -e
+  # shellcheck disable=SC2329,SC2059  # overrides the builtin for generate_plan_json; format is the caller's
   printf() { if [[ "${1:-}" == *schema_version* ]]; then return 1; fi; builtin printf "$@"; }
   generate_plan_json "$PLAN" >/dev/null 2>&1 ); rc=$?
 assert_neq "$rc" "0" "a failed write aborts under set -e"
@@ -179,6 +181,7 @@ begin_test "a directory as --plan-file is refused, not written into"
 mkdir -p "${REPORTS_DIR}/plandir"
 generate_plan_json "${REPORTS_DIR}/plandir" >/dev/null 2>&1; rc=$?
 assert_neq "$rc" "0" "directory target refused"
+# shellcheck disable=SC2012  # counting entries; names do not matter
 assert_eq "$(ls -A "${REPORTS_DIR}/plandir" | wc -l | tr -d ' ')" "0" "nothing moved into the directory"
 
 begin_test "apply still aborts under errexit (no fail-open wrapper)"
