@@ -116,6 +116,8 @@ EOF
             needs-permanent) status_str="Not processed";  action_str="Outside HOME: quarantine mode skips it — needs --permanent" ;;
             backup-running) status_str="Not processed"; action_str="Time Machine was backing up — re-run later" ;;
             in-use)  status_str="Not processed";  action_str="In use by a running tool — close it and re-run" ;;
+            failed)  status_str="Failed";         action_str="The cleanup command failed — see the log and re-run" ;;
+            unavailable) status_str="Not processed"; action_str="The cleanup tool is not installed" ;;
             kept-newest) status_str="Kept";           action_str="Only each disk's newest local snapshot exists; it is kept" ;;
             volumes-unknown) status_str="Not processed"; action_str="Another mounted disk's snapshots could not be listed — eject it and re-run" ;;
             partial) status_str="Partly processed"; action_str="Items under HOME done; the rest is outside HOME — needs --permanent" ;;

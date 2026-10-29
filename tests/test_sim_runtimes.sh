@@ -151,6 +151,16 @@ assert_eq "$(deleted)" "1" "simctl runtime delete --unusable ran once"
 assert_eq "$(category_outcome sim-runtimes)" "cleaned" "outcome"
 assert_false "declare -f clean_sim_runtimes | grep -Eq '(^|[^_])(rm|safe_remove) '" "no rm / safe_remove"
 
+begin_test "simctl fails: outcome failed, not cleaned"
+reset_state; analyze_sim_runtimes >/dev/null 2>&1
+printf '#!/bin/sh\necho "xcrun $*" >> "%s"\nexit 1\n' "$CALLS" > "${SANDBOX}/xcrun_fail"
+chmod +x "${SANDBOX}/xcrun_fail"
+cp "${STUB_BIN}/xcrun" "${SANDBOX}/xcrun_ok"; cp "${SANDBOX}/xcrun_fail" "${STUB_BIN}/xcrun"
+clean_sim_runtimes >/dev/null 2>&1
+cp "${SANDBOX}/xcrun_ok" "${STUB_BIN}/xcrun"
+assert_eq "$(deleted)" "1" "simctl ran once"
+assert_eq "$(category_outcome sim-runtimes)" "failed" "outcome"
+
 begin_test "declined: nothing deleted"
 reset_state; analyze_sim_runtimes >/dev/null 2>&1
 confirm_category() { return 1; }

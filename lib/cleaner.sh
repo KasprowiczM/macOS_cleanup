@@ -545,6 +545,20 @@ clean_ios_device_support() {
     done
 }
 
+# native_cleanup_mode_allowed — a native cleanup command (docker prune, simctl
+# delete) runs only in the interactive modes, after its own prompt. The call
+# site already keeps these cleaners out of --auto-safe; this keeps the cleaner
+# itself from running one unasked if it is ever called from another mode.
+native_cleanup_mode_allowed() {
+    [[ "${MODE:-}" == "interactive" || "${MODE:-}" == "dry-run-then-interactive" ]]
+}
+
+# native_tool_available <tool> — the cleaners' one check that a native tool is
+# installed, so a test can say "not installed" without hiding /usr/bin.
+native_tool_available() {
+    command -v "${1:-}" >/dev/null 2>&1
+}
+
 clean_xcode_simulators() {
     # Same bash 3.2 set -u trap as clean_logs: an empty FOUND_DEV_ITEMS makes
     # the loop below an unbound-variable abort, not a zero-iteration loop.
@@ -579,23 +593,28 @@ clean_xcode_simulators() {
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "$(t "simulators_safe_if")" \
             --risk       "$cat_risk" || { mark_category_outcome "simulators" skipped; return 0; }
-            mark_category_outcome "simulators" cleaned
     fi
 
     print_section "Cleaning: iOS Simulators"
     if is_dry_run; then
         print_dry "Would run: xcrun simctl delete unavailable"
         record_native_command_event "xcrun simctl delete unavailable" "planned" "$(catbytes_get "simulators")" "dry-run"
+    elif ! native_cleanup_mode_allowed; then
+        print_skip "Unavailable simulators are deleted only in --interactive."
+        record_native_command_event "xcrun simctl delete unavailable" "skipped" "$(catbytes_get "simulators")" "not interactive"
     else
-        if command -v xcrun &>/dev/null; then
+        if native_tool_available xcrun; then
             if xcrun simctl delete unavailable 2>/dev/null; then
+                mark_category_outcome "simulators" cleaned
                 print_cleaned "$(t "simulators_success")"
                 record_native_command_event "xcrun simctl delete unavailable" "ok" "$(catbytes_get "simulators")" ""
             else
+                mark_category_outcome "simulators" failed
                 record_native_command_event "xcrun simctl delete unavailable" "failed" "$(catbytes_get "simulators")" "xcrun failed"
                 print_warn "$(t "simulators_simctl_err")"
             fi
         else
+            mark_category_outcome "simulators" unavailable
             record_native_command_event "xcrun simctl delete unavailable" "skipped" "$(catbytes_get "simulators")" "xcrun unavailable"
             print_warn "$(t "simulators_xcrun_err")"
         fi
@@ -650,7 +669,8 @@ clean_sim_runtimes() {
         return 0
     fi
 
-    if ! command -v xcrun &>/dev/null; then
+    if ! native_tool_available xcrun; then
+        mark_category_outcome "sim-runtimes" unavailable
         record_native_command_event "$cmd" "skipped" "$bytes" "xcrun unavailable"
         print_warn "xcrun is not available."
         return 0
@@ -660,6 +680,7 @@ clean_sim_runtimes() {
         print_cleaned "Unusable simulator runtimes deleted."
         record_native_command_event "$cmd" "ok" "$bytes" ""
     else
+        mark_category_outcome "sim-runtimes" failed
         record_native_command_event "$cmd" "failed" "$bytes" "xcrun failed"
         print_warn "xcrun simctl runtime delete --unusable failed."
     fi
@@ -929,23 +950,28 @@ clean_docker() {
             --consequence "$(consequence_for_mode "$cat_risk" "native")" \
             --safe-if    "Safe if you do not have important data in stopped containers." \
             --risk       "$cat_risk" || { mark_category_outcome "docker" skipped; return 0; }
-            mark_category_outcome "docker" cleaned
     fi
 
     print_section "Cleaning: Docker (system prune)"
     if is_dry_run; then
         print_dry "Would run: docker system prune -f"
         record_native_command_event "docker system prune -f" "planned" "$(catbytes_get "docker")" "dry-run"
+    elif ! native_cleanup_mode_allowed; then
+        print_skip "Docker prune runs only in --interactive."
+        record_native_command_event "docker system prune -f" "skipped" "$(catbytes_get "docker")" "not interactive"
     else
-        if command -v docker &>/dev/null; then
+        if native_tool_available docker; then
             if docker system prune -f 2>/dev/null; then
+                mark_category_outcome "docker" cleaned
                 print_cleaned "Docker system prune complete."
                 record_native_command_event "docker system prune -f" "ok" "$(catbytes_get "docker")" ""
             else
+                mark_category_outcome "docker" failed
                 record_native_command_event "docker system prune -f" "failed" "$(catbytes_get "docker")" "docker prune failed"
                 print_warn "docker system prune failed or Docker is not running."
             fi
         else
+            mark_category_outcome "docker" unavailable
             record_native_command_event "docker system prune -f" "skipped" "$(catbytes_get "docker")" "docker unavailable"
             print_warn "docker is not available."
         fi

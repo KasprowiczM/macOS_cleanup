@@ -1381,6 +1381,8 @@ CLEANUP_CATEGORY_OUTCOMES=""
 #   kept-newest:     only each disk's newest local snapshot exists; it is kept
 #   volumes-unknown: another mounted APFS disk's snapshots could not be listed
 #   in-use:          the tool that writes this cache was running
+#   failed:          the native cleanup command ran and failed
+#   unavailable:     the native cleanup tool is not installed
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
     [[ -n "$key" && -n "$outcome" ]] || return 0
