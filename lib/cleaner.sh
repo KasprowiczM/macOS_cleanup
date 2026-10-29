@@ -909,6 +909,36 @@ tm_backup_running() {
     return 0
 }
 
+# tm_other_volume_newest_dates — the newest local Time Machine snapshot date
+# of every other writable APFS volume, one per line.
+# `tmutil deletelocalsnapshots <date>` deletes that date on all mounted disks,
+# so such a date must be kept. The startup disk (/ and /System/Volumes/*) is
+# handled by the caller; read-only mounts (simulator runtimes, disk images)
+# cannot lose snapshots. Fails when the mount table cannot be read or parsed,
+# or a volume's snapshot list cannot be read.
+tm_other_volume_newest_dates() {
+    local mounts mline rest mp opts listing line d newest
+    mounts="$(mount 2>/dev/null)" || return 1
+    while IFS= read -r mline; do
+        case "$mline" in *" (apfs, "*) ;; *) continue ;; esac
+        rest="${mline#* on }"
+        mp="${rest% (apfs, *}"
+        opts="${rest##* (apfs, }"
+        [[ "$rest" != "$mline" && "$mp" != "$rest" && "$mp" == /* ]] || return 1
+        case "$mp" in /|/System/Volumes/*) continue ;; esac
+        case ", ${opts%)}," in *", read-only,"*) continue ;; esac
+        listing="$(tmutil listlocalsnapshots "$mp" 2>/dev/null)" || return 1
+        newest=""
+        while IFS= read -r line; do
+            case "$line" in com.apple.TimeMachine.*) ;; *) continue ;; esac
+            d="$(tm_snapshot_date "$line")" || d=""
+            [[ -n "$d" && "$d" > "$newest" ]] && newest="$d"
+        done <<< "$listing"
+        [[ -z "$newest" ]] || echo "$newest"
+    done <<< "$mounts"
+    return 0
+}
+
 clean_time_machine_snapshots() {
     [[ ${#FOUND_TM_SNAPSHOTS[@]} -eq 0 ]] && return
 
@@ -921,18 +951,28 @@ clean_time_machine_snapshots() {
         snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
         [[ -n "$snap_d" && "$snap_d" > "$newest_date" ]] && newest_date="$snap_d"
     done
-    # One entry per date: deletelocalsnapshots works by date.
+    # One entry per date: deletelocalsnapshots works by date, on every
+    # mounted disk, so another APFS volume's newest date is kept as well.
     local -a deletable=()
-    local seen_dates=" "
+    local seen_dates=" " keep_dates=""
+    if (( ${#FOUND_TM_SNAPSHOTS[@]} > 1 )); then
+        if ! keep_dates="$(tm_other_volume_newest_dates)"; then
+            print_warn "Could not list the local snapshots of every mounted disk. Deleting by date affects all disks, so local snapshots are left alone."
+            record_skipped_item "Local Time Machine snapshots: another mounted disk could not be checked"
+            mark_category_outcome "time-machine" volumes-unknown
+            return 0
+        fi
+    fi
     for snap in "${FOUND_TM_SNAPSHOTS[@]}"; do
         snap_d="$(tm_snapshot_date "$snap")" || snap_d=""
         [[ -n "$snap_d" && "$snap_d" != "$newest_date" ]] || continue
+        case $'\n'"${keep_dates}"$'\n' in *$'\n'"${snap_d}"$'\n'*) continue ;; esac
         case "$seen_dates" in *" ${snap_d} "*) continue ;; esac
         seen_dates="${seen_dates}${snap_d} "
         deletable+=("$snap")
     done
     if (( ${#deletable[@]} == 0 )); then
-        print_info "Local Time Machine snapshots: only the newest exists; it is kept."
+        print_info "Local Time Machine snapshots: only the newest of each disk exists; it is kept."
         mark_category_outcome "time-machine" kept-newest
         return 0
     fi
@@ -963,6 +1003,7 @@ clean_time_machine_snapshots() {
     mark_category_outcome "time-machine" cleaned
 
     print_section "Cleaning: local Time Machine snapshots (newest kept: ${newest_date})"
+    print_info "Each date is deleted on every mounted disk; each disk's newest snapshot is kept."
 
     for snap in "${deletable[@]}"; do
         [[ -z "$snap" ]] && continue

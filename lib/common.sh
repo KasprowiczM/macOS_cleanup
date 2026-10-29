@@ -1377,7 +1377,8 @@ CLEANUP_CATEGORY_OUTCOMES=""
 #   needs-permanent: quarantine mode cannot move these paths (outside HOME)
 #   partial:         the paths under HOME were processed, the rest need --permanent
 #   backup-running:  Time Machine was backing up, so no snapshot was deleted
-#   kept-newest:     the only local snapshot is the newest one, which is kept
+#   kept-newest:     only each disk's newest local snapshot exists; it is kept
+#   volumes-unknown: another mounted APFS disk's snapshots could not be listed
 #   in-use:          the tool that writes this cache was running
 mark_category_outcome() {
     local key="${1:-}" outcome="${2:-}"
