@@ -3,19 +3,14 @@
 ---
 
 <p align="center">
-  <img src="assets/macos-cleanup-logo.png" alt="macOS Cleanup Logo" width="350" />
+  <a href="https://macos-cleanup.64bit.site/"><img src="assets/brand-banner.svg" alt="Same Mac. Fresh start. — macOS Cleanup" width="640" /></a>
 </p>
 
-# macOS Cleanup — Professional System Cleaner
+# macOS Cleanup — Same Mac. Fresh start.
 
-> **Professional macOS cleanup tool** — safer than commercial apps, fully transparent, with complete user control over what gets deleted.
+> A local, open-source command-line tool for careful macOS cleanup. Analyze first, review a plan, and choose what to apply.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
-  <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
-  <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-</p>
+[Explore the website](https://macos-cleanup.64bit.site/) · [Support](https://macos-cleanup.64bit.site/support) · [GitHub stars](https://github.com/KasprowiczM/macOS_cleanup/stargazers) · MIT License
 
 ## What is this project?
 
@@ -26,10 +21,13 @@
 - **Waits for your consent** — the default answer is always NO
 - **Moves user data to quarantine** during cleanup modes, so rollback is possible
 - **Never touches** mail data, passwords, cookies, browser profiles, or documents
+- Some native command operations have no rollback; review their consequences before applying them.
+
+The CLI runs locally and does not send system paths, cleanup results, or usage telemetry to an operator service. It does not use `sudo`; system caches are report-only. Quarantine preserves a rollback path but frees **0 bytes** on APFS until you permanently purge the quarantined run. After a purge, APFS snapshots may still retain blocks as Purgeable space; when those blocks are reclaimed is controlled by macOS.
 
 ## Requirements
 
-- macOS 10.15 Catalina or newer (including Sonoma, Sequoia, macOS 15.x)
+- Officially supported on Apple Silicon Macs running macOS 11 Big Sur or newer. The v3.0.7 CLI technical minimum is macOS 10.15; Intel is not blocked by the code but is outside official support.
 - bash 3.2+ (pre-installed on macOS)
 - Python 3.10+ for auxiliary tools `dev-sync/` and safe parsing of `plan.json` in `apply --from-plan`
 - Optional: `bc` (for size calculations), `mdfind` (Spotlight, pre-installed)
@@ -101,17 +99,17 @@ bash cleanup_all.sh --interactive --category time-machine
 ### 5. Analyze / plan / apply
 
 ```bash
-# Alias readable for agents/operators workflow
-bash cleanup_all.sh analyze
+# Read-only analysis
+bash cleanup_all.sh --dry-run
 
 # Analysis + structural JSON plan
-bash cleanup_all.sh plan
+bash cleanup_all.sh plan --plan-file plan.json
 
 # Plan execution: default SAFE only
-bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json
+bash cleanup_all.sh apply --from-plan plan.json
 
 # Simulation of plan execution
-bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json --dry-run
+bash cleanup_all.sh apply --from-plan plan.json --dry-run
 ```
 
 `plan.json` contains operations with an `id`, path or command, category, class (`SAFE`/`REVIEW`/`DANGEROUS`), estimated size, impact description, and recommendation. `apply --from-plan` never executes `DANGEROUS`; `REVIEW` is skipped unless you add `--include-review` and pass the interactive confirmation.

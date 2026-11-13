@@ -1,0 +1,22 @@
+<svg viewBox="15 20 66 56" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+          <title id="title">macOS Cleanup</title><desc id="desc">An isometric storage disk with a green check: the same Mac, a fresh start.</desc><defs>
+            <linearGradient id="brand-rim" x1="19" y1="25" x2="78" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#fff0cc"/><stop offset=".24" stop-color="#d8b17e"/><stop offset=".55" stop-color="#675749"/><stop offset=".78" stop-color="#f0ca8e"/><stop offset="1" stop-color="#8a694a"/></linearGradient>
+            <linearGradient id="brand-side" x1="18" y1="45" x2="78" y2="69" gradientUnits="userSpaceOnUse"><stop stop-color="#5a4534"/><stop offset=".36" stop-color="#242424"/><stop offset=".7" stop-color="#554534"/><stop offset="1" stop-color="#b1895e"/></linearGradient>
+            <linearGradient id="brand-face" x1="24" y1="23" x2="70" y2="59" gradientUnits="userSpaceOnUse"><stop stop-color="#74716a"/><stop offset=".2" stop-color="#383936"/><stop offset=".63" stop-color="#20211f"/><stop offset="1" stop-color="#56504a"/></linearGradient>
+          </defs>
+
+          <path d="M16 42v12c0 11.6 14.3 21 32 21s32-9.4 32-21V42Z" fill="url(#brand-side)"/>
+          <path d="M17 55c2 10.4 15.5 18.5 31 18.5S77 65.4 79 55" stroke="#e9bd83" stroke-opacity=".36" stroke-width="1"/>
+          <ellipse cx="48" cy="42" rx="32" ry="21" fill="url(#brand-rim)"/>
+          <ellipse cx="48" cy="41" rx="28.5" ry="18" fill="url(#brand-face)" stroke="#0d0e0d" stroke-width="1"/>
+          <ellipse cx="48" cy="40.6" rx="25.3" ry="15.4" stroke="#e8d4b0" stroke-opacity=".22" stroke-width=".7"/>
+          <path d="M24 36c4-8 13-12 24-12 10.4 0 18.4 3 23 9" stroke="#fff4db" stroke-opacity=".36" stroke-width="1" stroke-linecap="round"/>
+
+          <g transform="translate(48 41) scale(1 .6) rotate(-90)">
+            <circle stroke="#8dce93" stroke-dasharray="75.4" stroke-dashoffset="56.5" cx="0" cy="0" r="12" stroke-width="24" />
+          </g>
+          <ellipse cx="48" cy="41" rx="9" ry="6.5" fill="#1a1b19" stroke="#dfc5a0" stroke-opacity=".55" stroke-width=".8"/>
+
+          <path  d="m44 41 2.8 2.8 5.4-5.6" stroke="#a5e5ac" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path opacity=".35" d="M22 61c6.5 7.1 15.2 10.5 26 10.5S68 68.1 74 61" stroke="#f2ad5f" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>

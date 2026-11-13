@@ -1,6 +1,6 @@
 # macOS Cleanup — Complete User & Operator Guide
 
-`macOS_cleanup` is a safe, transparent space reclamation tool designed specifically for modern macOS (10.15+ through macOS 26+). It scans disposable development caches, log archives, temporary build artifacts, and package manager stores, moving eligible files into quarantine before permanent removal. It will **never touch** your personal documents, photos, mail accounts, keychains, browser profiles, password managers, or system critical files under any circumstances.
+`macOS_cleanup` is a local command-line tool for analyzing and carefully managing selected macOS caches, logs, temporary build artifacts, and package-manager stores. Official product support is Apple Silicon with macOS 11 or later. The v3.0.7 CLI technical minimum is macOS 10.15; it does not block Intel by architecture, but Intel is outside official support. Eligible user files move to quarantine by default before permanent removal. It will **never touch** your personal documents, photos, mail accounts, keychains, browser profiles, password managers, or system critical files under any circumstances.
 
 ---
 
@@ -21,7 +21,7 @@ Scan your disk safely without changing or deleting anything.
 bash cleanup_all.sh --dry-run
 ```
 
-**Real Output Example:**
+**Illustrative output (values vary by system):**
 ```
 ═══════════════════════════════════════════════════
   macOS_cleanup v3.0.2 — System Analysis
@@ -59,10 +59,10 @@ bash cleanup_all.sh --dry-run
 Create an explicit JSON execution plan file that specifies every path, action, and risk level.
 
 ```bash
-bash cleanup_all.sh plan --out my_plan.json
+bash cleanup_all.sh plan --plan-file my_plan.json
 ```
 
-**Real Output Example:**
+**Illustrative output (values vary by system):**
 ```
   Plan generated successfully: my_plan.json
   Operations: 12 planned (SAFE: 4, REVIEW: 8, DANGEROUS: 0)
@@ -78,7 +78,7 @@ Executes ONLY `SAFE` risk operations into quarantine. `REVIEW` operations are sk
 bash cleanup_all.sh apply --from-plan my_plan.json
 ```
 
-**Real Output Example:**
+**Illustrative output (values vary by system):**
 ```
 ▶ Applying plan: my_plan.json
   ✓ Quarantining: ~/.cache/yarn/v6  (1.2 GB) -> quarantine/2026-08-07_235800/items/...
@@ -89,7 +89,7 @@ bash cleanup_all.sh apply --from-plan my_plan.json
   ────────────────────────────────────────────────
   Freed directly:      1.20 GB
   Quarantined:         1.25 GB (420 items)
-  Purgeable (APFS):    2.45 GB   ← snapshot-retained; returns automatically
+  Purgeable (APFS):    2.45 GB   ← snapshot-retained; macOS controls reclamation
   Free now:            105.26 GB
   ────────────────────────────────────────────────
 ```
@@ -107,7 +107,7 @@ bash cleanup_all.sh --purge-quarantine latest
 bash cleanup_all.sh --purge-quarantine latest --apply
 ```
 
-**Real Output Example:**
+**Illustrative output (values vary by system):**
 ```
 ▶ Purging quarantine run: 2026-08-07_235800
   ✓ Permanently removed quarantine items (1.25 GB)
@@ -136,7 +136,7 @@ bash cleanup_all.sh --purge-quarantine latest --apply
 When you delete files on macOS, `df -h` or Finder may not show an immediate increase in free space. This is expected APFS behavior:
 
 1. **APFS Local Snapshots**: Time Machine creates local snapshots that retain deleted blocks until the snapshot expires or disk space is needed.
-2. **Purgeable Space**: Space retained by APFS local snapshots is classified as **Purgeable**. macOS reclaims this space automatically within 24 hours or immediately when disk pressure increases.
+2. **Purgeable Space**: Space retained by APFS local snapshots is classified as **Purgeable**. macOS may reclaim this space under disk pressure, but the timing is controlled by the operating system and is not guaranteed.
 3. **Checking APFS Purgeable Space**:
    ```bash
    diskutil info /System/Volumes/Data | grep -i "Purgeable"
@@ -159,7 +159,7 @@ bash cleanup_all.sh --restore latest
 bash cleanup_all.sh --restore 2026-08-07_235800
 ```
 
-**Real Output Example:**
+**Illustrative output (values vary by system):**
 ```
 Restoring quarantine from latest run (run ID: 2026-08-07_235800): reports/restore_2026-08-07_235800.tsv
 Other available quarantine runs:
@@ -226,14 +226,16 @@ bash cleanup_all.sh --dry-run --json
 - `0`: Success / all operations completed cleanly.
 - `1`: Non-fatal errors or skipped items.
 - `2`: Invalid argument or missing configuration.
-- `99`: Critical path protection violation (script aborted safely).
+- `0`: Success.
+- `1`: One or more operations were skipped or encountered a non-fatal error.
+- `2`: Invalid argument or missing/invalid configuration.
 
 ---
 
 ## 10. Troubleshooting FAQ
 
 1. **"I ran cleanup and `df -h` didn't change!"**
-   Deleted files are held in APFS local snapshots as **Purgeable space**. Check with `diskutil info /System/Volumes/Data | grep -i Purgeable`. macOS reclaims it automatically.
+   Deleted files are held in APFS local snapshots as **Purgeable space**. Check with `diskutil info /System/Volumes/Data | grep -i Purgeable`. macOS may reclaim it under disk pressure; timing is controlled by the operating system and is not guaranteed.
 2. **"Why was Xcode DerivedData skipped during `--auto-safe`?"**
    DerivedData is classified as `REVIEW` risk to prevent unexpected rebuild delays. Run with `--interactive` or include category `dev` explicitly.
 3. **"How do I clean quarantine files to regain space immediately?"**

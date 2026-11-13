@@ -3,19 +3,14 @@
 ---
 
 <p align="center">
-  <img src="assets/macos-cleanup-logo.png" alt="macOS Cleanup Logo" width="350" />
+  <a href="https://macos-cleanup.64bit.site/de/"><img src="assets/brand-banner.svg" alt="Derselbe Mac. Ein Neuanfang. — macOS Cleanup" width="640" /></a>
 </p>
 
-# macOS Cleanup — Professioneller System Cleaner
+# macOS Cleanup — Derselbe Mac. Ein Neuanfang.
 
-> **Professionelles macOS-Bereinigungstool** — sicherer als kommerzielle Apps, völlig transparent, mit voller Benutzerkontrolle darüber, was gelöscht wird.
+> Ein lokales Open-Source-Kommandozeilenwerkzeug für eine sorgfältige Bereinigung von macOS. Erst analysieren, den Plan prüfen und dann auswählen, was angewendet wird.
 
-<p align="center">
-  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="CI Status" />
-  <img src="https://img.shields.io/badge/macOS-10.15%2B-blue.svg" alt="macOS Version" />
-  <img src="https://img.shields.io/badge/Bash-3.2%2B-lightgrey.svg" alt="Bash Version" />
-  <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License" />
-</p>
+[Projektwebsite ansehen](https://macos-cleanup.64bit.site/de/) · [Support](https://macos-cleanup.64bit.site/support) · [GitHub stars](https://github.com/KasprowiczM/macOS_cleanup/stargazers) · MIT License
 
 ## Was ist dieses Projekt?
 
@@ -26,10 +21,11 @@
 - **Auf Ihre Zustimmung wartet** — die Standardantwort ist immer NEIN
 - **Benutzerdaten in Quarantäne verschiebt** in Bereinigungsmodi, sodass ein Rollback möglich ist
 - **Niemals Mail-Daten, Passwörter, Cookies, Browserprofile oder Dokumente berührt**
+- Einige native Befehlsoperationen lassen sich nicht rückgängig machen; prüfen Sie ihre Folgen vor der Anwendung.
 
 ## Anforderungen
 
-- macOS 10.15 Catalina oder neuer (einschließlich Sonoma, Sequoia, macOS 26.x)
+- Offiziell unterstützt werden Macs mit Apple Silicon und macOS 11 Big Sur oder neuer. Die technische Mindestversion der CLI v3.0.7 ist macOS 10.15; Intel wird vom Code nicht blockiert, liegt aber außerhalb des offiziellen Supports.
 - bash 3.2+ (vorinstalliert auf macOS)
 - Python 3.10+ für Hilfstools in `dev-sync/` und das sichere Parsen von `plan.json` in `apply --from-plan`
 - Optional: `bc` (für Größenberechnungen), `mdfind` (Spotlight, vorinstalliert)
@@ -105,13 +101,13 @@ bash cleanup_all.sh --interactive --category time-machine
 bash cleanup_all.sh analyze
 
 # Analyse + struktureller JSON Plan
-bash cleanup_all.sh plan
+bash cleanup_all.sh plan --plan-file plan.json
 
 # Plan ausführen: standardmäßig nur SAFE
-bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json
+bash cleanup_all.sh apply --from-plan plan.json
 
 # Planausführung simulieren
-bash cleanup_all.sh apply --from-plan reports/plan_<run_id>.json --dry-run
+bash cleanup_all.sh apply --from-plan plan.json --dry-run
 ```
 
 `plan.json` enthält Operationen mit `id`, Pfad oder Befehl, Kategorie, Klasse `SAFE`/`REVIEW`/`DANGEROUS`, geschätzte Größe, Beschreibungen der Konsequenzen und Empfehlung. `apply --from-plan` führt niemals `DANGEROUS` aus; `REVIEW` wird übersprungen, es sei denn, Sie fügen `--include-review` hinzu und gehen durch die interaktive Bestätigung.
