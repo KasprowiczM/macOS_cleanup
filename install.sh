@@ -64,6 +64,16 @@ if [[ -d "$DEST/.git" ]]; then
         exit 1
     fi
     git -C "$DEST" fetch origin "$TARGET_REF"
+    if [[ "$TARGET_REF" != "main" ]] && git -C "$DEST" show-ref --verify --quiet "refs/tags/$TARGET_REF"; then
+        local_release="$(git -C "$DEST" rev-parse "refs/tags/$TARGET_REF^{commit}")"
+        fetched_release="$(git -C "$DEST" rev-parse 'FETCH_HEAD^{commit}')"
+        if [[ "$local_release" != "$fetched_release" ]]; then
+            say "✖  Refusing to update: the local release tag differs from the official release."
+            say "    The repository history may have changed. Your local tag and files were not replaced."
+            say "    Set MACOS_CLEANUP_DIR to a fresh directory and rerun this installer."
+            exit 1
+        fi
+    fi
     if ! git -C "$DEST" checkout "$TARGET_REF"; then
         say "✖  Failed to checkout $TARGET_REF at $DEST."
         say "    Local files were not rewritten."

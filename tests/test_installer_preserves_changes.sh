@@ -185,4 +185,27 @@ fresh_install "$NOSUMS_BARE" "${SANDBOX}/fresh_nosums.out"
 assert_neq "$fresh_rc" "0" "fresh install without SHA256SUMS must abort"
 assert_true "grep -q 'SHA256SUMS is missing' \"${SANDBOX}/fresh_nosums.out\"" "aborted for the missing file"
 
+# --- A rewritten upstream tag must not silently select the stale local tag. ---
+begin_test "rewritten release tag refuses update without rewriting local work"
+MIGRATION_DEST="${SANDBOX}/before_history_migration"
+clone_dest "$MIGRATION_DEST"
+MIGRATION_BARE="${SANDBOX}/rewritten_upstream.git"
+git clone --bare --no-hardlinks "$PROJ_DIR" "$MIGRATION_BARE" >/dev/null 2>&1
+git --git-dir="$MIGRATION_BARE" tag -f v3.0.7 main >/dev/null 2>&1
+point_origin_at_local "$MIGRATION_DEST" "$MIGRATION_BARE"
+MIGRATION_HEAD="$(git -C "$MIGRATION_DEST" rev-parse HEAD)"
+MIGRATION_TAG="$(git -C "$MIGRATION_DEST" rev-parse refs/tags/v3.0.7)"
+export MACOS_CLEANUP_DIR="$MIGRATION_DEST"
+MIGRATION_OUT="${SANDBOX}/migration.out"
+set +e
+PATH="${SHIM_DIR}:${PATH}" /bin/bash "${PROJ_DIR}/install.sh" >"$MIGRATION_OUT" 2>&1
+migration_rc=$?
+set -u
+assert_neq "$migration_rc" "0" "a changed release tag must abort"
+assert_eq "$(git -C "$MIGRATION_DEST" rev-parse HEAD)" "$MIGRATION_HEAD" "migration refusal must preserve HEAD"
+assert_eq "$(git -C "$MIGRATION_DEST" rev-parse refs/tags/v3.0.7)" "$MIGRATION_TAG" "migration refusal must preserve local tag"
+assert_true "grep -q 'release tag differs' \"$MIGRATION_OUT\"" "explain the release history mismatch"
+assert_true "grep -q 'fresh directory' \"$MIGRATION_OUT\"" "offer a fresh installation without replacing local work"
+assert_false "grep -q 'Installed to:' \"$MIGRATION_OUT\"" "refusal must not claim installation success"
+
 print_test_summary

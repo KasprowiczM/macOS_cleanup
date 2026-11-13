@@ -2,7 +2,7 @@
 
 The source history was sanitized on 2026-11-13 to exclude private development captures, generated machine maps, local agent settings and obsolete screenshots. Public authorship and the project license remain. Branch and release-tag names were retained; rewritten commit identifiers differ from earlier private clones.
 
-Use a fresh clone when migrating from an older private checkout. Do not merge an old clone’s unsanitized branches into the public history.
+Use a fresh clone in a separate directory when migrating from an older private checkout. The current main installer refuses to continue when a local release tag points to a different commit than the fetched official tag; it preserves local refs and files. Set MACOS_CLEANUP_DIR to an unused directory for a fresh installation. Do not merge an old clone’s unsanitized branches into the public history.
 
 ## Release integrity
 

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The installer refuses an existing checkout whose release tag differs from the fetched official tag, preserving local refs/files and directing the user to a fresh directory after a history migration.
+
 - **Docker and unavailable-simulator cleanup report what really happened.** `clean_docker` and `clean_xcode_simulators` recorded "cleaned" right after consent, before the command ran, so a failed `docker system prune` was reported as done. "cleaned" is now recorded only after the command succeeds. A failed command is reported as "Failed" and a missing tool as "Not processed — the cleanup tool is not installed" (new outcomes `failed` and `unavailable`, also used by simulator runtimes). A dry-run previews and claims nothing.
 - **Native cleanup commands check the mode themselves.** Both cleaners ran their command in any mode they were called from; only the call site kept them out of `--auto-safe`. They now run it only in the interactive modes and otherwise journal it as skipped (`tests/test_native_cleaner_outcomes.sh`). A reviewed plan applied with `apply --from-plan` still runs `xcrun simctl delete unavailable` through its allowlist and checksum, by design.
 - **Developer caches and Time Machine snapshots follow the same rule.** `clean_dev_caches` (npm, pip, brew, gem and cache removal) and `clean_time_machine_snapshots` previously relied only on their call site; outside the interactive modes they now preview in a dry-run and otherwise do nothing.
