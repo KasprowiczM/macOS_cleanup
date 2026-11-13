@@ -16,7 +16,7 @@ behavior. The product promise must stay conservative and source-backed.
 - `docs/ux_dx_safety_model.md`: `analyze -> plan -> apply`, rollback, risk.
 - `docs/agents/security.md`: non-negotiable safety boundaries.
 - `docs/rules_design.md`: YAML safety semantics and rule taxonomy.
-- `graphify-out/AGENT_PROJECT_MAP.md`: runtime architecture and reports flow.
+- Runtime architecture and reports flow: tracked `lib/` modules and `docs/agents/security.md`.
 
 ## Product Positioning
 

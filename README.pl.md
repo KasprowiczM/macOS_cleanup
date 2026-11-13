@@ -349,7 +349,6 @@ macOS_cleanup/
 ├── dev-sync/               # Pomocniczy sync prywatnego overlayu lokalnego
 ├── DEV_SCRIPTS_README.md   # Operator guide dla dev-sync
 ├── DESIGN.md               # System projektowy UX/UI dla raportów i prototypów
-├── graphify-out/           # Mapa projektu dla agentów (generowana)
 ├── logs/                   # Logi wykonań (auto-generowane)
 ├── reports/                # Raporty Markdown, journal JSONL i manifesty restore
 ├── tests/                  # Scenariusze testowe
@@ -385,7 +384,7 @@ bash dev-sync/dev-sync-export.sh --dry-run --verbose
 
 Szczegóły: `DEV_SCRIPTS_README.md`.
 
-Mapa projektu dla agentów jest generowana przez graphify w `graphify-out/`. Plik `graphify-out/AGENT_PROJECT_MAP.md` zawiera skrót architektury i ścieżkę walidacji dla kolejnych sesji.
+Generowane mapy projektu i zapisane wyniki skanów są lokalnymi artefaktami deweloperskimi wyłączonymi z Git. Zobacz [utrzymanie publicznych źródeł](docs/PUBLIC_SOURCE.md).
 
 ## Rozszerzanie i konfiguracja
 

@@ -40,7 +40,7 @@ PLANNING RULE (NON-NEGOTIABLE): Do not make any changes or write code until you 
 - `@docs/agents/handoff.md` - handing off work state and context compression.
 - `@DEV_SCRIPTS_README.md` - operator guide for `dev-sync/`.
 - `@DESIGN.md` - UX/UI design system for reports, prototypes, and future product surfaces.
-- `@graphify-out/AGENT_PROJECT_MAP.md` - current project map for agents.
+- Generated project maps and machine baselines are local, ignored artifacts; use tracked source and tests as the public contract.
 - `@docs/codex/profiles.md` - mapping of Codex model profiles (default/orchestrator/advisor/workers).
 - `@docs/codex/context_controls.md` - context limits, logs, and compression rules.
 - `@docs/codex/mcp_skills_policy.md` - policy for disabling MCP and skills for this repo.

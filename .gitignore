@@ -56,3 +56,19 @@ dev-sync/__pycache__/
 venv/
 
 CONTINUATION_PROMPT.md
+
+# Private development artifacts (not public source)
+/graphify-out/
+/baseline/
+/docs/history/
+/docs/agents/handoff_*.md
+/.claude/
+/.codex/
+/.gemini/
+/.agents/
+/.agent/
+/.od-skills/
+*.local.md
+/PROMPT_*.md
+/RESUME*
+/ULTRA_REVIEW*.md

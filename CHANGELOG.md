@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Prepared public source by removing private development captures, generated maps, local agent settings and obsolete screenshots from reachable history. Commit/tag identities now use the public GitHub noreply address; tag names remain, but commit identifiers changed.
+- Historical release verifiers explicitly skip G14 when local baseline captures are absent; the skip is visible and is not counted as a pass. Supplied baselines still require equivalence. Checksum manifests were updated for changed verification tools.
+
 - The tests that run cleaners outside a dry-run can no longer reach a real native tool. `stub_native_tools` (`tests/helpers.sh`) puts failing stubs for npm, yarn, pnpm, corepack, pip, pip3, brew, gem, docker, tmutil and xcrun first on PATH and checks that they win; the cleaner, busy-check, empty-array, native-target and native-outcome tests use it, and the end-to-end test also shims pip, pip3 and gem. A test that hid its stubs by setting `PATH=…:/usr/bin:/bin` reached the real `/usr/bin/xcrun` during this work (no simulators existed, so nothing was deleted).
 - The installer tests cover the fresh-clone path as well as the update path: a verified checkout installs, and a checksum mismatch or a missing `SHA256SUMS` aborts after `git clone`.
 
