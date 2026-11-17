@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+# macos-cleanup launcher (marker: macos-cleanup launcher)
+#
+# A thin wrapper over the toolkit's entry points. It works out where the program
+# lives from its own path (following symlinks, so ~/.local/bin/macos-cleanup and its
+# short alias ~/.local/bin/mac-cleanup can simply be links), then hands over with exec. It holds no cleaning logic.
+#
+#   macos-cleanup                      terminal: the interface; no terminal: plain dry-run
+#   macos-cleanup ui [tab]             the interface (dashboard categories quarantine history
+#                                      settings diagnostics help)
+#   macos-cleanup scan [opts]          dry-run scan
+#   macos-cleanup plan [opts]          write a plan, change nothing
+#   macos-cleanup clean [--safe] ...   interactive clean (--safe: auto-safe)
+#   macos-cleanup apply --from-plan P  apply a plan
+#   macos-cleanup restore <run|latest|file>
+#   macos-cleanup quarantine [list|purge <sel> [--apply]]
+#   macos-cleanup history|doctor [--json]
+#   macos-cleanup schedule install|remove|status [--time HH:MM]
+#   macos-cleanup migrate | uninstall | update-self | version | help
+set -o pipefail
+
+mc_self() {
+    local src="$1" dir link
+    while [ -L "$src" ]; do
+        dir="$(cd -P "$(dirname "$src")" 2>/dev/null && pwd)"
+        link="$(readlink "$src")"
+        case "$link" in
+            /*) src="$link" ;;
+            *) src="$dir/$link" ;;
+        esac
+    done
+    dir="$(cd -P "$(dirname "$src")" 2>/dev/null && pwd)" || return 1
+    printf '%s/%s\n' "$dir" "$(basename "$src")"
+}
+
+SELF="$(mc_self "${BASH_SOURCE[0]:-$0}")" || { echo "macos-cleanup: cannot find its own folder. Reinstall it with install.sh." >&2; exit 1; }
+ROOT="$(dirname "$(dirname "$SELF")")"
+SCRIPT_DIR="$ROOT"
+
+mc_version() {
+    local v=""
+    if [ -f "$ROOT/VERSION" ]; then
+        v="$(tr -d '[:space:]' < "$ROOT/VERSION" 2>/dev/null)"
+    elif [ -f "$ROOT/config/defaults.sh" ]; then
+        v="$(sed -n 's/^readonly SCRIPT_VERSION="\([^"]*\)".*/\1/p' "$ROOT/config/defaults.sh" 2>/dev/null | head -n 1)"
+    fi
+    printf '%s\n' "${v:-unknown}"
+}
+
+mc_usage() {
+    cat <<'USAGE_TEXT'
+macos-cleanup: safe, predictable disk cleanup for macOS
+
+Usage: macos-cleanup [command] [options]
+       (mac-cleanup is the same command: the installer links both names)
+
+  (none)                        open the interface on a terminal; otherwise a plain dry-run
+  ui [tab]                      open the interface (dashboard, categories, quarantine,
+                                history, settings, diagnostics, help)
+  scan [options]                dry-run scan; changes nothing
+  plan [options]                write a cleanup plan; changes nothing
+  clean [--safe] [options]      clean interactively (--safe: only the safe tier, one question)
+  apply --from-plan FILE        apply a plan written by "plan" (younger than 24 hours)
+  restore <run|latest|file>     restore items from the quarantine
+  quarantine [list]             list the quarantine
+  quarantine purge <run|expired|all|latest> [--apply]
+  history [--json]              past runs
+  doctor [--json]               read-only readiness report
+  schedule install|remove|status [--time HH:MM]
+                                optional scheduled cleanup (off by default)
+  migrate [--preview|--apply|--undo MANIFEST]
+                                copy data from the version 3 layout (copy-only)
+  update-self [--check|--rollback] [--json]
+                                check for or install a newer release (manual only)
+  uninstall [--dry-run] [--purge-data]
+  version                       print the version
+  help                          this text
+USAGE_TEXT
+}
+
+mc_need() { # mc_need FILE : the program tree must be complete
+    [ -e "$ROOT/$1" ] || {
+        echo "macos-cleanup: ${1} is missing from ${ROOT}." >&2
+        echo "Run the installer again to repair it." >&2
+        exit 1
+    }
+}
+
+mc_engine() { # mc_engine ARGS... : the engine in plain CLI mode
+    mc_need cleanup_all.sh
+    exec bash "$ROOT/cleanup_all.sh" --cli "$@"
+}
+
+mc_ui() { # mc_ui VIEW EXPLICIT [--dry-run]
+    local view="$1" explicit="$2"
+    shift 2
+    mc_need lib/tui.sh
+    # shellcheck disable=SC1091
+    . "$ROOT/lib/tui.sh"
+    MC_TUI_VIEW="$view"
+    if [ "$explicit" = 1 ]; then
+        mc_tui_route --tui "$@"
+    else
+        mc_tui_route "$@"
+    fi
+    local status=$?
+    if [ "$MC_TUI_STARTED" = 1 ]; then
+        exit "$status"
+    fi
+    # No terminal or no interface: plain CLI (default dry-run).
+    mc_engine "$@"
+}
+
+cmd="${1:-}"
+[ "$#" -eq 0 ] || shift
+
+case "$cmd" in
+    "")
+        mc_ui dashboard 0
+        ;;
+    --tui)
+        mc_ui dashboard 1 "$@"
+        ;;
+    --cli)
+        mc_engine "$@"
+        ;;
+    ui|tui)
+        view="${1:-dashboard}"
+        case "$view" in
+            dashboard|categories|quarantine|history|settings|diagnostics|help) [ "$#" -eq 0 ] || shift ;;
+            home) view=dashboard; shift ;;
+            --*) view=dashboard ;;
+            *)
+                echo "macos-cleanup: unknown screen \"$view\"." >&2
+                echo "Screens: dashboard categories quarantine history settings diagnostics help" >&2
+                exit 2
+                ;;
+        esac
+        mc_ui "$view" 1 "$@"
+        ;;
+    scan)
+        mc_engine --dry-run "$@"
+        ;;
+    plan)
+        mc_engine plan "$@"
+        ;;
+    clean)
+        if [ "${1:-}" = "--safe" ]; then
+            shift
+            mc_engine --auto-safe "$@"
+        fi
+        mc_engine --interactive "$@"
+        ;;
+    apply)
+        mc_engine apply "$@"
+        ;;
+    restore)
+        if [ "$#" -lt 1 ]; then
+            echo "macos-cleanup: restore needs a run id, \"latest\" or a manifest file." >&2
+            exit 2
+        fi
+        target="$1"
+        shift
+        mc_engine --restore "$target" "$@"
+        ;;
+    quarantine)
+        sub="${1:-list}"
+        [ "$#" -eq 0 ] || shift
+        case "$sub" in
+            list) mc_engine --list-quarantine "$@" ;;
+            purge)
+                if [ "$#" -lt 1 ]; then
+                    echo "macos-cleanup: quarantine purge needs latest, a run id, all or expired." >&2
+                    exit 2
+                fi
+                selector="$1"
+                shift
+                mc_engine --purge-quarantine "$selector" "$@"
+                ;;
+            *)
+                echo "macos-cleanup: unknown quarantine command \"$sub\" (use list or purge)." >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    history)
+        mc_engine --history "$@"
+        ;;
+    doctor)
+        mc_engine --doctor "$@"
+        ;;
+    schedule)
+        verb="${1:-status}"
+        [ "$#" -eq 0 ] || shift
+        case "$verb" in
+            install|remove|status) mc_engine --schedule "$verb" "$@" ;;
+            *)
+                echo "macos-cleanup: unknown schedule command \"$verb\" (use install, remove or status)." >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    migrate)
+        mc_need scripts/layout_migrate.py
+        exec python3 "$ROOT/scripts/layout_migrate.py" "$@"
+        ;;
+    update-self|update_self)
+        if [ ! -f "$ROOT/scripts/update_self.sh" ]; then
+            echo "macos-cleanup: update-self is not available in this copy (scripts/update_self.sh is missing)." >&2
+            exit 2
+        fi
+        exec bash "$ROOT/scripts/update_self.sh" "$@"
+        ;;
+    uninstall)
+        mc_need uninstall.sh
+        exec bash "$ROOT/uninstall.sh" "$@"
+        ;;
+    version|--version|-V)
+        echo "macos-cleanup $(mc_version)"
+        ;;
+    help|--help|-h)
+        mc_usage
+        ;;
+    *)
+        echo "macos-cleanup: unknown command \"$cmd\"." >&2
+        echo "Run \"macos-cleanup help\" to see the commands." >&2
+        exit 2
+        ;;
+esac

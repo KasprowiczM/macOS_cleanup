@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/macos-cleanup/doctor.schema.json",
+  "title": "macOS Cleanup doctor (--doctor --json)",
+  "type": "object",
+  "required": [
+    "schema_version", "tool", "version", "paths", "runtime", "fda", "disk",
+    "snapshots", "time_machine", "quarantine", "lock", "legacy", "schedule",
+    "checks", "summary"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "tool": {"const": "macos-cleanup"},
+    "version": {"type": "string", "minLength": 1},
+    "paths": {
+      "type": "object",
+      "required": ["program", "config", "state", "quarantine", "mode"],
+      "properties": {
+        "program": {"type": ["string", "null"]},
+        "config": {"type": ["string", "null"]},
+        "state": {"type": ["string", "null"]},
+        "quarantine": {"type": ["string", "null"]},
+        "mode": {"enum": ["env", "checkout", "installed", "default", null]},
+        "rollback_available": {"type": "boolean", "description": "<program>.previous exists (contract section 12.2)."}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["bash", "python3", "python3_ok", "macos", "arch", "lang"],
+      "properties": {
+        "bash": {"type": "string", "minLength": 1},
+        "python3": {"type": ["string", "null"], "description": "Version, or null when python3 is missing or did not answer."},
+        "python3_ok": {"type": "boolean", "description": "python3 >= 3.9, which the interactive UI needs."},
+        "macos": {"type": ["string", "null"]},
+        "arch": {"type": ["string", "null"]},
+        "lang": {"type": "string", "minLength": 1}
+      }
+    },
+    "fda": {
+      "type": "object",
+      "description": "Full Disk Access cannot be queried; it is inferred from directory listings (names only) of protected folders. status uses the contract's granted/denied/unknown, verdict is the finer likely_* form.",
+      "required": ["status", "verdict", "guidance_key", "guidance", "probes"],
+      "properties": {
+        "status": {"enum": ["granted", "denied", "unknown"]},
+        "verdict": {"enum": ["likely_granted", "likely_missing", "unknown"]},
+        "guidance_key": {"enum": ["fda_granted", "fda_missing", "fda_unknown"]},
+        "guidance": {"type": "string", "minLength": 1},
+        "probes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "result", "readable"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "result": {"enum": ["readable", "denied", "absent", "unknown"]},
+              "readable": {"type": "boolean"}
+            }
+          }
+        }
+      }
+    },
+    "disk": {
+      "type": "object",
+      "required": [
+        "volume", "filesystem", "container_total_bytes", "container_free_bytes",
+        "volume_free_bytes", "volume_used_bytes", "purgeable_bytes", "source"
+      ],
+      "properties": {
+        "volume": {"type": ["string", "null"]},
+        "filesystem": {"type": ["string", "null"]},
+        "container_total_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "container_free_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "volume_free_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "volume_used_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "purgeable_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "source": {"enum": ["diskutil", "unknown"]}
+      }
+    },
+    "snapshots": {
+      "type": "object",
+      "required": ["count", "newest"],
+      "properties": {
+        "count": {"type": ["integer", "null"], "minimum": 0, "description": "null when tmutil failed or timed out; never 0 for unknown."},
+        "newest": {"type": ["string", "null"]}
+      }
+    },
+    "time_machine": {
+      "type": "object",
+      "required": ["latest_backup", "age_days"],
+      "properties": {
+        "latest_backup": {"type": ["string", "null"]},
+        "age_days": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "quarantine": {
+      "type": "object",
+      "required": ["bytes", "runs", "same_device_as_home"],
+      "properties": {
+        "bytes": {"type": ["integer", "null"], "minimum": 0},
+        "runs": {"type": ["integer", "null"], "minimum": 0},
+        "same_device_as_home": {"type": ["boolean", "null"]}
+      }
+    },
+    "lock": {
+      "type": "object",
+      "required": ["held", "pid", "stale"],
+      "properties": {
+        "held": {"type": "boolean"},
+        "pid": {"type": ["integer", "null"], "minimum": 0},
+        "stale": {"type": "boolean"}
+      }
+    },
+    "legacy": {
+      "type": "object",
+      "required": ["checkout", "logs", "reports", "orphan_manifests", "migrated"],
+      "properties": {
+        "checkout": {"type": ["string", "null"]},
+        "logs": {"type": "integer", "minimum": 0},
+        "reports": {"type": "integer", "minimum": 0},
+        "orphan_manifests": {"type": "integer", "minimum": 0},
+        "migrated": {"type": "integer", "minimum": 0}
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "required": ["installed", "label", "time", "weekday", "last_run"],
+      "properties": {
+        "installed": {"type": "boolean"},
+        "label": {"const": "com.github.kasprowiczm.macos-cleanup"},
+        "time": {"type": ["string", "null"]},
+        "weekday": {"type": ["string", "null"]},
+        "last_run": {"type": ["string", "null"]}
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "text"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "status": {"enum": ["ok", "warn", "fail"]},
+          "text": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["ok", "warn", "fail"],
+      "properties": {
+        "ok": {"type": "integer", "minimum": 0},
+        "warn": {"type": "integer", "minimum": 0},
+        "fail": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

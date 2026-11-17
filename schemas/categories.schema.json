@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/macos-cleanup/categories.schema.json",
+  "title": "macOS Cleanup categories (--list-categories --json)",
+  "type": "object",
+  "required": ["schema_version", "tool", "version", "categories", "warnings"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "tool": {"const": "macos-cleanup"},
+    "version": {"type": "string", "minLength": 1},
+    "categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id", "section", "tier", "action", "undo", "native_cmd", "unattended", "unit",
+          "label_key", "explain_key", "mode", "mode_source", "effective_auto",
+          "last_scan", "top_items"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,30}$"},
+          "section": {"type": "string", "minLength": 1},
+          "tier": {"enum": ["regenerable", "review", "report"]},
+          "action": {"enum": ["remove", "native", "report"]},
+          "undo": {"enum": ["quarantine", "none"]},
+          "native_cmd": {"type": ["string", "null"]},
+          "unattended": {"type": "boolean"},
+          "unit": {"enum": ["bytes", "count"]},
+          "label_key": {"type": "string", "minLength": 1},
+          "explain_key": {"type": "string", "minLength": 1},
+          "mode": {"enum": ["auto", "review", "skip"]},
+          "mode_source": {"enum": ["default", "user"]},
+          "effective_auto": {"type": "boolean"},
+          "last_scan": {
+            "type": ["object", "null"],
+            "properties": {
+              "run_id": {"type": "string"},
+              "estimated_bytes": {"type": ["integer", "null"], "minimum": 0},
+              "items": {"type": ["integer", "null"], "minimum": 0},
+              "partial": {"type": "boolean"}
+            }
+          },
+          "top_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "bytes"],
+              "properties": {
+                "path": {"type": "string"},
+                "bytes": {"type": "integer", "minimum": 0}
+              }
+            }
+          }
+        }
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "text"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "text": {"type": "string"}
+        }
+      }
+    }
+  }
+}

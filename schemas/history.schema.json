@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/macos-cleanup/history.schema.json",
+  "title": "macOS Cleanup history (--history --json)",
+  "type": "object",
+  "required": ["schema_version", "tool", "version", "runs", "skipped_runs", "warnings"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "tool": {"const": "macos-cleanup"},
+    "version": {"type": "string", "minLength": 1},
+    "runs": {
+      "type": "array",
+      "description": "Newest first, at most 200 runs, from <state>/runs/*/run.json. Fields are null only when the engine could not read them (python3 missing).",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_id", "mode", "started_at", "seconds", "result", "dry_run",
+          "estimated_bytes", "measured_freed_bytes", "quarantined_bytes",
+          "legacy", "restorable", "summary"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "run_id": {"type": "string", "minLength": 1},
+          "mode": {"type": ["string", "null"]},
+          "started_at": {"type": ["string", "null"]},
+          "seconds": {"type": ["integer", "null"], "minimum": 0},
+          "result": {"type": ["string", "null"]},
+          "dry_run": {"type": ["boolean", "null"]},
+          "estimated_bytes": {"type": ["integer", "null"], "minimum": 0},
+          "measured_freed_bytes": {"type": ["integer", "null"], "minimum": 0},
+          "quarantined_bytes": {"type": ["integer", "null"], "minimum": 0},
+          "legacy": {"type": ["boolean", "null"]},
+          "restorable": {"type": ["boolean", "null"], "description": "A quarantine run with a manifest exists for this run id."},
+          "summary": {"type": ["string", "null"], "description": "Path of the run.json this row was read from."}
+        }
+      }
+    },
+    "skipped_runs": {"type": "integer", "minimum": 0},
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "text"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "text": {"type": "string"}
+        }
+      }
+    }
+  }
+}

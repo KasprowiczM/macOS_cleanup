@@ -1,0 +1,40 @@
+# share/app_caches.tsv - per-application cache allowlist (macos-cleanup 4.0).
+#
+# One row per well-known application cache directory the analyzer sizes under
+# the user-caches section. Tab-separated; '#' lines are comments; the first
+# non-comment line is the header and must read: label, path, category.
+#
+#   label     display name; unique; the key the plan and the report show
+#   path      absolute or ~/-relative; one cache directory (removed as a whole)
+#   category  app-caches         allowlisted: regenerable, SAFE, eligible for
+#                                --auto-safe and unattended runs
+#             app-caches-review  everything else: needs a human decision
+#
+# Every path must lie under a root of its category in share/categories.tsv
+# (lib/registry.sh checks this). Source of the entries: analyze_app_specific_caches
+# in lib/analyzer.sh and app_cache_auto_safe in lib/policy.sh (v3.0.7).
+label	path	category
+Slack (Electron cache)	~/Library/Application Support/Slack/Cache	app-caches
+Slack (Code Cache)	~/Library/Application Support/Slack/Code Cache	app-caches
+Slack (GPU Cache)	~/Library/Application Support/Slack/GPUCache	app-caches
+VS Code (Cache)	~/Library/Application Support/Code/Cache	app-caches
+VS Code (Code Cache)	~/Library/Application Support/Code/Code Cache	app-caches
+VS Code (CachedData)	~/Library/Application Support/Code/CachedData	app-caches-review
+VS Code (CachedExtensionVSIXs)	~/Library/Application Support/Code/CachedExtensionVSIXs	app-caches-review
+Cursor (Cache)	~/Library/Application Support/Cursor/Cache	app-caches
+Cursor (Code Cache)	~/Library/Application Support/Cursor/Code Cache	app-caches
+Figma (Cache)	~/Library/Caches/com.figma.Desktop	app-caches-review
+JetBrains IDEs (Cache)	~/Library/Caches/JetBrains	app-caches-review
+JetBrains IDEs (Logs)	~/Library/Logs/JetBrains	app-caches-review
+Adobe (Cache)	~/Library/Caches/Adobe	app-caches-review
+Adobe Media Cache Files	~/Library/Application Support/Adobe/Common/Media Cache Files	app-caches-review
+Adobe Media Cache	~/Library/Application Support/Adobe/Common/Media Cache	app-caches-review
+Microsoft Teams (Cache)	~/Library/Application Support/Microsoft/Teams/Cache	app-caches
+Microsoft Teams (Code Cache)	~/Library/Application Support/Microsoft/Teams/Code Cache	app-caches
+Spotify (Cache)	~/Library/Caches/com.spotify.client	app-caches
+Spotify (PersistentCache)	~/Library/Application Support/Spotify/PersistentCache	app-caches-review
+Discord (Cache)	~/Library/Application Support/discord/Cache	app-caches
+Discord (Code Cache)	~/Library/Application Support/discord/Code Cache	app-caches
+Zoom (Cache)	~/Library/Caches/us.zoom.xos	app-caches
+Xcode (Cache)	~/Library/Caches/com.apple.dt.Xcode	app-caches
+CleanMyMac (Cache)	~/Library/Caches/com.macpaw.CleanMyMac4	app-caches

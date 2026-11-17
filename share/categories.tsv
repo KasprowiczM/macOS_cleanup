@@ -1,0 +1,121 @@
+# share/categories.tsv - the category registry (macos-cleanup 4.0).
+#
+# ONE declarative table of every cleanup category. The analyzer, planner,
+# executor, reporter, event emitter and UI all read it through lib/registry.sh;
+# nothing else may keep a category list (audit finding F17).
+#
+# Format: tab-separated, '#' lines are comments, '-' means empty. The first
+# non-comment line is the header and must name the 16 columns below, in order.
+#
+#   id          category id: [a-z][a-z0-9-]{1,30}; the only valid event 'group'
+#               and --only value
+#   section     v3 --category value: trash user-caches logs system dev
+#               app-leftovers time-machine large-files, or 'overview'
+#               (analyzed only in a full scan, never acted on)
+#   tier        regenerable | review | report
+#   action      remove (safe_remove) | native (allowlisted vendor command) |
+#               report (never acted on)
+#   undo        quarantine (restorable) | none (permanent, or a native tool)
+#   analyzer    the analyze_* function that measures the category
+#   roots       ':'-separated absolute or ~/-relative paths a remove op of this
+#               category may lie under; 'X/*' = strictly below X, never X itself.
+#               For native/report rows the roots are the default target or
+#               measured location, informational: native_target_allowed stays
+#               the authority for native targets.
+#   native_cmd  allowlisted command of a native row (its first word is 'tool')
+#   tool        executable a native row needs (must be installed)
+#   in_use      cache_owner_running key checked before touching the category
+#   unattended  yes only for tier=regenerable, action=remove, undo=quarantine
+#   unit        bytes | count
+#   from_file   yes when 'apply --from-plan' may execute ops of this category
+#   label_key   i18n key of the display name: cat_<id with - as _>
+#   explain_key i18n key of the explanation: explain_<id with - as _>
+#   order       unique integer; rows stay in ascending order (UI and consent
+#               order); the table follows the v4 architecture contract, 3.3
+#
+# Old (v3.0.7 CATEGORY_REGISTRY ledger key) -> new category id. One line per
+# v3 key; lib/registry.sh ignores them, tests/test_registry.sh parses them and
+# the docs writer lifts them into MIGRATING_FROM_V3 and the changelog.
+#
+# rename: trash -> trash
+# rename: user-caches -> user-caches
+# rename: system-caches -> system-caches
+# rename: app-caches -> app-caches,app-caches-review    (split: allowlisted half / other half)
+# rename: user-logs -> user-logs
+# rename: system-logs -> system-logs
+# rename: diagnostic-reports -> diagnostic-reports
+# rename: tmp -> tmp
+# rename: app-leftovers -> app-leftovers
+# rename: xcode-derived -> xcode-derived
+# rename: xcode-archives -> xcode-archives
+# rename: simulators -> simulators
+# rename: sim-runtimes -> sim-runtimes
+# rename: device-support -> device-support
+# rename: npm -> npm
+# rename: npx -> npx
+# rename: yarn -> yarn
+# rename: pnpm -> pnpm
+# rename: pnpm-stale -> pnpm-stale
+# rename: pip -> pip
+# rename: brew -> brew
+# rename: brew-stale -> brew                            (merged: one brew cleanup, estimate = max)
+# rename: gradle -> gradle
+# rename: maven -> maven
+# rename: cocoapods -> cocoapods
+# rename: cargo -> cargo
+# rename: swift-pm -> swift-pm
+# rename: gem -> gem
+# rename: bundler -> bundler
+# rename: composer -> composer
+# rename: android-avd -> android-avd
+# rename: docker -> docker
+# rename: time-machine -> tm-snapshots                  (renamed)
+# rename: ios-backups -> ios-backups
+# rename: installers -> installers
+# rename: browser-caches -> browser-caches
+# rename: browser-data -> browser-data
+# rename: mail-total -> (dropped)                       (a sum of mail-data and the mail container)
+# rename: mail-data -> mail-data
+# rename: mail-downloads -> mail-downloads
+#
+# The v3 section names (--category) are unchanged.
+id	section	tier	action	undo	analyzer	roots	native_cmd	tool	in_use	unattended	unit	from_file	label_key	explain_key	order
+trash	trash	review	remove	quarantine	analyze_trash	~/.Trash/*	-	-	-	no	bytes	yes	cat_trash	explain_trash	10
+user-caches	user-caches	review	remove	quarantine	analyze_user_caches	~/Library/Caches/*	-	-	-	no	bytes	yes	cat_user_caches	explain_user_caches	20
+app-caches	user-caches	regenerable	remove	quarantine	analyze_app_specific_caches	~/Library/Application Support/Slack/Cache:~/Library/Application Support/Slack/Code Cache:~/Library/Application Support/Slack/GPUCache:~/Library/Application Support/Code/Cache:~/Library/Application Support/Code/Code Cache:~/Library/Application Support/Cursor/Cache:~/Library/Application Support/Cursor/Code Cache:~/Library/Application Support/Microsoft/Teams/Cache:~/Library/Application Support/Microsoft/Teams/Code Cache:~/Library/Caches/com.spotify.client:~/Library/Application Support/discord/Cache:~/Library/Application Support/discord/Code Cache:~/Library/Caches/us.zoom.xos:~/Library/Caches/com.apple.dt.Xcode:~/Library/Caches/com.macpaw.CleanMyMac4	-	-	-	yes	bytes	yes	cat_app_caches	explain_app_caches	30
+app-caches-review	user-caches	review	remove	quarantine	analyze_app_specific_caches	~/Library/Application Support/Code/CachedData:~/Library/Application Support/Code/CachedExtensionVSIXs:~/Library/Caches/com.figma.Desktop:~/Library/Caches/JetBrains:~/Library/Logs/JetBrains:~/Library/Caches/Adobe:~/Library/Application Support/Adobe/Common/Media Cache Files:~/Library/Application Support/Adobe/Common/Media Cache:~/Library/Application Support/Spotify/PersistentCache	-	-	-	no	bytes	yes	cat_app_caches_review	explain_app_caches_review	40
+user-logs	logs	review	remove	quarantine	analyze_logs	~/Library/Logs/*	-	-	-	no	bytes	yes	cat_user_logs	explain_user_logs	50
+system-logs	logs	review	remove	none	analyze_logs	/Library/Logs/*:/var/log/*:/private/var/log/*	-	-	-	no	bytes	yes	cat_system_logs	explain_system_logs	60
+diagnostic-reports	logs	review	remove	quarantine	analyze_diagnostic_reports	~/Library/Logs/DiagnosticReports/*:/Library/Logs/DiagnosticReports/*	-	-	-	no	bytes	yes	cat_diagnostic_reports	explain_diagnostic_reports	70
+system-caches	system	report	report	none	analyze_system_caches	/Library/Caches	-	-	-	no	bytes	no	cat_system_caches	explain_system_caches	80
+tmp	system	review	remove	none	analyze_tmp	/private/tmp/*:/tmp/*	-	-	-	no	bytes	yes	cat_tmp	explain_tmp	90
+xcode-derived	dev	regenerable	remove	quarantine	analyze_dev_environment	~/Library/Developer/Xcode/DerivedData	-	-	xcode_derived	yes	bytes	yes	cat_xcode_derived	explain_xcode_derived	100
+xcode-archives	dev	report	report	none	analyze_dev_environment	~/Library/Developer/Xcode/Archives	-	-	-	no	bytes	no	cat_xcode_archives	explain_xcode_archives	110
+simulators	dev	review	native	none	analyze_dev_environment	~/Library/Developer/CoreSimulator/Devices	xcrun simctl delete unavailable	xcrun	-	no	bytes	yes	cat_simulators	explain_simulators	120
+sim-runtimes	dev	review	native	none	analyze_dev_environment	-	xcrun simctl runtime delete --unusable	xcrun	sim_runtimes	no	bytes	no	cat_sim_runtimes	explain_sim_runtimes	130
+device-support	dev	review	remove	quarantine	analyze_ios_device_support	~/Library/Developer/Xcode/iOS DeviceSupport/*:~/Library/Developer/Xcode/watchOS DeviceSupport/*:~/Library/Developer/Xcode/tvOS DeviceSupport/*:~/Library/Developer/Xcode/macOS DeviceSupport/*	-	-	-	no	bytes	yes	cat_device_support	explain_device_support	140
+npm	dev	regenerable	native	none	analyze_dev_environment	~/.npm	npm cache clean --force	npm	-	no	bytes	yes	cat_npm	explain_npm	150
+npx	dev	regenerable	remove	quarantine	analyze_dev_environment	~/.npm/_npx	-	-	npx_cache	yes	bytes	yes	cat_npx	explain_npx	160
+yarn	dev	regenerable	native	none	analyze_dev_environment	~/Library/Caches/Yarn:~/.yarn	yarn cache clean	yarn	-	no	bytes	yes	cat_yarn	explain_yarn	170
+pnpm	dev	regenerable	native	none	analyze_dev_environment	~/Library/pnpm/store:~/.pnpm-store:~/.local/share/pnpm/store	pnpm store prune	pnpm	-	no	bytes	yes	cat_pnpm	explain_pnpm	180
+pnpm-stale	dev	review	remove	quarantine	analyze_dev_environment	~/Library/pnpm/store/*:~/.local/share/pnpm/store/*	-	-	pnpm_stale_store	no	bytes	yes	cat_pnpm_stale	explain_pnpm_stale	190
+pip	dev	regenerable	native	none	analyze_dev_environment	~/Library/Caches/pip	pip cache purge	pip	-	no	bytes	yes	cat_pip	explain_pip	200
+brew	dev	review	native	none	analyze_dev_environment	~/Library/Caches/Homebrew	brew cleanup --prune=all	brew	-	no	bytes	yes	cat_brew	explain_brew	210
+gradle	dev	regenerable	remove	quarantine	analyze_dev_environment	~/.gradle/caches	-	-	gradle_cache	yes	bytes	yes	cat_gradle	explain_gradle	220
+maven	dev	report	report	none	analyze_dev_environment	~/.m2/repository	-	-	-	no	bytes	no	cat_maven	explain_maven	230
+cocoapods	dev	regenerable	remove	quarantine	analyze_dev_environment	~/Library/Caches/CocoaPods	-	-	cocoapods_cache	yes	bytes	yes	cat_cocoapods	explain_cocoapods	240
+cargo	dev	regenerable	remove	quarantine	analyze_dev_environment	~/.cargo/registry	-	-	cargo_cache	yes	bytes	yes	cat_cargo	explain_cargo	250
+swift-pm	dev	regenerable	remove	quarantine	analyze_dev_environment	~/Library/Caches/org.swift.swiftpm:~/.swiftpm/cache	-	-	swift_pm_cache	yes	bytes	yes	cat_swift_pm	explain_swift_pm	260
+gem	dev	review	native	none	analyze_dev_environment	~/.gem/cache	gem cleanup	gem	-	no	bytes	yes	cat_gem	explain_gem	270
+bundler	dev	regenerable	remove	quarantine	analyze_dev_environment	~/.bundle/cache	-	-	bundler_cache	yes	bytes	yes	cat_bundler	explain_bundler	280
+composer	dev	regenerable	remove	quarantine	analyze_dev_environment	~/.composer/cache:~/Library/Caches/composer	-	-	composer_cache	yes	bytes	yes	cat_composer	explain_composer	290
+android-avd	dev	report	report	none	analyze_dev_environment	~/.android/avd	-	-	-	no	bytes	no	cat_android_avd	explain_android_avd	300
+docker	dev	review	native	none	analyze_dev_environment	-	docker system prune -f	docker	-	no	bytes	no	cat_docker	explain_docker	310
+app-leftovers	app-leftovers	report	report	none	analyze_app_leftovers	~/Library/Application Support/*	-	-	-	no	bytes	no	cat_app_leftovers	explain_app_leftovers	320
+tm-snapshots	time-machine	review	native	none	analyze_time_machine	-	tmutil deletelocalsnapshots	tmutil	-	no	count	no	cat_tm_snapshots	explain_tm_snapshots	330
+ios-backups	time-machine	review	remove	quarantine	analyze_ios_backups	~/Library/Application Support/MobileSync/Backup/*	-	-	-	no	bytes	yes	cat_ios_backups	explain_ios_backups	340
+installers	large-files	review	remove	quarantine	analyze_large_dmg_pkg	~/Downloads/*	-	-	-	no	bytes	yes	cat_installers	explain_installers	350
+browser-caches	overview	report	report	none	analyze_browser_storage	~/Library/Caches/com.apple.Safari:~/Library/Caches/Google/Chrome:~/Library/Caches/Firefox:~/Library/Caches/Microsoft Edge:~/Library/Caches/BraveSoftware/Brave-Browser	-	-	-	no	bytes	no	cat_browser_caches	explain_browser_caches	360
+browser-data	overview	report	report	none	analyze_browser_storage	~/Library/Safari:~/Library/Application Support/Google/Chrome:~/Library/Application Support/Firefox:~/Library/Application Support/Microsoft Edge:~/Library/Application Support/BraveSoftware	-	-	-	no	bytes	no	cat_browser_data	explain_browser_data	370
+mail-data	overview	report	report	none	analyze_mail_storage	~/Library/Mail	-	-	-	no	bytes	no	cat_mail_data	explain_mail_data	380
+mail-downloads	overview	report	report	none	analyze_mail_storage	~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads	-	-	-	no	bytes	no	cat_mail_downloads	explain_mail_downloads	390

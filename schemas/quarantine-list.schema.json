@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/macos-cleanup/quarantine-list.schema.json",
+  "title": "macOS Cleanup quarantine listing (--list-quarantine --json)",
+  "type": "object",
+  "required": ["schema_version", "tool", "version", "root", "retention_days", "runs", "totals", "warnings"],
+  "additionalProperties": true,
+  "properties": {
+    "schema_version": {"const": "2.0"},
+    "tool": {"const": "macos-cleanup"},
+    "version": {"type": "string", "minLength": 1},
+    "root": {"type": "string", "minLength": 1},
+    "retention_days": {"type": "integer", "minimum": 0},
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "run_id", "path", "bytes", "items", "items_total", "items_restored", "bytes_remaining", "empty", "created_at", "age_days", "expired",
+          "manifest", "restorable", "not_restorable_reason",
+          "restorable_items", "conflicting_items", "tool_version"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "run_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "bytes": {"type": ["integer", "null"], "minimum": 0, "description": "null when the size could not be measured; never 0 for unknown."},
+          "items": {"type": ["integer", "null"], "minimum": 0, "description": "Manifest rows; null when there is no manifest."},
+          "items_total": {"type": ["integer", "null"], "minimum": 0, "description": "Same as items (contract section 12.1)."},
+          "items_restored": {"type": ["integer", "null"], "minimum": 0, "description": "Rows the run journal records as restored; null when unknown."},
+          "bytes_remaining": {"type": ["integer", "null"], "minimum": 0, "description": "Manifest bytes of rows not yet restored; null when unknown."},
+          "empty": {"type": "boolean", "description": "Every manifest row is recorded as restored."},
+          "created_at": {"type": ["string", "null"]},
+          "age_days": {"type": ["integer", "null"], "minimum": 0},
+          "expired": {"type": "boolean"},
+          "manifest": {"enum": ["ok", "legacy", "missing"]},
+          "restorable": {"type": "boolean"},
+          "not_restorable_reason": {"enum": [null, "manifest_missing", "all_restored", "all_originals_exist", "nothing_left"]},
+          "restorable_items": {"type": ["integer", "null"], "minimum": 0},
+          "conflicting_items": {"type": ["integer", "null"], "minimum": 0},
+          "tool_version": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["bytes", "runs", "expired_runs"],
+      "properties": {
+        "bytes": {"type": ["integer", "null"], "minimum": 0},
+        "runs": {"type": "integer", "minimum": 0},
+        "expired_runs": {"type": "integer", "minimum": 0}
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "text"],
+        "properties": {
+          "code": {"type": "string", "minLength": 1},
+          "text": {"type": "string"}
+        }
+      }
+    }
+  }
+}
