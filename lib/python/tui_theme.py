@@ -9,7 +9,7 @@ import re
 
 GLYPHS_UNICODE = dict(
     tl='╭', tr='╮', bl='╰', br='╯', h='─', v='│', tee_l='├', tee_r='┤',
-    marker='▶', ok='✓', current='•', needs='!', fail='✗', running='⟳', pending='○', off='–',
+    marker='▶', ok='✓', current='•', needs='!', fail='✗', stopped='■', running='⟳', pending='○', off='–',
     check_on='[✓]', check_off='[ ]', radio_on='●', radio_off='○', arrow='→', ellipsis='…',
     bar_full='█', bar_empty='─', bar_parts=('', '▏', '▎', '▍', '▌', '▋', '▊', '▉'),
     spinner=('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'), expand='▾', collapse='▸',
@@ -17,7 +17,7 @@ GLYPHS_UNICODE = dict(
 )
 GLYPHS_ASCII = dict(
     tl='+', tr='+', bl='+', br='+', h='-', v='|', tee_l='+', tee_r='+',
-    marker='>', ok='+', current='=', needs='!', fail='x', running='*', pending='o', off='-',
+    marker='>', ok='+', current='=', needs='!', fail='x', stopped='#', running='*', pending='o', off='-',
     check_on='[x]', check_off='[ ]', radio_on='(*)', radio_off='( )', arrow='->', ellipsis='...',
     bar_full='#', bar_empty='.', bar_parts=('',) * 8,
     spinner=('|', '/', '-', '\\'), expand='v', collapse='>',

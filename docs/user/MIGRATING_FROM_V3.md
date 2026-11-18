@@ -1,10 +1,10 @@
 # Migrating from 3.x
 
-**macOS Cleanup 4.0.2.** This page lists what changed since 3.0.7 and how to bring your old runs along. Nothing here deletes your old files.
+**macOS Cleanup 4.0.3.** This page lists what changed since 3.0.7 and how to bring your old runs along. Nothing here deletes your old files.
 
 ## The short version
 
-1. Install 4.0.2 (see [INSTALL.md](INSTALL.md)). It leaves your old 3.x folder alone.
+1. Install 4.0.3 (see [INSTALL.md](INSTALL.md)). It leaves your old 3.x folder alone.
 2. Run `macos-cleanup migrate --preview` to see what would be copied.
 3. Run `macos-cleanup migrate --apply` to copy it.
 4. Quarantine runs you made with 3.x stay restorable with `macos-cleanup restore`.

@@ -181,7 +181,7 @@ i18n_get_pt() {
         leftovers_ok) echo "Nenhum resto claro de aplicação desinstalada." ;;
         leftovers_heuristic_note) echo "(Análise heurística — pode não detetar tudo)" ;;
         leftovers_found) echo "Restos potenciais" ;;
-        leftovers_warn) echo "Nota: heurística — verificar antes de remover" ;;
+        leftovers_warn) echo "Heurística — verificar antes de remover" ;;
         dev_section) echo "Ambiente de Desenvolvimento" ;;
         archives_check_needed) echo "Arquivos de compilação — verificar se ainda necessários" ;;
         simulators_found) echo "Simuladores indisponíveis" ;;
@@ -273,8 +273,9 @@ i18n_get_pt() {
         cli_report_saved_dryrun) echo "Relatório guardado. Modo de análise (dry-run) concluído sem limpeza." ;;
         cli_report_saved_next) echo "Relatório guardado. Quando estiver pronto:" ;;
         cli_analysis_complete) echo "Análise concluída. A passar para a limpeza." ;;
-        cli_auto_safe_warn) echo "Clean safe: só são limpas as categorias em modo automático, e apenas através da quarentena." ;;
+        cli_auto_safe_warn) echo "Clean safe: só são limpas as categorias em modo automático; os itens classificados como DANGEROUS nunca são incluídos. Em modo de quarentena os ficheiros podem ser restaurados; em modo permanente, não." ;;
         cli_auto_safe_prompt) echo "Mover agora para a quarentena os itens das categorias automáticas?" ;;
+        cli_auto_safe_prompt_permanent) echo "Excluir agora permanentemente os itens das categorias automáticas? Não pode ser desfeito." ;;
         cli_auto_safe_cancelled) echo "Limpeza auto-safe cancelada pelo utilizador." ;;
 
         backup_check) echo "Verificação da cópia de segurança do Time Machine" ;;
@@ -284,7 +285,7 @@ i18n_get_pt() {
         cli_allowed) echo "Permitido" ;;
         cli_app_caches_review) echo "Caches de aplicações (revisão necessária)" ;;
         cli_apply_requires_plan) echo "O modo --apply requer um ficheiro de plano (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "A limpeza automática afeta apenas categorias SEGURAS." ;;
+        cli_auto_safe_desc1) echo "A limpeza automática afeta as categorias em modo automático (os itens DANGEROUS nunca) e elimina permanentemente." ;;
         cli_auto_safe_desc1_q) echo "A limpeza automática move ficheiros para a quarentena." ;;
         cli_auto_safe_desc2) echo "As restantes categorias requerem a opção --interactive." ;;
         cli_auto_safe_only) echo "Limpar apenas as categorias automáticas" ;;

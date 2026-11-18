@@ -6,7 +6,7 @@
 
 # macOS Cleanup
 
-**Wersja 4.0.2** · Mac z procesorem Apple Silicon · macOS 11 lub nowszy · [Strona](https://macos-cleanup.64bit.site/pl/) · [Wsparcie](https://macos-cleanup.64bit.site/support) · [Licencja MIT](LICENSE) · [Zmiany](CHANGELOG.md)
+**Wersja 4.0.3** · Mac z procesorem Apple Silicon · macOS 11 lub nowszy · [Strona](https://macos-cleanup.64bit.site/pl/) · [Wsparcie](https://macos-cleanup.64bit.site/support) · [Licencja MIT](LICENSE) · [Zmiany](CHANGELOG.md)
 
 Lokalne narzędzie do ostrożnego odzyskiwania miejsca na dysku w macOS. Najpierw mierzy, potem pokazuje plan i działa tylko na tym, co zatwierdzisz. Większość usunięć trafia do folderu kwarantanny, z którego da się je przywrócić. Ma interfejs w terminalu oraz zwykły tryb wiersza poleceń i nigdy nie używa `sudo`.
 
@@ -71,13 +71,13 @@ Kwarantanna to cofnięcie, nie kopia zapasowa. Przed pierwszym prawdziwym czyszc
 /bin/bash -c "$(curl -fsSL https://github.com/KasprowiczM/macOS_cleanup/releases/latest/download/install.sh)"
 ```
 
-Instalator pobiera paczkę wydania i plik `SHA256SUMS`, sprawdza sumę kontrolną, umieszcza program w `~/.local/share/macos-cleanup` i tworzy dowiązanie `~/.local/bin/macos-cleanup`. Nie wymaga `git`, nigdy nie używa `sudo`, nie zmienia Twoich ustawień, stanu ani kwarantanny, nie włącza uruchamiania automatycznego i nigdy nie rozpoczyna czyszczenia. Aby zainstalować konkretne wydanie: `install.sh --version 4.0.2`.
+Instalator pobiera paczkę wydania i plik `SHA256SUMS`, sprawdza sumę kontrolną, umieszcza program w `~/.local/share/macos-cleanup` i tworzy dowiązanie `~/.local/bin/macos-cleanup`. Nie wymaga `git`, nigdy nie używa `sudo`, nie zmienia Twoich ustawień, stanu ani kwarantanny, nie włącza uruchamiania automatycznego i nigdy nie rozpoczyna czyszczenia. Aby zainstalować konkretne wydanie: `install.sh --version 4.0.3`.
 
 Jeśli wolisz sam sprawdzić pobrany plik:
 
 ```bash
-curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.2/macos-cleanup-4.0.2.tar.gz
-curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.2/SHA256SUMS
+curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.3/macos-cleanup-4.0.3.tar.gz
+curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.3/SHA256SUMS
 shasum -a 256 -c SHA256SUMS --ignore-missing
 ```
 

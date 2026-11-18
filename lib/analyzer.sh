@@ -465,9 +465,15 @@ analyze_disk_overview() {
 
     # --- Basic disk usage ---
     echo -e "  ${C_BOLD}$(t "disk_volumes_header")${C_RESET}"
-    optional_command_with_timeout "$SCAN_TOOL_TIMEOUT" df -h "$target_vol" 2>/dev/null | awk 'NR==1{next} {
-        printf "    Size: %s  |  Used: %s  |  Free: %s  (%s)\n", $2, $3, $4, $5
-    }' || true
+    local df_size="" df_used="" df_free="" df_pct=""
+    # df -k, so the sizes go through bytes_to_human like every other size here.
+    # The last df column is Capacity: the USED share, not the free one.
+    read -r df_size df_used df_free df_pct < <(optional_command_with_timeout "$SCAN_TOOL_TIMEOUT" df -k "$target_vol" 2>/dev/null | \
+        awk 'NR==2{printf "%.0f %.0f %.0f %s\n", $2*1024, $3*1024, $4*1024, $5}') || true
+    if [[ -n "$df_size" && -n "$df_pct" ]]; then
+        printf '    Size: %s  |  Used: %s (%s)  |  Free: %s\n' \
+            "$(bytes_to_human "$df_size")" "$(bytes_to_human "$df_used")" "$df_pct" "$(bytes_to_human "$df_free")"
+    fi
     echo
 
     # --- APFS Free & Purgeable space ---
@@ -562,7 +568,7 @@ analyze_disk_overview() {
                 (
                     home_rc=0
                     optional_command_with_timeout "$home_limit" \
-                        du -x -sh -I 'Mobile Documents' -I CloudStorage "$home_dir" \
+                        du -x -sk -I 'Mobile Documents' -I CloudStorage "$home_dir" \
                         > "$home_tmp/$home_n.out" 2>/dev/null || home_rc=$?
                     printf '%s\n' "$home_rc" > "$home_tmp/$home_n.rc"
                 ) &
@@ -589,9 +595,11 @@ analyze_disk_overview() {
             rmdir "$home_tmp" 2>/dev/null || true
         fi
         if [[ -n "$home_top" ]]; then
-            printf '%s' "$home_top" | sort -rh 2>/dev/null | head -10 | \
-                while IFS= read -r line; do
-                    echo "    $line"
+            # du -sk prints "<KiB><tab><path>"; sizes are shown through bytes_to_human.
+            printf '%s' "$home_top" | sort -rn 2>/dev/null | head -10 | \
+                while IFS=$'\t' read -r home_kb home_path; do
+                    case "$home_kb" in ''|*[!0-9]*) continue ;; esac
+                    echo "    $(bytes_to_human $(( home_kb * 1024 )))  ${home_path}"
                 done || true
         fi
         if [[ -n "$home_slow" ]]; then

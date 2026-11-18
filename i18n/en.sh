@@ -180,7 +180,7 @@ i18n_get_en() {
         leftovers_ok) echo "No clear uninstalled application leftovers found." ;;
         leftovers_heuristic_note) echo "(Heuristic analysis — may not detect everything)" ;;
         leftovers_found) echo "Potential leftovers" ;;
-        leftovers_warn) echo "Note: heuristic — verify before deleting" ;;
+        leftovers_warn) echo "Heuristic — verify before deleting" ;;
         dev_section) echo "Developer Environment" ;;
         archives_check_needed) echo "Build archives — check if still needed" ;;
         simulators_found) echo "Unavailable iOS/watchOS/tvOS simulators" ;;
@@ -273,8 +273,9 @@ i18n_get_en() {
         cli_report_saved_dryrun) echo "Report saved. Dry-run mode completed without cleanup." ;;
         cli_report_saved_next) echo "Report saved. When ready:" ;;
         cli_analysis_complete) echo "Analysis complete. Moving to cleanup now." ;;
-        cli_auto_safe_warn) echo "Clean safe: only categories in automatic mode are cleaned, and only through quarantine." ;;
+        cli_auto_safe_warn) echo "Clean safe: only categories in automatic mode are cleaned; items rated DANGEROUS are never included. In quarantine mode the files can be restored; in permanent mode they cannot." ;;
         cli_auto_safe_prompt) echo "Move the items of the automatic categories to quarantine now?" ;;
+        cli_auto_safe_prompt_permanent) echo "Delete the items of the automatic categories permanently now? This cannot be undone." ;;
         cli_auto_safe_cancelled) echo "Auto-safe cleanup cancelled by user." ;;
 
         backup_check) echo "Time Machine backup verification" ;;
@@ -284,7 +285,7 @@ i18n_get_en() {
         cli_allowed) echo "Allowed" ;;
         cli_app_caches_review) echo "App Caches (Review required)" ;;
         cli_apply_requires_plan) echo "Mode --apply requires plan file (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "Auto-cleaning only affects SAFE categories." ;;
+        cli_auto_safe_desc1) echo "Auto-cleaning affects the categories set to auto mode (DANGEROUS items never) and deletes permanently." ;;
         cli_auto_safe_desc1_q) echo "Auto-cleaning moves files to quarantine." ;;
         cli_auto_safe_desc2) echo "Other categories require the --interactive flag." ;;
         cli_auto_safe_only) echo "Clean only the automatic categories" ;;

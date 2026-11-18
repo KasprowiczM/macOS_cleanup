@@ -140,12 +140,25 @@ def read_unreadable(state_dir, run_id):
     return out[:5000]
 
 
-def latest_plan(models, state_dir, max_age_hours=24, now=None):
-    """(plan_path, run_id) of the newest run whose plan is younger than max_age_hours."""
+def dry_run_row(row, type_of=None):
+    """True for a history row of a scan or preview (a dry run): the only runs whose plan.json covers every
+    category. A cleaning run writes its own plan, narrowed to its --only list, so its plan is not the plan a
+    later Clean safe would act on. ``type_of(row)`` gives the run type (the app's facts, which also read the
+    event stream); without it the row's mode decides. Known gap: a CLI ``--dry-run --only x`` run qualifies
+    too, because the --only ids are recorded nowhere the interface can read."""
+    from tui_runfacts import type_from_mode
+    kind = type_of(row) if type_of else type_from_mode(row.get('mode'))
+    return kind in ('scan', 'preview') or bool(row.get('dry_run'))
+
+
+def latest_plan(models, state_dir, max_age_hours=24, now=None, type_of=None):
+    """(plan_path, run_id) of the newest dry run whose plan is younger than max_age_hours."""
     import time
     from tui_plan import known_plan_path
     now = time.time() if now is None else now
     for row in models.history_rows():
+        if not dry_run_row(row, type_of):
+            continue
         run_id = row['run_id']
         path = os.path.join(state_dir, 'runs', run_id, 'plan.json')
         if not os.path.isfile(path) or os.path.islink(path) or not known_plan_path(path, state_dir):

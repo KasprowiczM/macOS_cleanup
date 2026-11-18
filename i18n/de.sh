@@ -181,7 +181,7 @@ i18n_get_de() {
         leftovers_ok) echo "Keine Anwendungsreste gefunden." ;;
         leftovers_heuristic_note) echo "(Heuristische Analyse)" ;;
         leftovers_found) echo "Mögliche Reste" ;;
-        leftovers_warn) echo "Hinweis: Vor Löschung prüfen" ;;
+        leftovers_warn) echo "Vor Löschung prüfen" ;;
         dev_section) echo "Entwicklerumgebung" ;;
         archives_check_needed) echo "Build-Archive — Prüfung erforderlich" ;;
         simulators_found) echo "Nicht verfügbare Simulatoren" ;;
@@ -273,8 +273,9 @@ i18n_get_de() {
         cli_report_saved_dryrun) echo "Bericht gespeichert. Dry-Run ohne Bereinigung beendet." ;;
         cli_report_saved_next) echo "Bericht gespeichert. Wenn bereit:" ;;
         cli_analysis_complete) echo "Analyse abgeschlossen. Die Bereinigung beginnt jetzt." ;;
-        cli_auto_safe_warn) echo "Sicher bereinigen: Es werden nur Kategorien im automatischen Modus bereinigt, und nur über die Quarantäne." ;;
+        cli_auto_safe_warn) echo "Sicher bereinigen: Es werden nur Kategorien im automatischen Modus bereinigt; als DANGEROUS eingestufte Objekte werden nie einbezogen. Im Quarantänemodus lassen sich die Dateien wiederherstellen, im dauerhaften Modus nicht." ;;
         cli_auto_safe_prompt) echo "Die Objekte der automatischen Kategorien jetzt in die Quarantäne verschieben?" ;;
+        cli_auto_safe_prompt_permanent) echo "Die Objekte der automatischen Kategorien jetzt endgültig löschen? Das kann nicht rückgängig gemacht werden." ;;
         cli_auto_safe_cancelled) echo "Automatische sichere Bereinigung vom Benutzer abgebrochen." ;;
 
         backup_check) echo "Überprüfung des Time-Machine-Backups" ;;
@@ -284,7 +285,7 @@ i18n_get_de() {
         cli_allowed) echo "Erlaubt" ;;
         cli_app_caches_review) echo "App-Caches (Überprüfung erforderlich)" ;;
         cli_apply_requires_plan) echo "Modus --apply erfordert Plandatei (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "Die automatische Bereinigung betrifft nur SICHERE Kategorien." ;;
+        cli_auto_safe_desc1) echo "Die automatische Bereinigung betrifft die Kategorien im Automatikmodus (DANGEROUS-Objekte nie) und löscht endgültig." ;;
         cli_auto_safe_desc1_q) echo "Die automatische Bereinigung verschiebt Dateien in die Quarantäne." ;;
         cli_auto_safe_desc2) echo "Andere Kategorien erfordern das Flag --interactive." ;;
         cli_auto_safe_only) echo "Nur die automatischen Kategorien bereinigen" ;;

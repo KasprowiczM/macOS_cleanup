@@ -87,7 +87,7 @@ class SettingsScreen(Screen):
         if kind in ('int', 'time'):
             return str(value)
         if key == 'schedule':
-            return app.t('ui_installed') if app.schedule().get('state') == 'on' else ''
+            return app.t('ui_installed') if app.schedule().get('state') == 'on' else app.glyphs['arrow']      # an action row like the others
         if key == 'excludes':
             return app.t('ui_entries', count=len(app.excluded))
         if key == 'category_modes':

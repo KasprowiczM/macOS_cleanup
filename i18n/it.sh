@@ -181,7 +181,7 @@ i18n_get_it() {
         leftovers_ok) echo "Nessun residuo chiaro di app disinstallate." ;;
         leftovers_heuristic_note) echo "(Analisi euristica)" ;;
         leftovers_found) echo "Residui potenziali" ;;
-        leftovers_warn) echo "Nota: euristica — verificare prima di eliminare" ;;
+        leftovers_warn) echo "Euristica — verificare prima di eliminare" ;;
         dev_section) echo "Ambiente di Sviluppo" ;;
         archives_check_needed) echo "Archivi di build — verificare se ancora necessari" ;;
         simulators_found) echo "Simulatori non disponibili" ;;
@@ -273,8 +273,9 @@ i18n_get_it() {
         cli_report_saved_dryrun) echo "Report salvato. Analisi (dry-run) completata senza alcuna pulizia." ;;
         cli_report_saved_next) echo "Report salvato. Quando sei pronto:" ;;
         cli_analysis_complete) echo "Analisi completata. Passaggio alla pulizia." ;;
-        cli_auto_safe_warn) echo "Pulisci i sicuri: vengono pulite solo le categorie in modalità automatica, e solo tramite la quarantena." ;;
+        cli_auto_safe_warn) echo "Pulisci i sicuri: vengono pulite solo le categorie in modalità automatica; gli elementi classificati DANGEROUS non vengono mai inclusi. In modalità quarantena i file si possono ripristinare, in modalità permanente no." ;;
         cli_auto_safe_prompt) echo "Spostare ora in quarantena gli elementi delle categorie automatiche?" ;;
+        cli_auto_safe_prompt_permanent) echo "Eliminare ora definitivamente gli elementi delle categorie automatiche? Non può essere annullato." ;;
         cli_auto_safe_cancelled) echo "Pulizia auto-safe annullata dall'utente." ;;
 
         backup_check) echo "Verifica del backup Time Machine" ;;
@@ -284,7 +285,7 @@ i18n_get_it() {
         cli_allowed) echo "Consentito" ;;
         cli_app_caches_review) echo "Cache applicazioni (verifica richiesta)" ;;
         cli_apply_requires_plan) echo "La modalità --apply richiede un file di piano (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "La pulizia automatica influisce solo sulle categorie SICURE." ;;
+        cli_auto_safe_desc1) echo "La pulizia automatica riguarda le categorie in modalità auto (mai gli elementi DANGEROUS) ed elimina definitivamente." ;;
         cli_auto_safe_desc1_q) echo "La pulizia automatica sposta i file in quarantena." ;;
         cli_auto_safe_desc2) echo "Le altre categorie richiederanno il flag --interactive." ;;
         cli_auto_safe_only) echo "Pulire solo le categorie automatiche" ;;

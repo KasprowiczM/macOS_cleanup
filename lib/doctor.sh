@@ -445,10 +445,10 @@ _dr_build_checks() {
         _dr_check quarantine fail "the quarantine folder is on a different volume than HOME: quarantine mode is refused"
     elif [ -z "$MC_DR_Q_BYTES" ]; then
         # Slow to add up is not a problem with the quarantine: informational, not a warning.
-        _dr_check quarantine ok "${MC_DR_Q_RUNS:-?} run(s); the size could not be measured in time"
+        _dr_check quarantine ok "Quarantine: ${MC_DR_Q_RUNS:-?} run(s); the size could not be measured in time"
     else
         _dr_human_gib "$MC_DR_Q_BYTES"
-        _dr_check quarantine ok "${MC_DR_Q_RUNS} run(s), ${REPLY}"
+        _dr_check quarantine ok "Quarantine: ${MC_DR_Q_RUNS} run(s), ${REPLY}"
     fi
     # lock
     if [ "$MC_DR_LOCK_HELD" -eq 1 ]; then
@@ -473,6 +473,51 @@ _dr_build_checks() {
         fi
     else
         _dr_check legacy ok "no v3 data to migrate"
+    fi
+    # rules overlay
+    _dr_rules_overlay_check
+}
+
+# _dr_rules_overlay_check — read-only look at <config>/rules.local.yaml.
+# mc_apply_rules_overlay (lib/paths.sh) cannot be called here: it changes the
+# policy tables and prints startup warnings. This checks only what can be
+# judged from the file alone (a symbolic link is ignored; a rule path must be
+# absolute, ~ or $HOME). Whether a rule would lower a shipped risk is decided
+# at run time and is not checked here.
+_dr_rules_overlay_check() {
+    local file="${MC_CONFIG_DIR:-}/rules.local.yaml" line value n=0 bad=""
+    if [ -z "${MC_CONFIG_DIR:-}" ] || { [ ! -e "$file" ] && [ ! -L "$file" ]; }; then
+        _dr_check rules_overlay ok "Rules overlay: none"
+        return 0
+    fi
+    if [ -L "$file" ]; then
+        _dr_check rules_overlay warn "Rules overlay: rules.local.yaml is a symbolic link, so it is ignored"
+        return 0
+    fi
+    if [ ! -f "$file" ] || [ ! -r "$file" ]; then
+        _dr_check rules_overlay warn "Rules overlay: rules.local.yaml cannot be read"
+        return 0
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%%#*}"
+        line="${line#"${line%%[![:space:]]*}"}"
+        case "$line" in
+            "- path:"*|"path:"*) ;;
+            *) continue ;;
+        esac
+        value="${line#*path:}"
+        value="${value#"${value%%[![:space:]]*}"}"; value="${value%"${value##*[![:space:]]}"}"
+        value="${value%\"}"; value="${value#\"}"; value="${value%\'}"; value="${value#\'}"
+        n=$(( n + 1 ))
+        case "$value" in
+            /*|'~'|'~/'*|'$HOME'|'$HOME/'*) ;;
+            *) [ -n "$bad" ] || bad="$value" ;;
+        esac
+    done < "$file"
+    if [ -n "$bad" ]; then
+        _dr_check rules_overlay warn "Rules overlay: rule '${bad}' is not an absolute or ~ path and will be rejected"
+    else
+        _dr_check rules_overlay ok "Rules overlay: rules.local.yaml present, ${n} rule(s) well-formed; each is checked against the shipped rules when a run starts"
     fi
 }
 

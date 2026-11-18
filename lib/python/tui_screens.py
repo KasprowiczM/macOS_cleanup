@@ -48,7 +48,7 @@ def status_glyph(app, state, result=None, tick=0):
     if state == 'pending':
         return g['pending'], 'muted'
     return {'ok': (g['ok'], 'ok'), 'warn': (g['needs'], 'warn'), 'failed': (g['fail'], 'fail'),
-            'error': (g['fail'], 'fail'), 'off': (g['off'], 'muted'), 'skipped': (g['off'], 'muted')
+            'error': (g['fail'], 'fail'), 'stopped': (g['stopped'], 'warn'), 'off': (g['off'], 'muted'), 'skipped': (g['off'], 'muted')
             }.get(result, (g['ok'], 'ok'))
 
 
@@ -112,7 +112,9 @@ def restore_text(app, info):
     return out
 
 
-_Q_UNMEASURED = re.compile(r'(\S+) run\(s\); the size could not be measured in time')
+# The doctor's text is 'N run(s); the size could not be measured in time' or, once it names its subject,
+# 'Quarantine: N run(s); ...'; both are understood.
+_Q_UNMEASURED = re.compile(r'(?:Quarantine: )?(\S+) run\(s\); the size could not be measured in time')
 
 
 def check_text(app, check):
@@ -141,6 +143,11 @@ class Screen:
 
     def zones(self, app):
         return ['main']
+
+    def wanted_main(self, app):
+        """Columns the main pane would like on a wide terminal so that no name or label in it is clipped; the layout
+        gives them only while the side pane keeps a usable width. 0: the screen has no wish."""
+        return 0
 
     def bindings(self, app, zone):
         return []
@@ -732,7 +739,7 @@ class Dashboard(Screen):
         out.append((app.t('ui_last_run_title'), 'accent'))
         if rows:
             last = rows[0]
-            glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'warn'}.get(last.get('result'), 'ok'))
+            glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'stopped'}.get(last.get('result'), 'ok'))
             word = app.t('ui_res_run_' + str(last.get('result') if last.get('result') in ('ok', 'warn', 'error', 'cancelled') else 'unknown'))
             when = (last.get('started_at') or '')[:16].replace('T', ' ')
             out.append((clip('%s %s %s %s' % (glyph, word, g['sep'], when), width, g['ellipsis']), style))
@@ -784,13 +791,14 @@ class Dashboard(Screen):
             out.append(('  ' + app.t('ui_result_no_phases'), 'base'))
         out.append(('', 'base'))
         out.append((app.t('ui_result_space'), 'accent'))
+        overview = self.plan_overview(app, model) if model.type() == 'preview' else None    # read once, used three times below
         if model.type() == 'restore':
             out.extend(('  ' + l, 'base') for l in restore_text(app, model.restore_summary()))
         elif dry:
             # A scan or preview measures nothing that was freed: no "measured freed", no "quarantined".
             line = '  %s %s' % (app.t('ui_card_estimated_plan' if model.type() == 'preview' else 'ui_card_estimated'),
                                fmt_bytes(model.estimated_total()))
-            info = model.informational_total()
+            info = self.report_total(app, model, overview)
             if info:
                 line += '   %s %s' % (app.t('ui_card_report_only'), fmt_bytes(info))
             out.append((line, 'base'))
@@ -804,7 +812,7 @@ class Dashboard(Screen):
                 out.append((('  ' + g['arrow'] + ' ' if i == 0 else '    ') + line, 'base'))
         out.append(('', 'base'))
         if model.type() == 'preview':
-            out.extend(self.plan_lines(app, model, width))
+            out.extend(self.plan_lines(app, model, width, overview))
         notes = self.result_notes(app, model)
         if notes:
             out.append(('%s (%d)' % (app.t('ui_result_notes'), len(notes)), 'accent'))
@@ -839,7 +847,7 @@ class Dashboard(Screen):
             out.append((clip(text, width, g['ellipsis']), style))
         if dry:                                         # one figure from one source: the scan's own sizes, summed
             total = sum((gr.estimated or 0) for gr in groups if gr.unit == 'bytes')
-            out.append(('  ' + app.t('ui_result_scan_total', size=fmt_bytes(total), report=fmt_bytes(model.informational_total())), 'strong'))
+            out.append(('  ' + app.t('ui_result_scan_total', size=fmt_bytes(total), report=fmt_bytes(self.report_total(app, model, overview))), 'strong'))
         buckets = model.buckets()
         for key in ('failed', 'skipped', 'unavailable'):
             if buckets[key]:
@@ -866,41 +874,63 @@ class Dashboard(Screen):
                 notes.append((tui_runfacts.note_category(text), text))
         return notes
 
-    def plan_lines(self, app, model, width):
-        """What Clean would do, from the run's plan.json: per category operations, size, mode and removal kind."""
-        g = app.glyphs
-        out = [(app.t('ui_result_plan'), 'accent')]
+    def plan_overview(self, app, model):
+        """(rows, totals) of tui_plan.overview for a preview's plan, or None when there is no readable plan.
+        The one place the report-only figure is worked out: a report-only category has one size, the one the
+        scan measured."""
         path = (model.plan or {}).get('path') or ''
         if not path:
             run_dir = (model.paths or {}).get('run_dir') or ''
             path = os.path.join(run_dir, 'plan.json') if run_dir else ''
         plan = tui_plan.load_plan(path) if path else None
         if plan is None:
+            return None
+        rows, totals = tui_plan.overview(plan, app.mode_lookup(), app.settings.get('remove_mode'), home=app.home)
+        scanned = {gid: grp.estimated for gid, grp in model.cats['scan'].items() if grp.unit == 'bytes' and grp.estimated is not None}
+        for row in rows:
+            if row['state'] == 'report' and row['id'] in scanned:
+                row['bytes'] = row['report_bytes'] = scanned[row['id']]
+        # per operation, not per row: a report-only operation inside a category that has another state (one outside
+        # the category roots next to normal ones, a snapshot the engine cannot date) is still only reported
+        totals['report'] = (totals['report'][0], sum(r['report_bytes'] for r in rows))
+        return rows, totals
+
+    def report_total(self, app, model, overview):
+        """Bytes of what is only reported and never cleaned. On a preview with a plan it is the plan's own
+        figure (the line under the plan table), so the Space card, the scan total and that line cannot differ;
+        without a plan, or on a scan, it is what the scan measured in report-only categories."""
+        if overview is not None:
+            return overview[1]['report'][1]
+        return model.informational_total()
+
+    def plan_lines(self, app, model, width, overview=False):
+        """What Clean would do, from the run's plan.json: per category operations, size, mode and removal kind."""
+        g = app.glyphs
+        out = [(app.t('ui_result_plan'), 'accent')]
+        if overview is False:
+            overview = self.plan_overview(app, model)
+        if overview is None:
             out.extend(('  ' + l, 'warn') for l in wrap(app.t('ui_plan_missing'), max(10, width - 2)))
             out.append(('', 'base'))
             return out
-        rows, totals = tui_plan.overview(plan, app.mode_lookup(), app.settings.get('remove_mode'))
-        scanned = {gid: grp.estimated for gid, grp in model.cats['scan'].items() if grp.unit == 'bytes' and grp.estimated is not None}
-        for row in rows:                                # a report-only category has one size: the one the scan measured
-            if row['state'] == 'report' and row['id'] in scanned:
-                row['bytes'] = scanned[row['id']]
-        totals['report'] = (totals['report'][0], sum(r['bytes'] for r in rows if r['state'] == 'report'))
+        rows, totals = overview
         if not rows:
             out.append(('  ' + app.t('ui_plan_nothing'), 'base'))
             out.append(('', 'base'))
             return out
         name_w = min(max(text_width(app.category_label(r['id'])) for r in rows) + 2, max(14, width // 3))
-        style_of = dict(auto='ok', decision='warn', blocked='fail', report='base', skipped='base', permonly='base')
+        style_of = dict(auto='ok', decision='warn', blocked='fail', report='base', skipped='base', permonly='base', never='base', selonly='warn')
         for row in rows:
             state = app.t('ui_planstate_' + row['state'])
-            if row['state'] in ('auto', 'decision') and row['removal']:
+            if row['state'] in ('auto', 'decision', 'selonly') and row['removal']:
                 state += ' ' + g['sep'] + ' ' + app.t('ui_planrm_' + row['removal'], tools=', '.join(sorted(row['tools'])) or '?')
             text = '  %s %4d  %9s  %s' % (pad(clip(app.category_label(row['id']), name_w, g['ellipsis']), name_w), row['ops'],
                                           fmt_bytes(row['bytes']), state)
             out.append((clip(text, width, g['ellipsis']), style_of[row['state']]))
         out.append(('', 'base'))
         for key, glyph, style in (('auto', g['ok'], 'ok'), ('decision', g['needs'], 'warn'), ('report', g['current'], 'base'),
-                                  ('permonly', g['off'], 'base'), ('skipped', g['off'], 'base'), ('blocked', g['fail'], 'fail')):
+                                  ('permonly', g['off'], 'base'), ('never', g['off'], 'base'), ('selonly', g['needs'], 'warn'), ('skipped', g['off'], 'base'),
+                                  ('blocked', g['fail'], 'fail')):
             ops, size = totals[key]
             if ops or key in ('auto', 'decision'):
                 for i, line in enumerate(wrap(app.t('ui_plan_total_' + key, ops=ops, size=fmt_bytes(size)), max(10, width - 4))):
@@ -915,10 +945,10 @@ class Dashboard(Screen):
         c.box(rect, app.t('ui_pane_result'), focused)
         inner = rect.inner()
         y = inner.y
-        glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'failed': 'failed', 'stopped': 'warn'}.get(model.result, 'ok'))
+        glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'failed': 'failed', 'stopped': 'stopped'}.get(model.result, 'ok'))
         title = 'ui_result_title_' + (model.result if model.result in ('failed', 'stopped') else 'ok')
         c.put(y, inner.x, clip('%s %s  %s' % (glyph, app.t(title), app.t('ui_type_' + model.type())), inner.w, g['ellipsis']), style)
-        took = app.t('ui_result_time', time=duration((model.ended or time.monotonic()) - model.started))
+        took = app.t('ui_result_time', time=duration(model.run_seconds()))
         if text_width(took) + 20 < inner.w:
             c.put(y, inner.x + inner.w - text_width(took), took, 'muted')
         y += 2
@@ -970,6 +1000,11 @@ class Categories(Screen):
         elif self.sort == 'tier':
             rows = sorted(rows, key=lambda r: tui_registry.TIERS.index(r['tier']) if r['tier'] in tui_registry.TIERS else 9)
         return rows
+
+    NAME_COLUMNS = 38               # what the pane needs besides the name: border and padding (4), marker, check, tier, mode, size, last mark
+
+    def wanted_main(self, app):
+        return max([text_width(app.category_label(r['id'])) for r in app.models.category_rows()] + [0]) + self.NAME_COLUMNS
 
     def mode_of(self, app, row):
         mode, source, _ = app.category_mode(row)
@@ -1119,10 +1154,37 @@ class Categories(Screen):
         order = [i for i in tui_registry.CATEGORY_IDS if i in self.selected]
         app.request_action('clean_selected', None, ['--only', ','.join(order)])
 
+    def removal_places(self, app, ident):
+        """Where this category's file removals reach ('temp': only in permanent mode; 'system': never), decided by
+        the engine's per-path tests on the newest plan's operations of the category, and by the category's registry
+        roots when the plan says nothing. The plan is read again only when its file changed."""
+        places = set()
+        if tui_registry.info(ident)['action'] != 'remove':
+            return places
+        if ident in tui_plan.CATEGORY_PLACE:
+            places.add(tui_plan.CATEGORY_PLACE[ident])
+        path, _ = tui_data.latest_plan(app.models, app.state_dir, max_age_hours=24 * 365, type_of=lambda r: app.run_facts(r).type)
+        try:
+            key = (path, os.stat(path).st_mtime) if path else None
+        except OSError:
+            key = None
+        if key is None:
+            return places
+        if getattr(self, '_plan_places_key', None) != key:
+            found = {}
+            plan = tui_plan.load_plan(path)
+            for op in (plan or {}).get('operations', []):
+                if isinstance(op, dict) and op.get('action') == 'remove_path':
+                    place = tui_plan.where(op, app.home)
+                    if place in ('temp', 'system'):
+                        found.setdefault(str(op.get('category')), set()).add(place)
+            self._plan_places, self._plan_places_key = found, key
+        return places | self._plan_places.get(ident, set())
+
     def category_items(self, app, row):
         """Item list for a category: its operations in the newest plan, else the model's top items."""
         items = []
-        path, _ = tui_data.latest_plan(app.models, app.state_dir, max_age_hours=24 * 365)
+        path, _ = tui_data.latest_plan(app.models, app.state_dir, max_age_hours=24 * 365, type_of=lambda r: app.run_facts(r).type)
         plan = tui_plan.load_plan(path) if path else None
         if plan:
             for op in plan.get('operations', []):
@@ -1187,7 +1249,7 @@ class Categories(Screen):
             c.put(y, inner.x, clip(self.sizes_note(app), inner.w, g['ellipsis']), 'base')
         y += 1
         size_w, mode_w, tier_w = 8, 8, 6
-        name_w = max(8, inner.w - 34)
+        name_w = max(8, inner.w - (self.NAME_COLUMNS - 4))
         c.put(y, inner.x + 5, clip(app.t('ui_col_name'), name_w), 'muted')
         x = inner.x + 5 + name_w + 1
         c.put(y, x, app.t('ui_col_tier')[:tier_w], 'muted')
@@ -1274,6 +1336,11 @@ class Categories(Screen):
             note = self.mode_note(app, row)
             if note:
                 text += '\n' + note
+            places = self.removal_places(app, row['id'])
+            if 'temp' in places:
+                text += '\n' + app.t('ui_cat_permonly_note')
+            if 'system' in places:
+                text += '\n' + app.t('ui_cat_never_note')
         for line in wrap(text, inner.w):
             if y >= inner.y + inner.h:
                 break

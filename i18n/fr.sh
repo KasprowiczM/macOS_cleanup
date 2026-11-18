@@ -181,7 +181,7 @@ i18n_get_fr() {
         leftovers_ok) echo "Aucun reliquat net d'application désinstallée trouvé." ;;
         leftovers_heuristic_note) echo "(Analyse heuristique — peut ne pas tout détecter)" ;;
         leftovers_found) echo "Reliquats potentiels" ;;
-        leftovers_warn) echo "Remarque : heuristique — vérifier avant suppression" ;;
+        leftovers_warn) echo "Heuristique — vérifier avant suppression" ;;
         dev_section) echo "Environnement de développement" ;;
         archives_check_needed) echo "Archives de build — vérifier si toujours nécessaires" ;;
         simulators_found) echo "Simulateurs indisponibles" ;;
@@ -273,8 +273,9 @@ i18n_get_fr() {
         cli_report_saved_dryrun) echo "Rapport enregistré. Analyse (dry-run) terminée, sans nettoyage." ;;
         cli_report_saved_next) echo "Rapport enregistré. Quand vous êtes prêt :" ;;
         cli_analysis_complete) echo "Analyse terminée. Passage au nettoyage." ;;
-        cli_auto_safe_warn) echo "Clean safe : seules les catégories en mode automatique sont nettoyées, et uniquement via la quarantaine." ;;
+        cli_auto_safe_warn) echo "Clean safe : seules les catégories en mode automatique sont nettoyées ; les éléments classés DANGEROUS ne sont jamais inclus. En mode quarantaine les fichiers peuvent être restaurés, en mode définitif non." ;;
         cli_auto_safe_prompt) echo "Déplacer maintenant en quarantaine les éléments des catégories automatiques ?" ;;
+        cli_auto_safe_prompt_permanent) echo "Supprimer maintenant définitivement les éléments des catégories automatiques ? Action irréversible." ;;
         cli_auto_safe_cancelled) echo "Nettoyage auto-safe annulé par l'utilisateur." ;;
 
         backup_check) echo "Vérification de la sauvegarde Time Machine" ;;
@@ -284,7 +285,7 @@ i18n_get_fr() {
         cli_allowed) echo "Autorisé" ;;
         cli_app_caches_review) echo "Caches d'application (examen requis)" ;;
         cli_apply_requires_plan) echo "Le mode --apply nécessite un fichier de plan (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "Le nettoyage automatique n'affecte que les catégories SAFE." ;;
+        cli_auto_safe_desc1) echo "Le nettoyage automatique concerne les catégories en mode auto (jamais les éléments DANGEROUS) et supprime définitivement." ;;
         cli_auto_safe_desc1_q) echo "Le nettoyage automatique déplace les fichiers en quarantaine." ;;
         cli_auto_safe_desc2) echo "Les autres catégories nécessitent l'option --interactive." ;;
         cli_auto_safe_only) echo "Nettoyer uniquement les catégories automatiques" ;;

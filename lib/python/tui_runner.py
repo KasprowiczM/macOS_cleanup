@@ -244,6 +244,7 @@ class RunModel:
         self.ended = None
         self.result = None           # ok | warn | failed | stopped | unknown
         self.run_end = None
+        self.engine_seconds = None      # the run's length as the engine measured it (run_end / run.json)
         self.version = None
         self.paths = {}
         self.disk = {}
@@ -540,6 +541,8 @@ class RunModel:
         if self.ended is not None and result is None and not stopped:
             return
         self.ended = time.monotonic()
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds >= 0:
+            self.engine_seconds = seconds
         failed = stopped or returncode not in (None, 0) or result in ('error', 'cancelled')
         for phase in self.phases.values():
             if phase.state == 'running':
@@ -620,6 +623,13 @@ class RunModel:
                 for key in out:
                     out[key] += g.counts.get(key, 0)
         return out
+
+    def run_seconds(self, now=None):
+        """How long the run took: the engine's own seconds (the figure History shows) when it reported them, else
+        the interface's wall clock; for a run still going, the wall clock."""
+        if self.engine_seconds is not None:
+            return self.engine_seconds
+        return (self.ended or now or time.monotonic()) - self.started
 
     def estimated_total(self):
         if self.run_end and self.run_end.get('estimated_bytes') is not None:
@@ -785,6 +795,7 @@ def model_from_summary(summary):
     seconds = summary.get('seconds')
     model.started = 0.0
     model.ended = float(seconds) if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds >= 0 else 0.0
+    model.engine_seconds = model.ended if model.ended or seconds == 0 else None
     plan = summary.get('plan')
     if isinstance(plan, dict) and plan.get('path'):
         model.plan = dict(path=_clip(plan.get('path'), 400), operations=_int(plan.get('operations')),
@@ -866,6 +877,19 @@ class LogBuffer:
             for line in reversed(lines):
                 if line.strip():
                     return line.strip()
+        return ''
+
+    def last_meaningful_line(self):
+        """The newest line with words in it, frames stripped (clean_log_line); '' when there is none: a rule of
+        dashes or a banner frame says nothing about the run."""
+        partial = clean_log_line(self.visible_partial())
+        if partial and partial.strip():
+            return partial.strip()
+        for _, lines in reversed(self.blocks):
+            for line in reversed(lines):
+                text = clean_log_line(line)
+                if text and text.strip():
+                    return text.strip()
         return ''
 
 

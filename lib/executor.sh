@@ -656,9 +656,14 @@ _exc_auto_eligible() {
     return 0
 }
 
-# consent_auto_confirm — the one auto-safe question (default no).
+# consent_auto_confirm — the one auto-safe question (default no). In permanent
+# removal mode nothing goes to quarantine, so the question says what happens.
 consent_auto_confirm() {
-    ask_yes_no "$(t "cli_auto_safe_prompt")" "no"
+    if [[ "${REMOVE_MODE:-quarantine}" == "permanent" ]]; then
+        ask_yes_no "$(t "cli_auto_safe_prompt_permanent")" "no"
+    else
+        ask_yes_no "$(t "cli_auto_safe_prompt")" "no"
+    fi
 }
 
 # _exc_consent_selective — auto and unattended: approve eligible ops; an op

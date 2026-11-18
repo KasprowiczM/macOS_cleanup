@@ -482,12 +482,13 @@ class App:
         if action == 'apply_plan':
             path = operand
         else:
-            path, _ = tui_data.latest_plan(self.models, self.state_dir)
+            path, _ = tui_data.latest_plan(self.models, self.state_dir, type_of=lambda r: self.run_facts(r).type)
         remove_mode = self.settings.get('remove_mode')
 
         def open_review(app, plan_path):
             plan = tui_plan.load_plan(plan_path) if plan_path else None
-            summary = tui_plan.summarize(plan or {'operations': []}, remove_mode, include, only, auto_only)
+            summary = tui_plan.summarize(plan or {'operations': []}, remove_mode, include, only, auto_only, home=app.home,
+                                        mode_of=app.mode_lookup())
             notes = [app.t('ui_plan_note_' + action)]
             if remove_mode == 'permanent':
                 notes.append(app.t('ui_plan_note_permanent_mode'))
@@ -940,9 +941,16 @@ class App:
         g = self.glyphs
         model = self.current_model()
         out = []
+        section = None
         for gid, lines in log.blocks:
             group = (model.cats['clean'].get(gid) or model.cats['scan'].get(gid)) if model and gid else None
             if group is not None:
+                # The engine prints one header per section it knows; a category block is drawn under its own
+                # section's name, not under whatever header was printed last.
+                kind = tui_registry.info(gid)['section']
+                if kind and kind != section:
+                    out.append((self.t('sect_' + kind.replace('-', '_')), 'strong'))
+                section = kind
                 glyph, style = status_glyph(self, group.state, group.result, self.tick_count)
                 running = group.state == 'running'
                 collapsed = group.state == 'done' and group.result == 'ok' and not self.log_expand_all
@@ -955,6 +963,7 @@ class App:
                     continue
                 out.extend((line, 'base') for line in wrap_log(lines, width))
             else:
+                section = None
                 out.extend((line, 'base') for line in wrap_log(lines, width, ''))
         partial = log.visible_partial()
         if partial.strip():
@@ -980,6 +989,8 @@ class App:
                 help_rect = Rect(body.y, w - hw, body.h, hw)
                 content = Rect(body.y, 0, body.h, w - hw)
             target = MAIN_TARGET.get(self.screen.id)
+            if target:                  # a wide terminal: let the list have what its longest name needs, the side pane keeps 40
+                target = max(target, min(self.screen.wanted_main(self), content.w - 40))
             sw = 0 if self.screen.id in NO_SIDE_PANE else (content.w - target) if target else int(content.w * ratio)
             if target and sw < 30 and self.screen.id not in NO_SIDE_PANE:
                 sw = int(content.w * ratio) if content.w - int(content.w * ratio) >= MIN_MAIN.get(self.screen.id, 40) else 0
@@ -1247,7 +1258,7 @@ class App:
                 started = self.job.started_at or time.monotonic()
                 elapsed = duration(time.monotonic() - started)
                 spinner = g['spinner'][self.tick_count % len(g['spinner'])] if self.animate else g['running']
-                line = log.last_line() if log else ''
+                line = log.last_meaningful_line() if log else ''
                 if self.prompt_hidden:
                     text, style = self.t('ui_prompt_waiting'), 'status_warn'
                 elif line:

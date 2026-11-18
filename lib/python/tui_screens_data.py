@@ -360,6 +360,14 @@ class Quarantine(Screen):
 # ---------------------------------------------------------------------------
 class History(Screen):
     id, tab = 'history', 'ui_tab_history'
+    TYPES = ('apply', 'clean', 'preview', 'prune', 'purge', 'restore', 'scan', 'unattended', 'unknown')
+
+    def type_columns(self, app):
+        """Width of the longest type name in the current language, capped."""
+        return min(24, max(text_width(app.t('ui_type_' + t)) for t in self.TYPES))
+
+    def wanted_main(self, app):
+        return 46 + max(9, self.type_columns(app))              # border and padding, marker, time, gaps, mark and the two size columns
 
     def __init__(self):
         self.list = ListState()
@@ -390,7 +398,7 @@ class History(Screen):
         """A dry-run/plan run younger than 24 h whose plan file still exists. Never in read-only mode."""
         if app.read_only:
             return None
-        if app.run_facts(row).type not in ('scan', 'preview') and not row.get('dry_run'):
+        if not tui_data.dry_run_row(row, lambda r: app.run_facts(r).type):
             return None
         path = os.path.join(app.state_dir, 'runs', row['run_id'], 'plan.json')
         if not tui_plan.known_plan_path(path, app.state_dir) or not os.path.isfile(path) or os.path.islink(path):
@@ -490,7 +498,10 @@ class History(Screen):
                 c.box(side, app.t('ui_pane_details'))
             return
         y = inner.y
-        when_w, type_w, res_w = 16, 9, 3
+        when_w, res_w = 16, 3
+        # The type column fits the longest type name of the language (Apply plan, Usuwanie z kwarantanny), as far as
+        # the window allows after the time, the mark and the two size columns; 9 where it is narrow.
+        type_w = max(9, min(self.type_columns(app), inner.w - (42 if inner.w >= 56 else 22)))      # 42: the size columns follow
         c.put(y, inner.x + 2, app.t('ui_col_when'), 'muted')
         c.put(y, inner.x + 2 + when_w + 1, app.t('ui_col_type'), 'muted')
         if inner.w >= 56:
@@ -506,7 +517,7 @@ class History(Screen):
                 c.fill(y, inner.x, 1, inner.w, style)
                 c.put(y, inner.x, g['marker'], style)
             facts = app.run_facts(row)
-            glyph, gstyle = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'warn'}.get(facts.result, 'ok'))
+            glyph, gstyle = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'stopped'}.get(facts.result, 'ok'))
             c.put(y, inner.x + 2, (row.get('started_at') or row['run_id'])[:16].replace('T', ' '), style)
             c.put(y, inner.x + 2 + when_w + 1, clip(app.t('ui_type_' + facts.type), type_w), style)
             c.put(y, inner.x + 2 + when_w + type_w + 2, glyph, style if selected else gstyle)
@@ -523,7 +534,7 @@ class History(Screen):
         """(text, style) rows of the details pane for a run; every '!' carries its reason."""
         g = app.glyphs
         facts = app.run_facts(row)
-        glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'warn'}.get(facts.result, 'ok'))
+        glyph, style = status_glyph(app, 'done', {'ok': 'ok', 'warn': 'warn', 'error': 'failed', 'cancelled': 'stopped'}.get(facts.result, 'ok'))
         out = [(clip('%s %s  %s' % (glyph, app.t('ui_type_' + facts.type), duration(facts.seconds)), width, g['ellipsis']), style)]
         if facts.type == 'unknown':
             out.extend(('  ' + l, 'base') for l in wrap(app.t('ui_hist_type_unknown'), max(10, width - 2)))
@@ -583,6 +594,12 @@ class History(Screen):
 
 
 # ---------------------------------------------------------------------------
+def check_mark(g, status):
+    """(glyph, style) of a health check; 'info' is a row nothing was measured for, drawn without a tick."""
+    return {'ok': (g['ok'], 'ok'), 'warn': (g['needs'], 'warn'), 'fail': (g['fail'], 'fail'),
+            'info': (g['current'], 'muted')}.get(status, (g['ok'], 'ok'))
+
+
 class Diagnostics(Screen):
     id, tab = 'diagnostics', 'ui_tab_diagnostics'
 
@@ -601,7 +618,7 @@ class Diagnostics(Screen):
         rows.append(dict(id='settings_conf', status='warn' if bad else 'ok',
                          text=app.t('ui_diag_settings_bad', n=len(bad)) if bad else app.t('ui_diag_settings_ok')))
         if not any(r['id'] == 'rules_overlay' for r in rows):
-            rows.append(dict(id='rules_overlay', status='ok', text=app.t('ui_diag_rules_unknown')))
+            rows.append(dict(id='rules_overlay', status='info', text=app.t('ui_diag_rules_unknown')))      # an older engine: nothing was checked, so no tick
         fda = (doctor.get('fda') or {}).get('status') if isinstance(doctor.get('fda'), dict) else None
         if fda and not any(r['id'] == 'fda' for r in rows):
             rows.append(dict(id='fda', status={'granted': 'ok', 'denied': 'warn'}.get(fda, 'warn'), text=app.t('ui_diag_fda_' + fda) if fda in ('granted', 'denied', 'unknown') else fda))
@@ -690,7 +707,7 @@ class Diagnostics(Screen):
 
     def advice(self, app, row):
         """What to do about a check: its own advice when it is not ok, else 'nothing to do'."""
-        if row['status'] == 'ok':
+        if row['status'] in ('ok', 'info'):
             return app.t('ui_diag_advice_ok')
         key = 'ui_diag_advice_' + row['id']
         text = app.t(key)
@@ -705,8 +722,7 @@ class Diagnostics(Screen):
         if rows:
             self.list.clamp(len(rows))
             row = rows[self.list.index]
-            glyph, style = {'ok': (app.glyphs['ok'], 'ok'), 'warn': (app.glyphs['needs'], 'warn'),
-                            'fail': (app.glyphs['fail'], 'fail')}.get(row['status'], (app.glyphs['ok'], 'ok'))
+            glyph, style = check_mark(app.glyphs, row['status'])
             out.append((app.t('ui_diag_selected'), 'accent'))
             out.extend(((glyph + ' ' if i == 0 else '  ') + line, style) for i, line in enumerate(wrap(row['text'], max(10, width - 2))))
             out.append(('', 'base'))
@@ -774,7 +790,7 @@ class Diagnostics(Screen):
             if selected:
                 c.fill(y, inner.x, 1, inner.w, style)
                 c.put(y, inner.x, g['marker'], style)
-            glyph, gstyle = {'ok': (g['ok'], 'ok'), 'warn': (g['needs'], 'warn'), 'fail': (g['fail'], 'fail')}.get(row['status'], (g['ok'], 'ok'))
+            glyph, gstyle = check_mark(g, row['status'])
             c.put(y, inner.x + 2, glyph, style if selected else gstyle)
             c.put(y, inner.x + 4, clip(row['text'], inner.w - 4, g['ellipsis']), style)
             c.region(y, inner.x, 1, inner.w, ('diag_row', n))

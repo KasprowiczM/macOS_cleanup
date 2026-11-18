@@ -3,6 +3,27 @@
 All notable user-visible changes to **macOS Cleanup**. The current version is in [`VERSION`](VERSION).
 This file is the public summary, written for people who use the tool. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] — 2026-11-18
+
+Engine behaviour did not change in this release: what a cleanup removes, and how, is the same as in 4.0.2. The changes are in what the screens and documents tell you.
+
+### Changed
+
+- **The plan review says exactly what the program will do.** The review shown before a cleanup now matches the engine:
+  - Native commands such as Docker are listed as "asked once more, cannot be undone" under Clean selected, and as not part of Clean safe or Apply plan.
+  - Locations outside your home folder are listed as acting only in permanent mode; system locations are listed as never removed.
+  - A category set to skip is shown as skipped.
+  - Clean safe shows every category you set to auto mode, including items rated REVIEW (DANGEROUS items never).
+  - The review uses only a plan from a Scan or a Preview; otherwise it first makes a fresh preview.
+- **Clean safe's question and warning say "delete permanently"** when the removal mode is permanent.
+- **Disk overview:** the used percentage is shown next to Used, and sizes are in GiB and MiB.
+- **Result page and Dashboard:** one report-only figure, the same run time as History, section headers in the live log, a distinct mark for a stopped run, and names are no longer cut off in Categories and History.
+
+### Fixed
+
+- **Documentation corrected:** Clean safe, `--auto-safe` and scheduled runs clean the categories set to auto mode.
+- **Diagnostics:** the rules overlay status now comes from the engine, and the quarantine line is labelled.
+
 ## [4.0.2] — 2026-11-17
 
 ### Added

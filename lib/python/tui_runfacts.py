@@ -133,7 +133,8 @@ def report_warnings(state_dir, run_id):
 # The engine's advisory notes carry no category; these phrases name the category they are about.
 NOTE_HINTS = (('time machine backup', ''), ('contains messages, attachments', 'mail-data'), ('mail download', 'mail-downloads'),
               ('apple mail', 'mail-data'), ('profiles/cookies', 'browser-data'), ('cookies', 'browser-data'),
-              ('browser', 'browser-caches'), ('heuristic', 'app-leftovers'), ('large_dmg_pkg', 'installers'),
+              ('browser', 'browser-caches'), ('heuristic', 'app-leftovers'), ('heurystyk', 'app-leftovers'), ('heuristique', 'app-leftovers'), ('heurística', 'app-leftovers'),
+              ('euristica', 'app-leftovers'), ('vor löschung prüfen', 'app-leftovers'), ('large_dmg_pkg', 'installers'),
               ('local apfs snapshots', 'tm-snapshots'), ('time machine', 'tm-snapshots'))
 
 

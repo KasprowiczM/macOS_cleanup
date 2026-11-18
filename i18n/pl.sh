@@ -180,7 +180,7 @@ i18n_get_pl() {
         leftovers_ok) echo "Brak wyraźnych pozostałości po odinstalowanych aplikacjach." ;;
         leftovers_heuristic_note) echo "(Analiza heurystyczna — może nie wykryć wszystkiego)" ;;
         leftovers_found) echo "Potencjalne pozostałości" ;;
-        leftovers_warn) echo "Uwaga: heurystyka — zweryfikuj przed usunięciem" ;;
+        leftovers_warn) echo "Heurystyka — zweryfikuj przed usunięciem" ;;
         dev_section) echo "Środowisko deweloperskie" ;;
         archives_check_needed) echo "Archiwa kompilacji — sprawdź, czy nadal są potrzebne" ;;
         simulators_found) echo "Niedostępne symulatory iOS/watchOS/tvOS" ;;
@@ -273,8 +273,9 @@ i18n_get_pl() {
         cli_report_saved_dryrun) echo "Raport zapisany. Tryb dry-run zakończony bez czyszczenia." ;;
         cli_report_saved_next) echo "Raport zapisany. Gdy wszystko będzie gotowe:" ;;
         cli_analysis_complete) echo "Analiza zakończona. Teraz przejdziemy przez czyszczenie." ;;
-        cli_auto_safe_warn) echo "Czyść bezpiecznie: czyszczone są tylko kategorie w trybie automatycznym i tylko przez kwarantannę." ;;
+        cli_auto_safe_warn) echo "Czyść bezpiecznie: czyszczone są tylko kategorie w trybie automatycznym; pozycje ocenione jako DANGEROUS nigdy nie są uwzględniane. W trybie kwarantanny pliki można przywrócić, w trybie trwałym nie." ;;
         cli_auto_safe_prompt) echo "Przenieść teraz pozycje kategorii automatycznych do kwarantanny?" ;;
+        cli_auto_safe_prompt_permanent) echo "Usunąć teraz trwale pozycje kategorii automatycznych? Tego nie można cofnąć." ;;
         cli_auto_safe_cancelled) echo "Czyszczenie auto-safe anulowane przez użytkownika." ;;
 
         backup_check) echo "Weryfikacja kopii Time Machine" ;;
@@ -284,7 +285,7 @@ i18n_get_pl() {
         cli_allowed) echo "Dozwolone" ;;
         cli_app_caches_review) echo "Pamięci podręczne aplikacji (wymaga przeglądu)" ;;
         cli_apply_requires_plan) echo "Tryb --apply wymaga podania pliku planu (--from-plan)" ;;
-        cli_auto_safe_desc1) echo "Usuwanie automatyczne dotyczy tylko bezpiecznych kategorii (SAFE)." ;;
+        cli_auto_safe_desc1) echo "Czyszczenie automatyczne dotyczy kategorii ustawionych na tryb auto (pozycje DANGEROUS nigdy) i usuwa trwale." ;;
         cli_auto_safe_desc1_q) echo "Usuwanie automatyczne przenosi pliki do kwarantanny." ;;
         cli_auto_safe_desc2) echo "Pozostałe kategorie wymagają podania flagi --interactive." ;;
         cli_auto_safe_only) echo "Czyszczenie tylko kategorii automatycznych" ;;
