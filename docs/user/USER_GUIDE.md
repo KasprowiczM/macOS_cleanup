@@ -1,6 +1,6 @@
 # User guide (English)
 
-**macOS Cleanup 4.0.3** · Apple Silicon Mac · macOS 11 or later
+**macOS Cleanup 4.0.4** · Apple Silicon Mac · macOS 11 or later
 
 ## What it does
 
@@ -229,7 +229,7 @@ These work on `bash cleanup_all.sh` and, where they make sense, are passed throu
 | `--schedule install\|remove\|status`, `--time HH:MM` | install, remove | Manage the automatic run |
 | `--cli` | n/a | Never open the interface |
 | `--tui` | yes | Require the interface. Fails with exit code 2 without a terminal |
-| `--version`, `--help` | yes | Version (`macos-cleanup 4.0.3`) and help |
+| `--version`, `--help` | yes | Version (`macos-cleanup 4.0.4`) and help |
 
 **`--permanent` deletes for good.** Nothing can be restored. It is never used by an automatic run, and it is a setting you must choose on purpose (`remove_mode`). Even then, a folder that cannot be read completely is not deleted in permanent mode.
 

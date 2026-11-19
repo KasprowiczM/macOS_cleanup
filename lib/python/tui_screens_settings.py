@@ -455,7 +455,7 @@ class SettingsScreen(Screen):
             c.put(y, rect.x, '%s %s' % (mark, pad(app.t('ui_ch_accent_' + accent), name_w)), 'swatch_' + accent)
             x = rect.x + 3 + name_w
             if x + 14 <= rect.x + rect.w:
-                c.put(y, x, g['bar_full'] * 7 + g['bar_empty'] * 3, 'swatch_' + accent)
+                c.bar(y, x, 10, 0.7, style='swatch_' + accent)
                 x += 11
             sample = '[ %s ]' % app.t('ui_accent_sample')
             if x + text_width(sample) <= rect.x + rect.w:

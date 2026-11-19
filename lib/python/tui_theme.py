@@ -12,6 +12,9 @@ GLYPHS_UNICODE = dict(
     marker='▶', ok='✓', current='•', needs='!', fail='✗', stopped='■', running='⟳', pending='○', off='–',
     check_on='[✓]', check_off='[ ]', radio_on='●', radio_off='○', arrow='→', ellipsis='…',
     bar_full='█', bar_empty='─', bar_parts=('', '▏', '▎', '▍', '▌', '▋', '▊', '▉'),
+    # Progress bars are one slim heavy line: the fill and the track are the same glyph and differ by colour;
+    # a half-cell cap smooths the leading edge, and the travelling highlight reuses the fill glyph.
+    bar_fill='━', bar_track='━', bar_cap='╸', bar_cap_r='╺', bar_pulse='━',
     spinner=('⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'), expand='▾', collapse='▸',
     spark=('▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'), sep='·', up='↑', down='↓',
 )
@@ -20,6 +23,7 @@ GLYPHS_ASCII = dict(
     marker='>', ok='+', current='=', needs='!', fail='x', stopped='#', running='*', pending='o', off='-',
     check_on='[x]', check_off='[ ]', radio_on='(*)', radio_off='( )', arrow='->', ellipsis='...',
     bar_full='#', bar_empty='.', bar_parts=('',) * 8,
+    bar_fill='#', bar_track='-', bar_cap='', bar_cap_r='', bar_pulse='=',
     spinner=('|', '/', '-', '\\'), expand='v', collapse='>',
     spark=('_', '_', '.', '.', '-', '-', '^', '^'), sep='|', up='^', down='v',
 )
@@ -27,7 +31,7 @@ GLYPHS_ASCII = dict(
 ACCENTS = ('blue', 'violet', 'amber', 'green', 'rose', 'graphite')
 STYLES = ('base', 'muted', 'accent', 'ok', 'warn', 'fail', 'sel', 'sel_focus', 'border', 'focus_border',
           'title', 'focus_title', 'header', 'header_accent', 'keybar', 'keybar_key', 'btn', 'btn_focus',
-          'btn_primary', 'bar_lo', 'bar_mid', 'bar_hi', 'bar_empty', 'dialog', 'dialog_border', 'input',
+          'btn_primary', 'bar_track', 'bar_run', 'bar_ok', 'bar_warn', 'bar_fail', 'bar_pulse', 'dialog', 'dialog_border', 'input',
           'status', 'status_ok', 'status_warn', 'tab', 'tab_active', 'strong')
 
 THEME_CHOICES = ('auto', 'dark', 'light')
@@ -47,10 +51,21 @@ _ACCENT_16 = dict(blue=4, violet=5, amber=3, green=2, rose=5, graphite=7)
 # (dark 247 = #9e9e9e on black, light 240 = #585858 on white).
 _SEM_256 = dict(ok=(77, 28), warn=(214, 130), fail=(203, 160), muted=(247, 240), fg_on_bg=(253, 236),
                 strong_on_bg=(255, 232), sel_bg=(237, 253), header_bg=(236, 254), dialog_bg=(235, 255))
+# Progress bar track: a quiet line the fill runs over (dark 238, light 253).
+_BAR_TRACK_256 = (238, 253)
+# The travelling highlight of a running bar: per accent, a brighter colour than the accent on the dark scheme
+# and a lighter one that still reads on white on the light scheme.
+_PULSE_256 = dict(blue=(75, 33), violet=(147, 98), amber=(222, 100), green=(151, 28), rose=(211, 168),
+                  graphite=(255, 244))
 
 
-def glyphs(ascii_only=False):
-    return GLYPHS_ASCII if ascii_only else GLYPHS_UNICODE
+GLYPHS_UNICODE_MONO = dict(GLYPHS_UNICODE, bar_track='─')   # no colours: the track must differ by shape
+
+
+def glyphs(ascii_only=False, mono=False):
+    if ascii_only:
+        return GLYPHS_ASCII
+    return GLYPHS_UNICODE_MONO if mono else GLYPHS_UNICODE
 
 
 def parse_osc11(reply):
@@ -184,8 +199,8 @@ class Theme:
             mono = dict(base=0, muted=0, accent=bold, ok=0, warn=bold, fail=bold | und, sel=rev,
                         sel_focus=rev | bold, border=dim, focus_border=bold, title=0, focus_title=bold | rev,
                         header=rev, header_accent=rev | bold, keybar=rev, keybar_key=rev | bold, btn=0,
-                        btn_focus=rev | bold, btn_primary=bold, bar_lo=0, bar_mid=0, bar_hi=bold,
-                        bar_empty=dim, dialog=0, dialog_border=bold, input=und, status=0, status_ok=bold,
+                        btn_focus=rev | bold, btn_primary=bold, bar_track=dim, bar_run=bold, bar_ok=bold,
+                        bar_warn=bold, bar_fail=bold, bar_pulse=bold | rev, dialog=0, dialog_border=bold, input=und, status=0, status_ok=bold,
                         status_warn=bold, tab=dim, tab_active=rev | bold, strong=bold)
             self.attrs = mono
             return self
@@ -209,15 +224,17 @@ class Theme:
             s = {k: v[light] for k, v in _SEM_256.items()}
             c = dict(acc=acc, ok=s['ok'], warn=s['warn'], fail=s['fail'], muted=s['muted'], base=-1,
                      strong=-1, fg_bg=s['fg_on_bg'], strong_bg=s['strong_on_bg'], sel_bg=s['sel_bg'],
-                     header_bg=s['header_bg'], dialog_bg=s['dialog_bg'], on_acc=(234 if not light else 255))
+                     header_bg=s['header_bg'], dialog_bg=s['dialog_bg'], on_acc=(234 if not light else 255),
+                     track=_BAR_TRACK_256[light], pulse=_PULSE_256[self.accent][light])
             dbg = c['dialog_bg']
+            pulse = pair(c['pulse'])
         else:
             acc = _ACCENT_16[self.accent]
             c = dict(acc=acc, ok=2, warn=3, fail=1, base=-1, strong=-1, fg_bg=-1, strong_bg=-1,
                      muted=(7 if not light else (8 if colors >= 16 else 0)),
-                     sel_bg=bg, header_bg=bg, dialog_bg=bg, on_acc=0)
+                     sel_bg=bg, header_bg=bg, dialog_bg=bg, on_acc=0, track=(8 if colors >= 16 and not light else 7))
             dbg = bg
-        lo_ramp = c['muted']
+            pulse = pair(c['acc']) | bold
         self.attrs = dict(
             base=pair(c['base']), muted=pair(c['muted']),
             accent=pair(c['acc']), ok=pair(c['ok']), warn=pair(c['warn']), fail=pair(c['fail']) | bold,
@@ -228,7 +245,8 @@ class Theme:
             header=pair(c['fg_bg'], c['header_bg']), header_accent=pair(c['acc'], c['header_bg']) | bold,
             keybar=pair(c['fg_bg'], c['header_bg']), keybar_key=pair(c['acc'], c['header_bg']) | bold,
             btn=pair(c['base']), btn_focus=pair(c['on_acc'], c['acc']) | bold, btn_primary=pair(c['acc']) | bold,
-            bar_lo=pair(lo_ramp), bar_mid=pair(c['acc']), bar_hi=pair(c['ok']), bar_empty=pair(c['muted']),
+            bar_track=pair(c['track']), bar_run=pair(c['acc']), bar_ok=pair(c['ok']), bar_warn=pair(c['warn']),
+            bar_fail=pair(c['fail']), bar_pulse=pulse,
             dialog=pair(c['fg_bg'], dbg), dialog_border=pair(c['acc'], dbg) | bold,
             input=pair(c['strong_bg'], c['sel_bg']) | und,
             status=pair(c['base']), status_ok=pair(c['ok']) | bold, status_warn=pair(c['warn']) | bold,

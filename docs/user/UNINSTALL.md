@@ -1,6 +1,6 @@
 # Uninstall
 
-**macOS Cleanup 4.0.3.** Removing it never touches your apps or the files you keep.
+**macOS Cleanup 4.0.4.** Removing it never touches your apps or the files you keep.
 
 ## Steps
 

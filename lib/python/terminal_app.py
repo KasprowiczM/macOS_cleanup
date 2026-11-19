@@ -142,7 +142,7 @@ class App:
 
     @property
     def glyphs(self):
-        return glyphs(wants_ascii(self.environ, self.settings.get('ascii')))
+        return glyphs(wants_ascii(self.environ, self.settings.get('ascii')), mono=color_disabled(self.environ))
 
     def t(self, key, **values):
         return tr(key, self.lang, **values)

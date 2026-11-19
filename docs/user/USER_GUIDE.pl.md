@@ -1,6 +1,6 @@
 # Przewodnik użytkownika (polski)
 
-**macOS Cleanup 4.0.3** · Mac z Apple Silicon · macOS 11 lub nowszy
+**macOS Cleanup 4.0.4** · Mac z Apple Silicon · macOS 11 lub nowszy
 
 ## Co robi
 
@@ -229,7 +229,7 @@ Działają w `bash cleanup_all.sh` i tam, gdzie mają sens, są przekazywane prz
 | `--schedule install\|remove\|status`, `--time HH:MM` | install, remove | Zarządzanie uruchamianiem automatycznym |
 | `--cli` | — | Nigdy nie otwieraj interfejsu |
 | `--tui` | tak | Wymagaj interfejsu. Bez terminala kończy się kodem 2 |
-| `--version`, `--help` | tak | Wersja (`macos-cleanup 4.0.3`) i pomoc |
+| `--version`, `--help` | tak | Wersja (`macos-cleanup 4.0.4`) i pomoc |
 
 **`--permanent` usuwa na zawsze.** Niczego nie da się przywrócić. Przebieg automatyczny nigdy go nie używa, a jest to ustawienie, które trzeba wybrać świadomie (`remove_mode`). Nawet wtedy folder, którego nie da się w pełni odczytać, nie jest usuwany w trybie trwałym.
 

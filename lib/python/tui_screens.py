@@ -39,6 +39,14 @@ class ListState:
         self.index = max(0, min(self.index, max(0, total - 1)))
 
 
+def bar_phase(app, y=0):
+    """The animation counter for a bar that is running right now, else None (the bar stays still). Rows are
+    offset by their line so bars never move in lockstep; idle screens never animate."""
+    if not app.animate or not app.run_active():
+        return None
+    return app.tick_count // 2 + y * 3
+
+
 def status_glyph(app, state, result=None, tick=0):
     g = app.glyphs
     if state == 'running':
@@ -516,7 +524,9 @@ class Dashboard(Screen):
             tail = ' %3d%%  %s' % (pct, duration(time.monotonic() - model.started))
             bar_w = max(6, inner.w - text_width(label) - text_width(tail) - 2)
             c.put(y, inner.x, label, 'strong')
-            c.bar(y, inner.x + text_width(label) + 1, bar_w, model.overall())
+            done = model.overall() >= 1
+            c.bar(y, inner.x + text_width(label) + 1, bar_w, model.overall(), phase=None if done else bar_phase(app, y),
+                  tone='ok' if done else 'run')
             c.put(y, inner.x + text_width(label) + 2 + bar_w, tail.strip(), 'base')
             y += 1 if tight else 2
         else:
@@ -627,9 +637,12 @@ class Dashboard(Screen):
             info = app.t('ui_state_failed')
         if bar_w >= 4:
             if state in ('pending', 'off', 'skipped'):
-                c.put(y, cx, g['bar_empty'] * bar_w, 'bar_empty')
+                c.bar(y, cx, bar_w, 0.0)
             else:
-                c.bar(y, cx, bar_w, fraction if state == 'running' else 1.0, indeterminate=app.tick_count)
+                tone = {'warn': 'warn', 'error': 'fail'}.get(result, 'ok') if state == 'done' else 'run'
+                # Only a running phase moves; finished bars are still. No measure yet: the bar glides.
+                c.bar(y, cx, bar_w, fraction if state == 'running' else 1.0,
+                      phase=bar_phase(app, y) if state == 'running' else None, tone=tone)
             cx += bar_w + 1
         c.put(y, cx, clip(info, max(0, x + width - cx - el_w), g['ellipsis']), style if state != 'pending' else 'muted')
         if el_w:

@@ -3,6 +3,14 @@
 All notable user-visible changes to **macOS Cleanup**. The current version is in [`VERSION`](VERSION).
 This file is the public summary, written for people who use the tool. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.4] — 2026-11-19
+
+Engine behaviour did not change in this release: what a cleanup removes, and how, is the same as in 4.0.3.
+
+### Changed
+
+- **New progress bars.** The bars on the Dashboard (Overall and each step) are now a slim line with a smooth leading edge, the same as in macOS Updates. A running bar carries a moving highlight; a step that has no measure yet shows a short segment gliding along the bar. Finished bars keep one colour for the result (done, warning, failed) and stay still, and nothing moves while no run is active or when Animations is off in Settings. Without colours (`NO_COLOR`) the empty part is drawn as a thin line.
+
 ## [4.0.3] — 2026-11-18
 
 Engine behaviour did not change in this release: what a cleanup removes, and how, is the same as in 4.0.2. The changes are in what the screens and documents tell you.

@@ -224,28 +224,48 @@ class Canvas:
             if used + text_width(r) + 6 <= w:
                 self.put(y, x + w - 2 - text_width(r), r, 'muted')
 
-    def bar(self, y, x, width, fraction, indeterminate=None):
-        """Smooth bar with eighth blocks and a muted→accent→ok colour ramp."""
+    def bar(self, y, x, width, fraction, phase=None, tone='run', style=None):
+        """Slim progress bar: one heavy line glyph for fill and track, told apart by colour (one colour per
+        state: run, ok, warn, fail; never by position), with a half-cell cap on the leading edge.
+
+        ``phase`` is the animation counter and is given only while something runs; ``None`` keeps the bar
+        still. A running determinate bar then carries a brighter 3-cell pulse travelling along its fill; with
+        ``fraction`` None (nothing measurable yet) a 4-cell segment glides to and fro over the track.
+        ``style`` replaces the fill colour (the accent swatches in Settings)."""
         g = self.g
         if width <= 0:
             return
+        fill = style or 'bar_' + (tone if tone in ('run', 'ok', 'warn', 'fail') else 'run')
+        cap, cap_r = g.get('bar_cap', ''), g.get('bar_cap_r', '')
         if fraction is None:
-            pos = (indeterminate or 0) % max(1, width)
             for i in range(width):
-                on = (i - pos) % width < 3
-                self.put(y, x + i, g['bar_full'] if on else g['bar_empty'], 'bar_mid' if on else 'bar_empty')
+                self.put(y, x + i, g['bar_track'], 'bar_track')
+            seg = min(4 if width >= 10 else 3, width)
+            span = width - seg
+            step = (phase or 0) % (2 * span) if span else 0
+            pos = step if step <= span else 2 * span - step
+            for i in range(seg):
+                edge = cap_r if i == 0 else cap if i == seg - 1 else ''
+                self.put(y, x + pos + i, edge or g['bar_pulse'], 'bar_run')
             return
         fraction = min(1.0, max(0.0, fraction))
-        eighths = int(round(fraction * width * 8))
-        full, part = divmod(eighths, 8)
+        halves = int(round(fraction * width * 2)) if cap else int(round(fraction * width)) * 2
+        if fraction > 0:
+            halves = max(1 if cap else 2, halves)
+        if fraction < 1:
+            halves = min(halves, 2 * width - (1 if cap else 2))
+        full, half = divmod(halves, 2)
         for i in range(width):
-            ramp = ('bar_lo', 'bar_mid', 'bar_hi')[min(2, i * 3 // max(1, width))] if fraction < 1 else 'bar_hi'
             if i < full:
-                self.put(y, x + i, g['bar_full'], ramp)
-            elif i == full and part and g['bar_parts'][part]:
-                self.put(y, x + i, g['bar_parts'][part], ramp)
+                self.put(y, x + i, g['bar_fill'], fill)
+            elif i == full and half:
+                self.put(y, x + i, cap, fill)
             else:
-                self.put(y, x + i, g['bar_empty'], 'bar_empty')
+                self.put(y, x + i, g['bar_track'], 'bar_track')
+        if phase is not None and tone == 'run' and full:
+            lead = (phase % (full + 3)) - 3
+            for i in range(max(0, lead), min(full, lead + 3)):
+                self.put(y, x + i, g['bar_pulse'], 'bar_pulse')
 
     def button(self, y, x, label, focused=False, primary=False, action=None, disabled=False):
         # Focus is visible without colour too: "▶ Label ◀" versus "[ Label ]".

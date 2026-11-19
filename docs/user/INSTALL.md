@@ -1,6 +1,6 @@
 # Installation
 
-**macOS Cleanup 4.0.3** · Apple Silicon Mac · macOS 11 or later · Website: <https://macos-cleanup.64bit.site/>
+**macOS Cleanup 4.0.4** · Apple Silicon Mac · macOS 11 or later · Website: <https://macos-cleanup.64bit.site/>
 
 Installing puts the program on your Mac and adds the `macos-cleanup` command. It cleans nothing and starts no scan.
 
@@ -35,7 +35,7 @@ To install a specific release, download `install.sh` and pass the version:
 
 ```bash
 curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/latest/download/install.sh
-/bin/bash install.sh --version 4.0.3
+/bin/bash install.sh --version 4.0.4
 ```
 
 Installer options:
@@ -71,12 +71,12 @@ Overrides are `MACOS_CLEANUP_HOME`, `MACOS_CLEANUP_CONFIG_DIR`, `MACOS_CLEANUP_S
 The installer checks the checksum for you. To do it by hand:
 
 ```bash
-curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.3/macos-cleanup-4.0.3.tar.gz
-curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.3/SHA256SUMS
+curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.4/macos-cleanup-4.0.4.tar.gz
+curl -fsSLO https://github.com/KasprowiczM/macOS_cleanup/releases/download/v4.0.4/SHA256SUMS
 shasum -a 256 -c SHA256SUMS --ignore-missing
 ```
 
-The check must print `macos-cleanup-4.0.3.tar.gz: OK`. If it prints `FAILED`, delete the files and download again.
+The check must print `macos-cleanup-4.0.4.tar.gz: OK`. If it prints `FAILED`, delete the files and download again.
 
 A checksum protects against a damaged or partial download. The releases are not cryptographically signed, so a checksum fetched from the same place as the package does not prove who published it.
 
@@ -86,12 +86,12 @@ After a successful check:
 
 ```bash
 mkdir -p ~/.local/share/macos-cleanup ~/.local/bin
-tar -xzf macos-cleanup-4.0.3.tar.gz --strip-components=1 -C ~/.local/share/macos-cleanup
+tar -xzf macos-cleanup-4.0.4.tar.gz --strip-components=1 -C ~/.local/share/macos-cleanup
 ln -sf ~/.local/share/macos-cleanup/bin/macos-cleanup ~/.local/bin/macos-cleanup
 macos-cleanup version
 ```
 
-The last command prints `macos-cleanup 4.0.3`. A manual install has no `.previous` copy to go back to.
+The last command prints `macos-cleanup 4.0.4`. A manual install has no `.previous` copy to go back to.
 
 ## First run
 
