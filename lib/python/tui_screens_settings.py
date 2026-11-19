@@ -88,6 +88,11 @@ class SettingsScreen(Screen):
             return str(value)
         if key == 'schedule':
             return app.t('ui_installed') if app.schedule().get('state') == 'on' else app.glyphs['arrow']      # an action row like the others
+        if key == 'check_updates':
+            state = app.update_state
+            return app.t('ui_upd_mark_' + {'checking': 'checking', 'failed': 'failed', 'dev': 'dev', 'current': 'current',
+                                           'available': 'available'}.get(state.get('status'), 'idle'),
+                         version=state.get('current', ''), latest=state.get('latest', ''))
         if key == 'excludes':
             return app.t('ui_entries', count=len(app.excluded))
         if key == 'category_modes':
@@ -483,6 +488,8 @@ def perform_action(app, key, screen):
                                       t('ui_btn_reset'), t('ui_btn_cancel'), done))
     elif key == 'excludes':
         excludes_dialog(app)
+    elif key == 'check_updates':
+        app.check_updates(origin='settings')
     elif key == 'prune_now':
         app.request_action('prune_artifacts')
     elif key == 'schedule':

@@ -1,6 +1,6 @@
 # User guide (English)
 
-**macOS Cleanup 4.0.4** · Apple Silicon Mac · macOS 11 or later
+**macOS Cleanup 4.0.5** · Apple Silicon Mac · macOS 11 or later
 
 ## What it does
 
@@ -19,7 +19,7 @@ Measuring never changes anything. Acting happens only for items you approved, an
 - It never uses `sudo` and never asks for your password.
 - It never touches the protected list: Mail, Messages, Calendars, Contacts, Keychains, password managers, browser profiles, Documents, Desktop, Photos, Music and Movies libraries, iCloud and other cloud-synced folders, SSH and GPG keys, credential files, `~/.config`, developer source folders, Git working trees (outside the Trash), and this tool's own program, settings, state and quarantine folders.
 - It never removes report-only categories (see [Tiers](#tiers)).
-- Scanning, cleaning and restoring never use the network. The network is used only to install and for an update you start yourself with `macos-cleanup update-self` (or Check for updates in the Help tab).
+- Scanning, cleaning and restoring never use the network. The network is used only to install and for an update you start yourself with `macos-cleanup update-self` (or Check for updates in the Help tab, or in Settings › System › Check for updates).
 - It never runs a native cleanup tool or a review-tier category in an automatic run.
 
 ## Tiers
@@ -229,7 +229,7 @@ These work on `bash cleanup_all.sh` and, where they make sense, are passed throu
 | `--schedule install\|remove\|status`, `--time HH:MM` | install, remove | Manage the automatic run |
 | `--cli` | n/a | Never open the interface |
 | `--tui` | yes | Require the interface. Fails with exit code 2 without a terminal |
-| `--version`, `--help` | yes | Version (`macos-cleanup 4.0.4`) and help |
+| `--version`, `--help` | yes | Version (`macos-cleanup 4.0.5`) and help |
 
 **`--permanent` deletes for good.** Nothing can be restored. It is never used by an automatic run, and it is a setting you must choose on purpose (`remove_mode`). Even then, a folder that cannot be read completely is not deleted in permanent mode.
 

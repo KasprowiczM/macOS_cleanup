@@ -678,14 +678,22 @@ class App:
         self.overlay = review
         self.overlay_scroll = 0
 
-    def check_updates(self):
+    def check_updates(self, origin='help'):
         """Manual update check (never automatic). A failed check is shown as failed,
-        never as up to date."""
+        never as up to date.
+
+        ``origin`` says who asked and is stored in ``update_state['origin']``:
+        'help' (the U key on the Help screen, the default) or 'settings' (Settings > System > Check
+        for updates). Both are user-initiated and report every outcome with a notice.
+        Contract for a possible future 'startup' origin: it would call this same method
+        and must stay quiet when the copy is up to date or the check failed (no notice),
+        and only surface an available update. Nothing implements that today; origin
+        changes no behaviour yet."""
         if self.paths.get('mode') == 'checkout':
-            self.update_state = dict(status='dev')
+            self.update_state = dict(status='dev', origin=origin)
             self.notify(self.t('ui_update_dev'), 'status')
             return
-        self.update_state = dict(status='checking')
+        self.update_state = dict(status='checking', origin=origin)
         self.notify(self.t('ui_update_checking'), 'status')
 
         def fetch():
@@ -694,11 +702,11 @@ class App:
 
         def done(app, data, error):
             if not isinstance(data, dict) or data.get('latest') in (None, ''):
-                app.update_state = dict(status='failed')
+                app.update_state = dict(status='failed', origin=origin)
                 app.notify(app.t('ui_update_failed'), 'status_warn')
                 return
             state = dict(current=plain(data.get('current', ''))[:32], latest=plain(data.get('latest'))[:32],
-                         url=plain(data.get('release_url') or '')[:200])
+                         url=plain(data.get('release_url') or '')[:200], origin=origin)
             if data.get('update_available') is True:
                 state['status'] = 'available'
                 app.update_state = state

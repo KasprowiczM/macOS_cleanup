@@ -5,7 +5,7 @@
 # No git, no sudo, no prompts. Works as a pipe and as a local file:
 #
 #   curl -fsSL https://github.com/KasprowiczM/macOS_cleanup/releases/latest/download/install.sh | bash
-#   curl -fsSL <that URL> | bash -s -- --version 4.0.4 --configure-shell
+#   curl -fsSL <that URL> | bash -s -- --version 4.0.5 --configure-shell
 #   bash install.sh --dry-run
 #
 # Prerequisites: macOS 11 or later and Python 3.9 or later (the terminal UI

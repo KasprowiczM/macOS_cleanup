@@ -1,6 +1,6 @@
 # Przewodnik użytkownika (polski)
 
-**macOS Cleanup 4.0.4** · Mac z Apple Silicon · macOS 11 lub nowszy
+**macOS Cleanup 4.0.5** · Mac z Apple Silicon · macOS 11 lub nowszy
 
 ## Co robi
 
@@ -19,7 +19,7 @@ Pomiar niczego nie zmienia. Działanie dotyczy tylko elementów, które zatwierd
 - Nigdy nie używa `sudo` i nigdy nie prosi o hasło.
 - Nigdy nie rusza listy chronionej: Poczty, Wiadomości, Kalendarzy, Kontaktów, pęków kluczy, menedżerów haseł, profili przeglądarek, Dokumentów, Biurka, bibliotek Zdjęć, Muzyki i Filmów, iCloud i innych folderów synchronizowanych z chmurą, kluczy SSH i GPG, plików z danymi uwierzytelniającymi, `~/.config`, folderów ze źródłami, drzew roboczych Git (poza Koszem) oraz własnego programu narzędzia, jego ustawień, stanu i kwarantanny.
 - Nigdy nie usuwa kategorii „tylko raport” (zobacz [Poziomy](#poziomy)).
-- Skanowanie, czyszczenie i przywracanie nigdy nie korzystają z sieci. Sieć służy tylko do instalacji i do aktualizacji, którą sam uruchamiasz poleceniem `macos-cleanup update-self` (albo przyciskiem sprawdzania aktualizacji na karcie Pomoc).
+- Skanowanie, czyszczenie i przywracanie nigdy nie korzystają z sieci. Sieć służy tylko do instalacji i do aktualizacji, którą sam uruchamiasz poleceniem `macos-cleanup update-self` (albo przyciskiem sprawdzania aktualizacji na karcie Pomoc, albo w Ustawienia › System › Sprawdź aktualizacje).
 - Nigdy nie uruchamia narzędzia natywnego ani kategorii z poziomu „do przeglądu” w przebiegu automatycznym.
 
 ## Poziomy
@@ -229,7 +229,7 @@ Działają w `bash cleanup_all.sh` i tam, gdzie mają sens, są przekazywane prz
 | `--schedule install\|remove\|status`, `--time HH:MM` | install, remove | Zarządzanie uruchamianiem automatycznym |
 | `--cli` | — | Nigdy nie otwieraj interfejsu |
 | `--tui` | tak | Wymagaj interfejsu. Bez terminala kończy się kodem 2 |
-| `--version`, `--help` | tak | Wersja (`macos-cleanup 4.0.4`) i pomoc |
+| `--version`, `--help` | tak | Wersja (`macos-cleanup 4.0.5`) i pomoc |
 
 **`--permanent` usuwa na zawsze.** Niczego nie da się przywrócić. Przebieg automatyczny nigdy go nie używa, a jest to ustawienie, które trzeba wybrać świadomie (`remove_mode`). Nawet wtedy folder, którego nie da się w pełni odczytać, nie jest usuwany w trybie trwałym.
 

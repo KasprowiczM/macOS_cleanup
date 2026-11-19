@@ -849,7 +849,7 @@ class About(Screen):
 
     def action(self, app, zone, action):
         if action == 'update':
-            app.check_updates()
+            app.check_updates(origin='help')
             return True
         step = {'up': -1, 'down': 1, 'pgup': -10, 'pgdn': 10, 'home': -10 ** 6, 'end': 10 ** 6}.get(action)
         if step is not None:

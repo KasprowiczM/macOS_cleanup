@@ -144,6 +144,7 @@ SCHEMA = [
     Setting('install_mode', 'info', None, 'paths'),
     Setting('legacy_data', 'info', None, 'paths'),
     # -- system ---------------------------------------------------------------------------
+    Setting('check_updates', 'action', None, 'system'),
     Setting('export', 'action', None, 'system'),
     Setting('import', 'action', None, 'system'),
     Setting('reset', 'action', None, 'system'),

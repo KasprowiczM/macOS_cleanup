@@ -3,6 +3,14 @@
 All notable user-visible changes to **macOS Cleanup**. The current version is in [`VERSION`](VERSION).
 This file is the public summary, written for people who use the tool. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.5] — 2026-11-19
+
+Engine behaviour did not change in this release: what a cleanup removes, and how, is the same as in 4.0.4.
+
+### Added
+
+- **Check for updates in Settings.** Settings › System › Check for updates looks for a newer release on GitHub and shows the result next to the row: not checked, checking, up to date, a newer version available, or check failed. When a newer version exists it asks once, then downloads it, verifies its SHA-256 checksum and replaces this copy; the previous copy is kept for `macos-cleanup update-self --rollback`. Nothing is checked by itself: only when you choose it in Settings or press U on the Help screen. A development checkout is updated with `git pull`.
+
 ## [4.0.4] — 2026-11-19
 
 Engine behaviour did not change in this release: what a cleanup removes, and how, is the same as in 4.0.3.
